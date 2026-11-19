@@ -5,7 +5,7 @@
    para os profissionais online mais perto, como um aplicativo de corrida).
    Sem numeração de etapas: cada tela tem um título e um Voltar bem visível.
    ========================================================= */
-const W_VAZIO=()=>({fotos:[],pag:null,modo:null,step:1,service:'',urgency:'hoje',addr:'',addrId:'',notes:'',date:'',oferta:null,presetService:'',enviando:false,lat:null,lng:null,geoEstado:'',reaproveitado:false});
+const W_VAZIO=()=>({fotos:[],pag:null,modo:null,step:1,service:'',urgency:'hoje',addr:'',addrId:'',notes:'',date:'',oferta:null,presetService:'',enviando:false,lat:null,lng:null,geoEstado:'',reaproveitado:false,proEmail:'',proId:'',proNome:''});
 let W=W_VAZIO();
 const PASSOS={agendar:['servico','local','detalhes','valor','confirmar'],agora:['servico','valor','local'],ajuda:['problema','valor','local'],obra:['servico','local','detalhes','valor','confirmar']};
 /* Ajuda rápida e Chamar agora saem na hora, em ondas, para quem está perto. */
@@ -23,14 +23,15 @@ function pageContratar(){
   const p=passoAtual();
   const body=!p?telaModo():p==='servico'?wServico():p==='problema'?wProblemaAjuda():p==='local'?(W.modo==='agora'||W.modo==='ajuda'?wLocalAgora():wLocalAgendar()):p==='detalhes'?wDetalhes():p==='valor'?wValor():p==='confirmar'?wConfirmar():wLocalAgora();
   const aviso=W.reaproveitado&&p?'<div class="aviso-dados" role="status">'+ic('refresh')+'<p><b>Seus dados continuam aqui.</b> Ajuste o que quiser e envie de novo.</p><button type="button" class="icon-btn" aria-label="Fechar aviso" onclick="W.reaproveitado=false;render()">'+ic('x')+'</button></div>':'';
+  const paraPro=W.proEmail&&W.modo==='agendar'&&p?'<div class="aviso-dados" role="status">'+ic('user')+'<p>O pedido vai direto para <b>'+esc(W.proNome)+'</b>. Se não puder atender, você é avisado.</p><button type="button" class="link-btn" onclick="W.proEmail=W.proId=\'\';render()">Enviar para todos</button></div>':'';
   const sub=!p?'Você escolhe: marcar para depois, chamar um profissional agora ou pedir uma ajuda rápida.':W.modo==='ajuda'?'Ajuda rápida: o pedido vai para pessoas verificadas perto de você.':W.modo==='obra'?'Obra: os profissionais da categoria mandam orçamentos com etapas, prazo e valor.':W.modo==='agora'?'Chamar agora: o pedido vai para os profissionais online mais perto de você.':'Agendar: os profissionais da categoria aceitam o seu valor ou mandam outra proposta.';
-  if(route.page==='app')return dashHead('Contratar',sub)+avisoPendenciaContratar()+aviso+'<div class="card contratar-card" data-passo="'+(p||'modo')+'">'+body+'</div>';
+  if(route.page==='app')return dashHead('Contratar',sub)+avisoPendenciaContratar()+aviso+paraPro+'<div class="card contratar-card" data-passo="'+(p||'modo')+'">'+body+'</div>';
   return folha('contratar',duo('descreva o serviço','que você precisa',1)+'<p class="corpo">'+sub+'</p>','cabeca')+
-  '<section class="folha-densa" style="padding-top:0"><div class="wrap folha-in"><div class="folha-corpo">'+aviso+'<div class="card contratar-card">'+body+'</div></div></div></section>';
+  '<section class="folha-densa" style="padding-top:0"><div class="wrap folha-in"><div class="folha-corpo">'+aviso+paraPro+'<div class="card contratar-card">'+body+'</div></div></div></section>';
 }
 function wSet(k,v){
   W[k]=v;
-  if(k==='service'){W.oferta=null;if(!servicoRecorrente(v))W.rec=null;}
+  if(k==='service'){W.oferta=null;W.proEmail=W.proId='';if(!servicoRecorrente(v))W.rec=null;}
   render();
 }
 /* Cabeçalho de cada tela: Voltar bem à vista, à esquerda do título. */
@@ -83,7 +84,7 @@ function sugerirObra(dias){
 function virarObra(){const s=W.service==='ajuda'?'':W.service;W.maisDeUmDia=false;W.modo='obra';W.service=s;W.urgency='hoje';W.step=s?2:1;render();}
 function escolherModo(m){
   if(W.modo==='ajuda'&&m!=='ajuda'&&W.service==='ajuda')W.service='';
-  W.modo=m;W.step=1;
+  W.modo=m;W.step=1;if(m!=='agendar')W.proEmail=W.proId='';
   if(m==='ajuda'){W.service='ajuda';W.oferta=W.oferta!=null&&W.oferta<AJUDA_MINIMO?null:W.oferta;}
   if(m==='agora'||m==='ajuda')W.urgency='agora';else if(W.urgency==='agora')W.urgency='hoje';
   if(m==='obra'&&!W.inicioObra)W.inicioObra=new Date(Date.now()+7*864e5).toISOString().slice(0,10);
@@ -198,6 +199,19 @@ function exemploObra(id){
 }
 
 /* ---------- Valor ---------- */
+/* Faixa do serviço: com 5 ou mais serviços concluídos no último ano, a da TaskGO (/api/precos); antes disso, a referência do catálogo. */
+const FAIXAS_PRECO={};
+function textoFaixaPreco(id){
+  const s=SERVICES.find(x=>x.id===id),r=FAIXAS_PRECO[id];if(!s)return '';
+  return r&&r.medio!=null?'Na TaskGO, '+esc(s.n)+' sai por <b>'+money(r.minimo)+' a '+money(r.maximo)+'</b> · metade até '+money(r.medio)+' ('+r.amostras+' serviços no último ano).':
+    'Referência de mercado: <b>'+money(s.min)+' a '+money(s.max)+'</b> por '+esc(s.unit)+'.';
+}
+function faixaPreco(id){
+  if(!SERVICES.some(x=>x.id===id))return '';
+  if(!DEMO_MODE&&!(id in FAIXAS_PRECO)){FAIXAS_PRECO[id]=null;
+    apiJSON('/api/precos/'+encodeURIComponent(id)).then(r=>{FAIXAS_PRECO[id]=r;const n=document.getElementById('faixaPreco');if(n&&W.service===id)n.innerHTML=textoFaixaPreco(id);}).catch(()=>{delete FAIXAS_PRECO[id];});}
+  return '<p class="hint" id="faixaPreco" aria-live="polite">'+textoFaixaPreco(id)+'</p>';
+}
 function wValor(){
   const v=W.oferta==null?'':W.oferta;
   if(W.modo==='obra')return cabecalhoPasso('Até quanto pretende gastar?','Os profissionais veem esse teto ao orçar. O valor final é o do orçamento que você escolher.')+
@@ -207,6 +221,7 @@ function wValor(){
   return cabecalhoPasso('Quanto você oferece?',W.rec?'Valor de cada vez.':W.modo==='ajuda'?'A partir de '+money(AJUDA_MINIMO)+'. Quem aceitar já vai sabendo o valor.':W.modo==='agora'?'Quem aceitar já vai sabendo o valor.':'Cada profissional pode aceitar ou mandar outra proposta.')+
   '<div class="oferta"><label for="wOferta" class="leitor">Valor oferecido em reais</label><span class="oferta-moeda" aria-hidden="true">R$</span>'+
   '<input id="wOferta" class="oferta-campo" type="number" inputmode="decimal" min="'+(W.modo==='ajuda'?AJUDA_MINIMO:1)+'" max="100000" step="any" placeholder="0" value="'+esc(v)+'" oninput="W.oferta=this.value===\'\'?null:Number(this.value)"></div>'+
+  faixaPreco(W.service)+
   blocoRecorrenteContratar()+
   rodapePasso('<button class="btn btn-primary" onclick="wGo('+(W.step+1)+')">'+(modoNaHora()?'Confirmar valor':'Revisar pedido')+' '+ic('arrow')+'</button>');
 }
@@ -299,6 +314,7 @@ async function enviarPedido(){
   const pedido={id:'o_'+Date.now().toString(36)+uid().slice(0,4),service:W.service,price:Number(W.oferta),notes:String(W.notes||'').trim(),address:endereco,
     urgente:agora,lat:W.lat,lng:W.lng,formaPagamento:escolha&&['dinheiro','pix_direto','cartao_maquininha'].includes(escolha.metodo)?escolha.metodo:undefined,bairro:end&&end.bairro?end.bairro:null,quando:agora?'agora':W.urgency,modo:obra?'obra':agora?'agora':'agendar',inicioDesejado:obra?W.inicioObra||null:undefined,
     recorrente:rec||undefined,
+    proEmail:W.modo==='agendar'&&!rec&&W.proEmail?W.proEmail:undefined,proId:W.modo==='agendar'&&!rec&&W.proEmail?W.proId||undefined:undefined,
     sched:rec?new Date(datasRecorrentes(rec.inicio,rec.dias,rec.vezes)[0]+'T'+rec.hora).getTime():!agora&&W.urgency==='agendar'&&W.date?new Date(W.date).getTime():null,
     clientId:u.id,clientEmail:u.email,clientName:u.name,status:'aguardando',created:Date.now()};
   W.enviando=true;render();
@@ -316,6 +332,13 @@ async function enviarPedido(){
     W.enviando=false;render();
     toast(erroLegivel(error,'O pedido não foi enviado. Confira sua conexão e tente de novo.'),'err');
   }
+}
+/* Chamar de novo quem já atendeu: agendado, direto para ele (o servidor confere se ainda pode atender); a pessoa confere endereço, data e valor. */
+function chamarDeNovo(id){
+  const o=S.orders.find(x=>x.id===id);if(!o||!o.proEmail)return go('/app/contratar?servico='+encodeURIComponent(o?o.service:''));
+  W=Object.assign(W_VAZIO(),{modo:'agendar',step:2,service:o.service,presetService:o.service,notes:o.notes||'',addr:o.address||'',addrId:'outro',
+    lat:o.lat!=null?Number(o.lat):null,lng:o.lng!=null?Number(o.lng):null,geoEstado:o.lat!=null?'manual':'',proEmail:o.proEmail,proId:o.proId||'',proNome:o.professionalName||'o mesmo profissional'});
+  go('/app/contratar');
 }
 /* Pedido cancelado pelo cliente: volta ao Contratar com tudo preenchido, na tela de conferir. */
 function reaproveitarPedido(o){

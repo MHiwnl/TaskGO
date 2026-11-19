@@ -51,7 +51,7 @@ function dashPedido(id){
      '<div class="card" style="margin-top:20px;border-top-color:var(--brand)">'+
      '<div style="display:flex;gap:14px;align-items:flex-start"><div class="ico-box">'+ic('bell')+'</div><div style="flex:1"><b>Novo pedido recebido</b><p class="muted" style="font-size:.88rem;margin-top:6px">'+esc(cli.name)+' solicitou '+esc(s.n)+' por '+money(o.price)+'. Revise o endereço e confirme se pode atender.</p></div></div>'+ 
      '<div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="recusarPedidoCliente(\''+o.id+'\')">Recusar pedido</button><button class="btn btn-grad" onclick="confirmarPedidoCliente(\''+o.id+'\')">'+ic('check')+' Confirmar atendimento</button></div></div>'
-     :painelPropostasCliente(o)):'')+
+     :o.proEmail?'<div class="card" style="margin-top:20px"><b>Enviado para '+esc(o.professionalName||'o profissional')+'</b><p class="muted" style="font-size:.88rem;margin-top:6px">Assim que confirmar, você recebe um aviso. Se não puder atender, o pedido é cancelado e você pode enviar para todos.</p></div>':painelPropostasCliente(o)):'')+
     (o.status==='em_andamento'&&!rec?
      '<div class="card" style="margin-top:20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">'+
      '<div class="ico-box">'+ic('play')+'</div><div style="flex:1;min-width:200px"><b>Serviço em andamento</b>'+
@@ -63,7 +63,8 @@ function dashPedido(id){
      '<div style="flex:1;min-width:200px"><b>'+(isPro?'Serviço concluído':'Pedido finalizado')+'</b><p class="muted" style="font-size:.88rem">'+(reviewRating?'Você avaliou com '+reviewRating+' estrelas.':(isPro?'Conte como foi sua experiência com o cliente.':'Avalie o profissional que realizou o serviço.'))+'</p></div>'+ 
      (reviewRating?stars(reviewRating):'<button class="btn btn-primary" onclick="abrirAvaliacao(\''+o.id+'\')">'+ic('star')+' '+(isPro?'Avaliar cliente':'Avaliar profissional')+'</button>')+'</div>'+ 
      '<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="baixarRecibo(\''+o.id+'\')">'+ic('file')+' Baixar recibo</button>'+
-     '<a class="btn btn-ghost btn-sm" href="#/app/contratar?servico='+o.service+'">'+ic('refresh')+' Contratar novamente</a></div></div>':'')+
+     (isPro?'':o.proEmail&&!o.obra&&o.service!=='ajuda'&&!o.recorrente?'<button class="btn btn-primary btn-sm" onclick="chamarDeNovo(\''+o.id+'\')">'+ic('refresh')+' Chamar '+esc(String(o.professionalName||'o profissional').split(' ')[0])+' de novo</button>':
+       '<a class="btn btn-ghost btn-sm" href="#/app/contratar?servico='+o.service+'">'+ic('refresh')+' Contratar novamente</a>')+'</div></div>':'')+
     blocoFotosPedido(o)+
     (o.notes?'<div class="card" style="margin-top:20px"><b style="font-size:.9rem">Descrição do pedido</b><p class="muted" style="font-size:.9rem;margin-top:8px">'+esc(o.notes)+'</p></div>':'')+
   '',''+
