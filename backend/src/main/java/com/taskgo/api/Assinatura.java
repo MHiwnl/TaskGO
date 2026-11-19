@@ -15,6 +15,8 @@ public class Assinatura {
     public static final String CARTAO = "cartao", PIX = "pix";
 
     @Id private String id;
+    /* Quem salvar uma cópia antiga (a renovação mensal, por exemplo) falha em vez de apagar um pagamento que caiu no meio. */
+    @jakarta.persistence.Version private Long versao;
     @Column(name = "usuario_id", nullable = false) private Long usuarioId;
     @Column(nullable = false) private String forma;
     @Column(name = "cartao_id") private String cartaoId;

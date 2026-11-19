@@ -18,9 +18,10 @@ function painelFinanceiro(){
   const numero=(rot,val,nota)=>'<div><span class="t2">'+rot+'</span><b>'+val+'</b>'+(nota?'<small>'+nota+'</small>':'')+'</div>';
   const dados=(d.porDia||[]).map(x=>({dia:x.dia,recebido:Math.round(Number(x.valor)*100)/100}));
   return (d.teste?'<p class="aviso-linha" role="note">Conta Asaas de teste: os valores não são dinheiro de verdade.</p>':'')+
+    ((d.resgatesVerificar||[]).length?'<p class="aviso-linha" role="alert">Resgates sem resposta do Asaas, confira no painel do Asaas: '+d.resgatesVerificar.map(x=>esc(x.profissional)+' '+money(x.valor)+' em '+dataHora(x.em)).join(' · ')+'</p>':'')+
     '<div class="fin-numeros">'+
       numero('Recebido hoje',money(d.hoje))+numero('Recebido neste mês',money(d.mes),money(d.planosMes)+' do Plano Pro')+numero('Assinantes Pro',String(d.assinantesPro||0),'com o mês pago')+
-      numero('Saldo no Asaas',saldo!=null?money(saldo):'—',saldo!=null?'disponível para transferir':(d.saldoErro||'Asaas desligado'))+
+      numero('Livre para transferir',saldo!=null?money(saldo):'—',saldo!=null?money(d.saldoAsaas)+' no Asaas, o resto é dos usuários':(d.saldoErro||'Asaas desligado'))+
     '</div>'+
     blocoGrafico('g-taxas','Recebido por dia','Taxas e Plano Pro pagos pelos profissionais à TaskGO, em reais. '+money(d.trintaDias)+' nos últimos 30 dias.',[['recebido','Recebido (R$)',1]],dados,'colunas')+
     secaoTransferencia(d)+

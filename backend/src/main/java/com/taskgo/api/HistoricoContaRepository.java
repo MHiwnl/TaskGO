@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface HistoricoContaRepository extends JpaRepository<HistoricoConta, String> {
     List<HistoricoConta> findByUsuarioIdOrderByCriadoEmDesc(Long usuarioId);
     void deleteByUsuarioId(Long usuarioId);
+    @org.springframework.data.jpa.repository.Modifying @org.springframework.data.jpa.repository.Query("delete from HistoricoConta h where h.criadoEm < :limite")
+    int apagarAntesDe(@org.springframework.data.repository.query.Param("limite") long limite);
 
     /* Auditoria: filtros opcionais (-1 / vazio = sem filtro) e cursor (criadoEm, id) para a próxima página. */
     @org.springframework.data.jpa.repository.Query("select h from HistoricoConta h where (:conta = -1 or h.usuarioId = :conta or h.autorId = :conta) and (:pedido = '' or h.pedidoId = :pedido) "

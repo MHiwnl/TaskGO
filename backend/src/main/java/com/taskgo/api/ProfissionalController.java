@@ -27,10 +27,15 @@ public class ProfissionalController {
         List<Usuario> liberados = profissionais.stream().filter(p -> p.getProId() != null && !p.getProId().isBlank()).filter(p -> exigencia == null || exigencia.liberado(p)).toList();
         java.util.Set<Long> pros = planos == null ? java.util.Set.of() : planos.pros(liberados.stream().map(Usuario::getId).toList());
         /* Plano Pro: aparece primeiro; dentro de cada grupo, a ordem de sempre. */
+        if (liberados.isEmpty()) return List.of();
+        /* Uma consulta para as notas de todos (antes era uma por profissional). */
+        java.util.Map<String, Object[]> notas = new java.util.HashMap<>();
+        for (Object[] r : pedidos.resumoAvaliacoesDe(liberados.stream().map(p -> String.valueOf(p.getEmail()).toLowerCase(java.util.Locale.ROOT)).toList()))
+            notas.put(String.valueOf(r[0]), r);
         return liberados.stream().sorted(java.util.Comparator.comparing((Usuario p) -> !pros.contains(p.getId())))
-                .map(p -> { Object[] summary = resumo(pedidos.resumoAvaliacoes(p.getEmail()));
-                    Double rating = summary[0] instanceof Number n ? n.doubleValue() : null;
-                    long reviews = summary[1] instanceof Number n ? n.longValue() : 0L;
+                .map(p -> { Object[] r = notas.get(String.valueOf(p.getEmail()).toLowerCase(java.util.Locale.ROOT));
+                    Double rating = r != null && r[1] instanceof Number n ? n.doubleValue() : null;
+                    long reviews = r != null && r[2] instanceof Number n ? n.longValue() : 0L;
                     return ProfissionalPublicoDto.from(p, rating, reviews, pros.contains(p.getId())); }).toList();
     }
 

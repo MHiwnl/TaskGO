@@ -292,7 +292,7 @@ public class RecorrenteService {
                 if (!pro) throw erro(HttpStatus.FORBIDDEN, "Só o profissional confirma o recebimento.");
                 if (!direto() || !VisitaRecorrente.A_PAGAR.equals(v.getStatus())) throw erro(HttpStatus.CONFLICT, "Esta vez não está esperando pagamento.");
                 v.fechar(VisitaRecorrente.LIBERADA, agora);
-                if (dinheiro != null) dinheiro.registrarTaxa(quem.id(), p.getId(), v.getValor().multiply(pagamentos.taxaDe(p)));
+                if (dinheiro != null) dinheiro.registrarTaxa(quem.id(), p.getId(), "rec:" + v.getId(), v.getValor().multiply(pagamentos.taxaDe(p)));
                 avisar(clienteId(p), p.getId(), "Vez de " + dia + " paga", p.getProfessionalName() + " confirmou que recebeu " + reais(v.getValor()) + ".", "rec-recebida:" + v.getId());
             }
             case "nao_veio" -> {

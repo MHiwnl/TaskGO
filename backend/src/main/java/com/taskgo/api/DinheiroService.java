@@ -92,9 +92,13 @@ public class DinheiroService {
     }
     /** Taxa da TaskGO sobre um valor recebido direto (etapa de obra, visita técnica, semana do recorrente). */
     @Transactional
-    public void registrarTaxa(Long trabalhadorId, String pedidoId, BigDecimal taxa) {
+    /* Uma taxa por origem ("etapa:<id>", "visita:<id>", "rec:<id>"): o id da pendência vem da origem, então um "recebi" repetido
+       não cria nem cobra outra. Em paralelo, o segundo insert espera o primeiro e falha antes de cobrar o cartão. */
+    public void registrarTaxa(Long trabalhadorId, String pedidoId, String origem, BigDecimal taxa) {
         if (trabalhadorId == null || taxa == null || taxa.signum() <= 0) return;
-        Pendencia nova = pendencias.save(new Pendencia(UUID.randomUUID().toString(), trabalhadorId, null, pedidoId, Pendencia.TAXA_DINHEIRO, taxa.setScale(2, RoundingMode.HALF_UP), System.currentTimeMillis()));
+        String id = "taxa:" + origem;
+        if (pendencias.existsById(id)) return;
+        Pendencia nova = pendencias.saveAndFlush(new Pendencia(id, trabalhadorId, null, pedidoId, Pendencia.TAXA_DINHEIRO, taxa.setScale(2, RoundingMode.HALF_UP), System.currentTimeMillis()));
         descontarTaxas(trabalhadorId);
         cobrarTaxaAutomatica(trabalhadorId, nova);
     }
@@ -168,6 +172,7 @@ public class DinheiroService {
         if (entregue.compareTo(preco) < 0) throw erro(HttpStatus.BAD_REQUEST, "O cliente precisa entregar pelo menos " + reais(preco) + ". Se ele não pagou, use Cliente não pagou.");
         if (entregue.compareTo(preco.multiply(BigDecimal.TEN).max(BigDecimal.valueOf(1000))) > 0) throw erro(HttpStatus.BAD_REQUEST, "Confira o valor recebido.");
         BigDecimal troco = entregue.subtract(preco);
+        if (pedidos.reservarPagamentoDireto(p.getId(), forma) == 0) throw erro(HttpStatus.CONFLICT, "O pagamento deste pedido já foi registrado.");
         Long trabalhador = quem.id(), cliente = clienteId(p);
         long agora = System.currentTimeMillis();
         boolean online = trocoOnline && troco.signum() > 0;

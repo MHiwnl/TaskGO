@@ -395,7 +395,7 @@ public class ObraService {
             case "recebida" -> {
                 if (!pagamentos.direto() || !pro || !VisitaTecnica.REALIZADA.equals(v.getStatus())) throw erro(HttpStatus.CONFLICT, "Marque a visita como feita antes.");
                 v.liberar(agora);
-                if (dinheiro != null) dinheiro.registrarTaxa(v.getProfissionalId(), p.getId(), v.getValor().multiply(TAXA_VISITA));
+                if (dinheiro != null) dinheiro.registrarTaxa(v.getProfissionalId(), p.getId(), "visita:" + v.getId(), v.getValor().multiply(TAXA_VISITA));
                 avisar(clienteId(p), p.getId(), "Visita técnica paga", v.getProfissionalNome() + " confirmou que recebeu " + reais(v.getValor()) + ".", "visita-recebida:" + v.getId());
             }
             case "recusar" -> {
@@ -637,7 +637,7 @@ public class ObraService {
         long agora = System.currentTimeMillis();
         BigDecimal valor = e.aPagar();
         e.recebidoDireto(valor, agora); etapas.save(e);
-        if (dinheiro != null) dinheiro.registrarTaxa(quem.id(), p.getId(), valor.multiply(FaixaObra.taxa(total(p))));
+        if (dinheiro != null) dinheiro.registrarTaxa(quem.id(), p.getId(), "etapa:" + e.getId(), valor.multiply(FaixaObra.taxa(total(p))));
         avisar(clienteId(p), p.getId(), "Etapa " + e.getOrdem() + " paga", "O profissional confirmou que recebeu " + reais(valor) + ".", "etapa-recebida:" + e.getId());
         auditar(quem.id(), "Recebeu direto a etapa " + e.getOrdem() + ": " + reais(valor), quem.id(), p.getId());
         verificarConclusao(p);
@@ -854,7 +854,7 @@ public class ObraService {
         abertas.addAll(etapas.findByStatus(EtapaObra.MEDIACAO));
         for (EtapaObra e : abertas) if (vistos.add(e.getPedidoId())) pedidos.findById(e.getPedidoId()).ifPresent(p -> r.add(linhaFila(p, "etapa")));
         for (Pedido p : pedidos.findByStatusIgnoreCase("agendado")) if ("pendente".equals(p.getExtra().get("obraRevisao")) && vistos.add(p.getId())) r.add(linhaFila(p, "revisao"));
-        for (Pedido p : pedidos.findByStatusIgnoreCase("concluido"))
+        for (Pedido p : pedidos.concluidosComGarantia())
             if (p.getExtra().get("obraGarantia") instanceof Map<?, ?> g && "defeito".equals(g.get("status")) && vistos.add(p.getId())) r.add(linhaFila(p, "garantia"));
         r.sort(Comparator.comparingLong(m -> ((Number) m.getOrDefault("criado", 0L)).longValue()));
         return r;
@@ -953,7 +953,7 @@ public class ObraService {
             if (e.getLiberarApos() != null && e.getLiberarApos() <= agora) pedidos.findById(e.getPedidoId()).ifPresent(p -> { if (!"cancelado".equals(p.getStatus())) aprovar(e, p); });
         if (!pagamentos.direto()) for (VisitaTecnica v : visitas.findByStatus(VisitaTecnica.REALIZADA))
             if (v.getRealizadaEm() != null && v.getRealizadaEm() + PRAZO_APROVAR <= agora) { liberarVisita(v); visitas.save(v); }
-        for (Pedido p : pedidos.findByStatusIgnoreCase("concluido"))
+        for (Pedido p : pedidos.concluidosComGarantia())
             if (p.getExtra().get("obraGarantia") instanceof Map<?, ?> g && "retida".equals(g.get("status")) && ((Number) g.get("ate")).longValue() <= agora) {
                 BigDecimal valor = new BigDecimal(String.valueOf(g.get("valor")));
                 fecharGarantia(p, valor, BigDecimal.ZERO, "liberada");

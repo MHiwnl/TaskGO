@@ -48,9 +48,14 @@ video/narracao/elevenlabs/
 backups/
 *.sql
 *.sql.gz
+# ...menos as migrações do banco (Flyway): elas fazem parte do código
+!backend/src/main/resources/db/migration/*.sql
 *.dump
 
 # Playwright CLI: snapshots/screenshots e sessões de login salvas (tokens): nunca no git
 .playwright-cli/
 .playwright/
 auth*.json
+
+# vídeos do /brag (render e quadros)
+brag-output*/

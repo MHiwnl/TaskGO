@@ -100,7 +100,11 @@ public class ResgateService {
                 s.enviada(t.path("id").asText(), k.tipo() + ":" + k.chave());
                 saques.save(s);
                 conferir(s);
-            } catch (AsaasCliente.Erro e) { falhou(s, e.getMessage()); }
+            } catch (AsaasCliente.Erro e) {
+                /* Sem resposta (503: tempo esgotado, rede) a transferência pode ter saído: o valor fica reservado e a equipe confere no Asaas.
+                   Só uma recusa do Asaas (4xx) devolve o saldo. */
+                if (e.status == 503) verificar(s); else falhou(s, e.getMessage());
+            }
         } else if (pagamentos.simulado()) {
             s.enviada("sim_" + UUID.randomUUID(), k == null ? null : k.tipo() + ":" + k.chave());
             concluir(s);
@@ -130,6 +134,11 @@ public class ResgateService {
         s.situacao("CONCLUIDO"); saques.save(s);
         fecharMovimento(s, "CONCLUIDA");
         avisar(s.getUsuarioId(), "Resgate enviado", PagamentoService.reais(s.getValor()) + " foram para a sua chave Pix.", "resgate:" + s.getId());
+    }
+    private void verificar(SolicitacaoSaque s) {
+        s.situacao("VERIFICAR"); saques.save(s);
+        org.slf4j.LoggerFactory.getLogger(ResgateService.class).error("Resgate {} sem resposta do Asaas: conferir no painel antes de devolver ou concluir.", s.getId());
+        avisar(s.getUsuarioId(), "Resgate em conferência", "O banco demorou a responder. Estamos conferindo o envio de " + PagamentoService.reais(s.getValor()) + "; o valor continua reservado.", "resgate-verificar:" + s.getId());
     }
     private void falhou(SolicitacaoSaque s, String motivo) {
         carteiras.findByUsuarioIdForUpdate(s.getUsuarioId()).ifPresent(c -> { c.devolverReserva(s.getValor()); carteiras.save(c); });

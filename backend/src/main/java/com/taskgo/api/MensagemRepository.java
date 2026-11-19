@@ -9,5 +9,7 @@ public interface MensagemRepository extends JpaRepository<Mensagem, String> {
     List<Mensagem> findByPedidoIdAndDestinatarioIdAndLidaEmIsNull(String pedidoId, Long destinatarioId);
     Optional<Mensagem> findByAutorIdAndClientMessageId(Long autorId, String clientMessageId);
     void deleteByPedidoIdIn(List<String> pedidoIds);
+    List<Mensagem> findByAutorIdOrDestinatarioIdOrderByCriadaEmAsc(Long autorId, Long destinatarioId);
+    long countByPedidoIdIn(List<String> pedidoIds);
     long countByDestinatarioIdAndLidaEmIsNull(Long destinatarioId);
 }

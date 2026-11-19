@@ -61,7 +61,7 @@ async function syncPedidos(email){
 }
 async function syncDadosConta(email){
   const resposta=await fetch(API_BASE_URL+'/api/auth/dados');
-  if(!resposta.ok)throw new Error('NÃ£o foi possÃ­vel carregar os dados da conta.');
+  if(!resposta.ok)throw new Error('Não foi possível carregar os dados da conta.');
   const dados=await resposta.json(),u=S.users.find(item=>String(item.email||'').toLowerCase()===String(email).toLowerCase());
   if(u&&dados.profile){const perfil=Object.assign({},dados.profile);delete perfil.professional;Object.assign(u,perfil);}
   if(u)S.notifs=[];

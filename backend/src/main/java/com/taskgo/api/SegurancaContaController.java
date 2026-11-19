@@ -42,8 +42,7 @@ public class SegurancaContaController {
     public void registrarSessao(Usuario u, HttpServletRequest request) {
         HttpSession s = request.getSession(false);
         if (s == null) return;
-        String ip = request.getHeader("X-Forwarded-For");
-        ip = ip == null || ip.isBlank() ? request.getRemoteAddr() : ip.split(",")[0].trim();
+        String ip = request.getRemoteAddr(); /* já é o IP real (server.forward-headers-strategy) */
         SessaoConta nova = sessoes.save(new SessaoConta(u.getId(), SessaoConta.dispositivo(request.getHeader("User-Agent")), ip, System.currentTimeMillis()));
         s.setAttribute(SESSAO, nova.getId());
     }

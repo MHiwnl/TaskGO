@@ -30,7 +30,7 @@ public class PedidoService {
     public Pedido criar(Pedido pedido, boolean aguardarPagamento) {
         if (pedido.getId() == null || pedido.getId().isBlank() || pedido.getClientEmail() == null || pedido.getClientEmail().isBlank()
                 || pedido.getService() == null || pedido.getService().isBlank() || pedido.getPrice() == null || pedido.getPrice() < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pedido incompleto: informe id, cliente, serviÃ§o e valor.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pedido incompleto: informe id, cliente, serviço e valor.");
         }
         /* Mesmo limite da tela: de R$ 1 a R$ 100.000, com no máximo 2 casas decimais. */
         double preco = pedido.getPrice();
@@ -61,7 +61,7 @@ public class PedidoService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No serviço recorrente, cada vez é paga por Pix ou pela TaskGO, não em dinheiro.");
             plano = RecorrenteService.plano(pedido.getExtra().get("recorrente"), pedido.getService(), java.time.LocalDate.now(RecorrenteService.FUSO));
         }
-        if (repository.existsById(pedido.getId())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Pedido jÃ¡ cadastrado.");
+        if (repository.existsById(pedido.getId())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Pedido já cadastrado.");
         /* Na criação, só os campos extras que o cliente pode escolher; os demais (nota do cliente, chegada,
            ondas do Chamar Agora, pagamento...) só o servidor escreve. */
         Map<String,Object> extrasSeguros=sanitizarExtras(pedido.getExtra());
@@ -139,23 +139,23 @@ public class PedidoService {
     @Transactional
     public Pedido aceitar(String id, String email) {
         if (email == null || email.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a conta profissional.");
-        if (usuarios == null) throw new IllegalStateException("RepositÃ³rio de usuÃ¡rios nÃ£o configurado.");
+        if (usuarios == null) throw new IllegalStateException("Repositório de usuários não configurado.");
         Usuario profissional = usuarios.findByEmailIgnoreCase(email.trim())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Conta profissional nÃ£o encontrada."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Conta profissional não encontrada."));
         boolean ajuda = repository.findById(id).map(AjudaRapida::eh).orElse(false);
         if (ajuda) {
             if (!AjudaRapida.podeAjudar(profissional)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Ligue a ajuda rápida, com a identidade verificada, para aceitar.");
             if (repository.findById(id).map(p -> equalsEmail(profissional.getEmail(), p.getClientEmail())).orElse(false))
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Você não pode aceitar o seu próprio pedido.");
         } else if (!"profissional".equalsIgnoreCase(profissional.getTipo()) || profissional.getProId() == null || profissional.getProId().isBlank())
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente uma conta profissional vÃ¡lida pode aceitar pedidos.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente uma conta profissional válida pode aceitar pedidos.");
         int atualizados = repository.aceitarSeDisponivel(id, profissional.getEmail().trim().toLowerCase(Locale.ROOT),
                 AjudaRapida.idAjudante(profissional), profissional.getNome(), System.currentTimeMillis());
         if (atualizados == 0) {
-            if (!repository.existsById(id)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido nÃ£o encontrado.");
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Este pedido nÃ£o estÃ¡ mais disponÃ­vel.");
+            if (!repository.existsById(id)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado.");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Este pedido não está mais disponível.");
         }
-        return repository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido nÃ£o encontrado."));
+        return repository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado."));
     }
 
     @Transactional

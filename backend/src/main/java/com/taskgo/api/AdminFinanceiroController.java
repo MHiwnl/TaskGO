@@ -35,6 +35,12 @@ public class AdminFinanceiroController {
     private final ModeracaoService moderacao;
     private AssinaturaRepository assinaturas;
     @org.springframework.beans.factory.annotation.Autowired(required = false) void setAssinaturas(AssinaturaRepository a) { this.assinaturas = a; }
+    private CarteiraRepository carteiras;
+    @org.springframework.beans.factory.annotation.Autowired(required = false) void setCarteiras(CarteiraRepository c) { this.carteiras = c; }
+    private SolicitacaoSaqueRepository saques;
+    @org.springframework.beans.factory.annotation.Autowired(required = false) void setSaques(SolicitacaoSaqueRepository s) { this.saques = s; }
+    /* O que pode sair da conta: o saldo do Asaas menos o que é dos usuários. */
+    private BigDecimal livre(BigDecimal saldoAsaas) { return saldoAsaas.subtract(carteiras == null ? BigDecimal.ZERO : carteiras.totalDosUsuarios()).max(BigDecimal.ZERO); }
 
     public AdminFinanceiroController(CobrancaRepository cobrancas, TransacaoFinanceiraRepository transacoes, UsuarioRepository usuarios,
                                      PagamentoService pagamentos, AsaasCliente asaas, ModeracaoService moderacao) {
@@ -85,7 +91,7 @@ public class AdminFinanceiroController {
         r.put("ultimas", ultimas);
         /* Saldo real da conta no Asaas (o que pode ser transferido agora). */
         if (pagamentos.asaasAtivo() && asaas.configurado()) {
-            try { r.put("saldo", new BigDecimal(asaas.saldo().path("balance").asText("0"))); }
+            try { BigDecimal s = new BigDecimal(asaas.saldo().path("balance").asText("0")); r.put("saldoAsaas", s); r.put("saldo", livre(s)); }
             catch (RuntimeException e) { r.put("saldoErro", "O Asaas não respondeu agora. Tente de novo em instantes."); }
         }
         List<Map<String, Object>> envios = new ArrayList<>();
@@ -95,6 +101,11 @@ public class AdminFinanceiroController {
             envios.add(m);
         }
         r.put("transferencias", envios);
+        /* Resgates sem resposta do Asaas: a equipe confere no painel do Asaas. */
+        List<Map<String, Object>> verificar = new ArrayList<>();
+        if (saques != null) for (SolicitacaoSaque s : saques.findByStatus("VERIFICAR"))
+            verificar.add(Map.of("valor", s.getValor(), "em", s.getCriadaEm(), "profissional", usuarios.findById(s.getUsuarioId()).map(Usuario::getNome).orElse("Conta excluída")));
+        r.put("resgatesVerificar", verificar);
         return r;
     }
 
@@ -109,9 +120,9 @@ public class AdminFinanceiroController {
         BigDecimal valor = body.valor().setScale(2, RoundingMode.HALF_UP);
         ResgateService.ChavePix k = ResgateService.normalizarChave(body.tipo(), body.chave());
         BigDecimal saldo;
-        try { saldo = new BigDecimal(asaas.saldo().path("balance").asText("0")); }
+        try { saldo = livre(new BigDecimal(asaas.saldo().path("balance").asText("0"))); }
         catch (RuntimeException e) { throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "O Asaas não respondeu agora. Tente de novo em instantes."); }
-        if (valor.compareTo(saldo) > 0) throw new ResponseStatusException(HttpStatus.CONFLICT, "O saldo disponível no Asaas é " + PagamentoService.reais(saldo) + ".");
+        if (valor.compareTo(saldo) > 0) throw new ResponseStatusException(HttpStatus.CONFLICT, "Pode sair até " + PagamentoService.reais(saldo) + ": o resto do saldo do Asaas é dos usuários.");
         String descricao = body.descricao() == null || body.descricao().isBlank() ? "Transferência TaskGO" : body.descricao().trim().substring(0, Math.min(80, body.descricao().trim().length()));
         String id, status;
         try {

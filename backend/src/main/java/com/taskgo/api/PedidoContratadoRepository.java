@@ -11,6 +11,9 @@ import org.springframework.data.jpa.repository.Modifying;
 public interface PedidoContratadoRepository extends JpaRepository<Pedido, String> {
     @Query("select avg(p.rating), count(p.rating) from Pedido p where lower(p.proEmail)=lower(:email) and lower(p.status)='concluido' and p.rating is not null")
     Object[] resumoAvaliacoes(@Param("email") String email);
+    /* Média e total de vários profissionais numa consulta só: [e-mail em minúsculas, média, total]. */
+    @Query("select lower(p.proEmail), avg(p.rating), count(p.rating) from Pedido p where lower(p.proEmail) in :emails and lower(p.status)='concluido' and p.rating is not null group by lower(p.proEmail)")
+    List<Object[]> resumoAvaliacoesDe(@Param("emails") java.util.Collection<String> emails);
     java.util.Optional<Pedido> findByIdAndStatusIgnoreCaseAndProEmailIsNull(String id, String status);
     /* Pedidos abertos recentes: o Chamar Agora procura entre eles os que estão chamando profissionais. */
     @Query("select p from Pedido p where lower(p.status) = 'aguardando' and p.created > :desde order by p.created desc")
@@ -78,7 +81,16 @@ public interface PedidoContratadoRepository extends JpaRepository<Pedido, String
     @org.springframework.transaction.annotation.Transactional
     @Query(value = "update pedidos set extra = :extra where id = :id and lower(status) = 'aguardando'", nativeQuery = true)
     int gravarExtraSeAberto(@Param("id") String id, @Param("extra") String extra);
+    /* Reserva o registro do pagamento direto: só o primeiro "recebi" passa (o segundo espera o primeiro e encontra 0 linhas). */
+    @Modifying(flushAutomatically = true)
+    @Query("update Pedido p set p.paid = :forma where p.id = :id and (p.paid is null or p.paid = 'estornado')")
+    int reservarPagamentoDireto(@Param("id") String id, @Param("forma") String forma);
     List<Pedido> findByClientEmailIgnoreCaseOrProEmailIgnoreCaseOrderByCreatedDesc(String clientEmail, String proEmail);
+    @Query("select p.id from Pedido p where lower(p.status) in ('concluido', 'cancelado') and coalesce(p.completedAt, p.created) < :limite")
+    List<String> encerradosAntesDe(@Param("limite") long limite);
+    /* Só os concluídos que já tiveram garantia de obra; quem chama confere se ela ainda está retida. */
+    @Query(value = "select * from pedidos where lower(status) = 'concluido' and extra like '%\"obraGarantia\"%'", nativeQuery = true)
+    List<Pedido> concluidosComGarantia();
     void deleteByClientEmailIgnoreCaseOrProEmailIgnoreCase(String clientEmail, String proEmail);
     @Query("select p from Pedido p where lower(p.status)=lower(:status) and p.proEmail is null")
     Page<Pedido> encontrarDisponiveis(@Param("status") String status, Pageable pageable);

@@ -12,6 +12,8 @@ public interface PropostaRepository extends JpaRepository<Proposta, String> {
     @org.springframework.data.jpa.repository.Query("select count(x) from Proposta x where x.criadaEm >= :a and x.criadaEm < :b")
     long criadasEntre(@org.springframework.data.repository.query.Param("a") long a, @org.springframework.data.repository.query.Param("b") long b);
     List<Proposta> findByPedidoIdOrderByCriadaEmAsc(String pedidoId);
+    List<Proposta> findByPedidoIdIn(java.util.Collection<String> pedidoIds);
+    void deleteByProfissionalId(Long profissionalId);
     List<Proposta> findByPedidoIdAndProfissionalIdOrderByCriadaEmAsc(String pedidoId, Long profissionalId);
     List<Proposta> findByPedidoIdAndStatus(String pedidoId, String status);
 }

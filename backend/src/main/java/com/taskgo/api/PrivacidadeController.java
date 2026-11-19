@@ -82,8 +82,8 @@ public class PrivacidadeController {
         /* O código de chegada é só do cliente; para o profissional ele não sai nem aqui. */
         dados.put("pedidos", meus.stream().map(x -> { Map<String, Object> m = new com.fasterxml.jackson.databind.ObjectMapper().convertValue(x, Map.class);
             if (!email.equalsIgnoreCase(String.valueOf(x.getClientEmail()))) m.remove("code"); return m; }).toList());
-        dados.put("propostas", propostas.findAll().stream().filter(x -> ids.contains(x.getPedidoId())).toList());
-        dados.put("mensagens", mensagens.findAll().stream().filter(m -> p.id().equals(m.getAutorId()) || p.id().equals(m.getDestinatarioId()))
+        dados.put("propostas", ids.isEmpty() ? List.of() : propostas.findByPedidoIdIn(ids));
+        dados.put("mensagens", mensagens.findByAutorIdOrDestinatarioIdOrderByCriadaEmAsc(p.id(), p.id()).stream()
                 .map(m -> Map.of("pedidoId", m.getPedidoId(), "enviadaPorVoce", p.id().equals(m.getAutorId()), "texto", m.getTexto(), "criadaEm", m.getCriadaEm())).toList());
         dados.put("notificacoes", notificacoes.findByUsuarioIdOrderByCriadaEmDesc(p.id()).stream()
                 .map(n -> Map.of("titulo", n.getTitulo(), "conteudo", n.getConteudo(), "criadaEm", n.getCriadaEm())).toList());
@@ -101,18 +101,12 @@ public class PrivacidadeController {
     @Transactional
     public void aplicarPrazos() {
         long agora = System.currentTimeMillis(), dia = Duration.ofDays(1).toMillis();
-        Set<String> encerradosHaTempo = new java.util.HashSet<>();
-        for (Pedido p : pedidos.findAll()) {
-            String s = String.valueOf(p.getStatus()).toLowerCase(Locale.ROOT);
-            Long fim = p.getCompletedAt() != null ? p.getCompletedAt() : p.getCreated();
-            if (Set.of("concluido", "cancelado").contains(s) && fim != null && agora - fim > diasConversas * dia) encerradosHaTempo.add(p.getId());
-        }
-        long conversas = 0, avisos = 0, fatos = 0;
-        if (!encerradosHaTempo.isEmpty()) { conversas = mensagens.findAll().stream().filter(m -> encerradosHaTempo.contains(m.getPedidoId())).count(); mensagens.deleteByPedidoIdIn(List.copyOf(encerradosHaTempo)); }
-        List<Notificacao> velhas = notificacoes.findAll().stream().filter(n -> n.getLidaEm() != null && agora - n.getCriadaEm() > diasNotificacoes * dia).toList();
-        avisos = velhas.size(); notificacoes.deleteAll(velhas);
-        List<HistoricoConta> antigos = historico.findAll().stream().filter(h -> agora - h.getCriadoEm() > diasHistorico * dia).toList();
-        fatos = antigos.size(); historico.deleteAll(antigos);
+        /* Tudo filtrado no banco: o custo não cresce com o histórico inteiro. */
+        List<String> encerradosHaTempo = pedidos.encerradosAntesDe(agora - diasConversas * dia);
+        long conversas = 0;
+        if (!encerradosHaTempo.isEmpty()) { conversas = mensagens.countByPedidoIdIn(encerradosHaTempo); mensagens.deleteByPedidoIdIn(encerradosHaTempo); }
+        long avisos = notificacoes.apagarLidasAntesDe(agora - diasNotificacoes * dia);
+        long fatos = historico.apagarAntesDe(agora - diasHistorico * dia);
         if (conversas + avisos + fatos > 0) log.info("Prazos de guarda: {} mensagens, {} notificações e {} registros do histórico apagados.", conversas, avisos, fatos);
     }
 
@@ -123,6 +117,6 @@ public class PrivacidadeController {
         if (denuncias != null) denuncias.deleteByDenuncianteIdOrDenunciadoId(usuarioId, usuarioId);
         if (sessoes != null) sessoes.deleteByUsuarioId(usuarioId);
         recursos.deleteAll(recursos.findByUsuarioIdOrderByCriadoEmDesc(usuarioId));
-        propostas.deleteAll(propostas.findAll().stream().filter(x -> usuarioId.equals(x.getProfissionalId())).toList());
+        propostas.deleteByProfissionalId(usuarioId);
     }
 }
