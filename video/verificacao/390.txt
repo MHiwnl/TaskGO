@@ -1,0 +1,11 @@
+pergunta    menor texto 9.8 px ("grupo do prédio")
+pedido      menor texto 10.4 px ("procurando")
+perto       menor texto 11.6 px ("você")
+verificada  menor texto 14.4 px ("documento conferido")
+endereco    menor texto 11.6 px ("agora só ele vê o endereço")
+mapa        menor texto 17.3 px ("você")
+codigo      menor texto 11.6 px ("no seu celular")
+paga        menor texto 14.4 px ("serviço concluído")
+virada      menor texto 11.6 px ("raio de 150 m")
+final       menor texto 12.3 px ("pedido")
+tudo legível a 390 px e nada cortado

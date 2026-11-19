@@ -1,0 +1,130 @@
+# Produção: banco, API, site, backup diário e a entrada pela internet.
+# No seu computador, pelo Cloudflare Tunnel (sem abrir portas):  .\iniciar-producao.ps1
+#   (= docker compose -p taskgo-prod -f docker-compose.prod.yml --env-file .env.producao --profile tunel up -d --build)
+# Num servidor próprio, com HTTPS pelo Caddy nas portas 80 e 443:  --profile servidor
+# Banco, API e nginx ficam sempre na rede interna do Docker.
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: taskgo_db
+      POSTGRES_USER: taskgo_app
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no .env}
+    volumes:
+      - dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskgo_app -d taskgo_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    # Imagem construída pelo iniciar-producao.ps1 (docker build -t taskgo-api-prod ./backend).
+    image: taskgo-api-prod
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
+      DB_URL: jdbc:postgresql://db:5432/taskgo_db
+      DB_USERNAME: taskgo_app
+      DB_PASSWORD: ${DB_PASSWORD}
+      # Site e API no mesmo endereço (o nginx repassa /api); o HTTPS termina no Caddy.
+      TASKGO_CORS_ALLOWED_ORIGINS: "https://${TASKGO_DOMINIO:?Defina TASKGO_DOMINIO no .env, por exemplo taskgo.com.br}"
+      SESSION_COOKIE_SECURE: "true"
+      SESSION_COOKIE_SAME_SITE: lax
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+      TASKGO_ADMIN_EMAILS: ${TASKGO_ADMIN_EMAILS:-}
+      TASKGO_SUPORTE_EMAILS: ${TASKGO_SUPORTE_EMAILS:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_AUTH: ${SMTP_AUTH:-true}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_STARTTLS_REQUIRED: ${SMTP_STARTTLS_REQUIRED:-true}
+      PASSWORD_RESET_FRONTEND_URL: https://${TASKGO_DOMINIO}/#/recuperar
+      # Pagamento real pelo Asaas, no modelo direto (só a taxa da TaskGO passa pelo Asaas).
+      TASKGO_PAGAMENTOS_MODO: asaas
+      TASKGO_PAGAMENTOS_MODELO: ${TASKGO_PAGAMENTOS_MODELO:-direto}
+      ASAAS_API_URL: "${ASAAS_API_URL:?Defina ASAAS_API_URL no .env, em produção https://api.asaas.com/v3}"
+      ASAAS_API_KEY: ${ASAAS_API_KEY:?Defina ASAAS_API_KEY no .env}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:?Defina ASAAS_WEBHOOK_TOKEN no .env (o mesmo cadastrado no webhook do Asaas)}
+      PIX_WEBHOOK_TOKEN: ${PIX_WEBHOOK_TOKEN:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+
+  web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    volumes:
+      - ./docker/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./css:/usr/share/nginx/html/css:ro
+      - ./js:/usr/share/nginx/html/js:ro
+      - ./assets:/usr/share/nginx/html/assets:ro
+
+  # HTTPS automático (Let's Encrypt) para o domínio; renova o certificado sozinho.
+  caddy:
+    image: caddy:2.8-alpine
+    profiles: ["servidor"]
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TASKGO_DOMINIO: ${TASKGO_DOMINIO}
+      TASKGO_EMAIL_CERTIFICADO: ${TASKGO_EMAIL_CERTIFICADO:-}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-dados:/data
+      - caddy-config:/config
+
+  # Cloudflare Tunnel: publica o site em https://TASKGO_DOMINIO sem abrir portas no roteador.
+  # O HTTPS fica com o Cloudflare; o túnel liga direto no nginx.
+  tunel:
+    image: cloudflare/cloudflared:2026.11.0
+    profiles: ["tunel"]
+    restart: unless-stopped
+    depends_on:
+      - web
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+
+  # Backup do banco todo dia, guardado em ./backups (os últimos 14 dias).
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/taskgo-$$(date +%Y-%m-%d).sql.gz
+          pg_dump -h db -U taskgo_app taskgo_db | gzip > "$$f.tmp" && mv "$$f.tmp" "$$f" && echo "backup ok: $$f"
+          find /backups -name 'taskgo-*.sql.gz' -mtime +14 -delete
+          sleep 86400
+        done
+
+volumes:
+  dados:
+    name: taskgo-prod-db
+  caddy-dados:
+  caddy-config:

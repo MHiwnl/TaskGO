@@ -1,0 +1,56 @@
+# Configuração e segredos locais
+.env
+.env.*
+!.env.example
+**/*.env
+**/*.env.*
+!**/*.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+# Artefatos locais
+backend/target/
+*.log
+.idea/
+.vscode/*.local.json
+Thumbs.db
+Desktop.ini
+design-systems
+.impeccable
+.github
+COMMANDS-Impeccable-Designs.md
+DESIGN.md
+
+# Filme explicativo (video/): só o código e os textos vão para o git.
+# Ambiente Python do clonador de voz (~27 mil arquivos)
+video/.venv-voz/
+# Referências de terceiros
+video/referencia/
+# Intermediários, quadros de teste e vídeos renderizados (refazem com render/render.cjs)
+video/build/
+video/frames/
+video/out/*.mp4
+video/verificacao/390/
+# Faixa-guia sintética e gravações de voz (dado pessoal)
+video/narracao/guia/
+video/narracao/prep/
+video/narracao/amostras/
+video/narracao/voz/
+video/narracao/referencia/*
+!video/narracao/referencia/LEIA.md
+# chave da ElevenLabs (nunca no git) e a tomada gerada
+video/.env.elevenlabs
+video/narracao/elevenlabs/
+
+# dumps do banco (dados pessoais e chaves): nunca no git
+backups/
+*.sql
+*.sql.gz
+*.dump
+
+# Playwright CLI: snapshots/screenshots e sessões de login salvas (tokens): nunca no git
+.playwright-cli/
+.playwright/
+auth*.json

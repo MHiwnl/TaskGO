@@ -1,0 +1,22 @@
+# HTTPS do TaskGO. O certificado vem do Let's Encrypt e é renovado sozinho.
+{
+	email {$TASKGO_EMAIL_CERTIFICADO}
+}
+
+www.{$TASKGO_DOMINIO} {
+	redir https://{$TASKGO_DOMINIO}{uri} permanent
+}
+
+{$TASKGO_DOMINIO} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	# Tempo real (SSE): repassa sem guardar em buffer.
+	reverse_proxy web:80 {
+		flush_interval -1
+	}
+}

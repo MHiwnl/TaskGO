@@ -1,0 +1,48 @@
+1
+00:00:00,500 --> 00:00:05,567
+Chuveiro queimou. Você pede indicação no
+grupo... e fica esperando alguém responder.
+
+2
+00:00:05,417 --> 00:00:07,188
+Com a TaskGO é diferente:
+
+3
+00:00:07,038 --> 00:00:12,282
+você faz um pedido só, e na hora os dez
+profissionais livres mais perto de você recebem.
+
+4
+00:00:12,132 --> 00:00:17,174
+E não é qualquer um, não: todo mundo
+ali tem documento e rosto conferidos.
+
+5
+00:00:17,024 --> 00:00:19,279
+Seu endereço? Só aparece
+pra quem você escolher.
+
+6
+00:00:19,129 --> 00:00:22,139
+Aí você acompanha ele
+chegando, ao vivo, no mapa.
+
+7
+00:00:21,989 --> 00:00:26,443
+Chegou na porta? Ele mostra um código de
+quatro números, e você sabe que é ele.
+
+8
+00:00:26,293 --> 00:00:29,072
+E você só paga no final,
+com o serviço pronto.
+
+9
+00:00:28,922 --> 00:00:34,254
+Ah, e aquele "tô chegando" de quem
+ainda tá a um quilômetro? Aqui não cola.
+
+10
+00:00:34,104 --> 00:00:37,796
+TaskGO. Confiança na hora que você
+precisa. Faz seu pedido agora.

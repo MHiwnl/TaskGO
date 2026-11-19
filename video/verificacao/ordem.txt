@@ -1,0 +1,99 @@
+t=4.05s  PSNR 48.1 dB  ok
+t=8.57s  PSNR 38.6 dB  ok
+t=12.25s  PSNR 48.1 dB  ok
+t=16.42s  PSNR 46.3 dB  ok
+t=20.27s  PSNR 36.3 dB  ok
+t=23.62s  PSNR 46.2 dB  ok
+t=27.63s  PSNR 48.0 dB  ok
+t=31.65s  PSNR 36.7 dB  ok
+t=36.47s  PSNR 48.3 dB  ok
+t=42.92s  PSNR 45.5 dB  ok
+cut_9x16.mp4: 10 de 10 batidas com o quadro certo
+t=3.25s  PSNR 50.1 dB  ok
+t=6.38s  PSNR 39.7 dB  ok
+t=10.10s  PSNR 52.2 dB  ok
+t=15.07s  PSNR 47.9 dB  ok
+t=18.28s  PSNR 38.2 dB  ok
+t=20.85s  PSNR 48.9 dB  ok
+t=24.57s  PSNR 55.9 dB  ok
+t=27.87s  PSNR 39.2 dB  ok
+t=32.03s  PSNR 54.8 dB  ok
+t=37.55s  PSNR 46.3 dB  ok
+master_16x9.mp4: 10 de 10 batidas com o quadro certo
+t=3.25s  PSNR 49.2 dB  ok
+t=6.38s  PSNR 39.6 dB  ok
+t=10.10s  PSNR 52.1 dB  ok
+t=15.07s  PSNR 47.9 dB  ok
+t=18.28s  PSNR 37.7 dB  ok
+t=20.85s  PSNR 47.9 dB  ok
+t=24.57s  PSNR 52.4 dB  ok
+t=27.87s  PSNR 38.5 dB  ok
+t=32.03s  PSNR 53.6 dB  ok
+t=37.55s  PSNR 45.2 dB  ok
+cut_9x16.mp4: 10 de 10 batidas com o quadro certo
+t=3.25s  PSNR 48.7 dB  ok
+t=6.38s  PSNR 38.2 dB  ok
+t=10.10s  PSNR 50.3 dB  ok
+t=15.07s  PSNR 46.1 dB  ok
+t=18.28s  PSNR 36.4 dB  ok
+t=20.85s  PSNR 47.4 dB  ok
+t=24.57s  PSNR 51.5 dB  ok
+t=27.87s  PSNR 37.3 dB  ok
+t=32.03s  PSNR 53.2 dB  ok
+t=37.55s  PSNR 44.4 dB  ok
+cut_1x1.mp4: 10 de 10 batidas com o quadro certo
+t=3.25s  PSNR 17.0 dB  ERRADO
+t=6.38s  PSNR 19.8 dB  ERRADO
+t=10.10s  PSNR 20.9 dB  ERRADO
+t=15.07s  PSNR 17.8 dB  ERRADO
+t=18.28s  PSNR 18.8 dB  ERRADO
+t=20.85s  PSNR 17.7 dB  ERRADO
+t=24.57s  PSNR 18.0 dB  ERRADO
+t=27.87s  PSNR 19.4 dB  ERRADO
+t=32.03s  PSNR 18.8 dB  ERRADO
+t=37.55s  PSNR 15.2 dB  ERRADO
+master_16x9_movimento_reduzido.mp4: 0 de 10 batidas com o quadro certo
+t=3.25s  PSNR 50.1 dB  ok
+t=6.38s  PSNR 39.7 dB  ok
+t=10.10s  PSNR 52.2 dB  ok
+t=15.07s  PSNR 47.9 dB  ok
+t=18.28s  PSNR 38.2 dB  ok
+t=20.85s  PSNR 48.9 dB  ok
+t=24.57s  PSNR 55.9 dB  ok
+t=27.87s  PSNR 39.2 dB  ok
+t=32.03s  PSNR 54.8 dB  ok
+t=37.55s  PSNR 46.4 dB  ok
+master_16x9.mp4: 10 de 10 batidas com o quadro certo
+t=3.25s  PSNR 49.2 dB  ok
+t=6.38s  PSNR 39.6 dB  ok
+t=10.10s  PSNR 52.1 dB  ok
+t=15.07s  PSNR 47.9 dB  ok
+t=18.28s  PSNR 37.7 dB  ok
+t=20.85s  PSNR 47.9 dB  ok
+t=24.57s  PSNR 52.4 dB  ok
+t=27.87s  PSNR 38.5 dB  ok
+t=32.03s  PSNR 53.6 dB  ok
+t=37.55s  PSNR 45.3 dB  ok
+cut_9x16.mp4: 10 de 10 batidas com o quadro certo
+t=3.25s  PSNR 48.7 dB  ok
+t=6.38s  PSNR 38.2 dB  ok
+t=10.10s  PSNR 50.3 dB  ok
+t=15.07s  PSNR 46.1 dB  ok
+t=18.28s  PSNR 36.4 dB  ok
+t=20.85s  PSNR 47.4 dB  ok
+t=24.57s  PSNR 51.5 dB  ok
+t=27.87s  PSNR 37.3 dB  ok
+t=32.03s  PSNR 53.2 dB  ok
+t=37.55s  PSNR 44.5 dB  ok
+cut_1x1.mp4: 10 de 10 batidas com o quadro certo
+t=3.25s  PSNR 53.4 dB  ok
+t=6.38s  PSNR 39.8 dB  ok
+t=10.10s  PSNR 51.8 dB  ok
+t=15.07s  PSNR 48.8 dB  ok
+t=18.28s  PSNR 38.4 dB  ok
+t=20.85s  PSNR 48.6 dB  ok
+t=24.57s  PSNR 56.3 dB  ok
+t=27.87s  PSNR 39.7 dB  ok
+t=32.03s  PSNR 54.2 dB  ok
+t=37.55s  PSNR 46.4 dB  ok
+master_16x9_movimento_reduzido.mp4: 10 de 10 batidas com o quadro certo

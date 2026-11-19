@@ -1,0 +1,8 @@
+{
+  "name": "taskgo-site",
+  "private": true,
+  "description": "Testes do site TaskGO (sem dependências: Node 20+ e Google Chrome).",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  }
+}

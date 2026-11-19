@@ -1,0 +1,402 @@
+# TaskGO
+
+Plataforma web para aproximar pessoas que precisam de serviços locais de profissionais autônomos, com busca por categoria, pedidos, conversa e acompanhamento do atendimento.
+
+> **Estágio atual: MVP em desenvolvimento.** A TaskGO foi criada em 2026 por estudantes da UNIBRA, em Recife, e ainda não está aberta ao público. O pagamento roda no sandbox do Asaas (sem dinheiro de verdade); login com Apple e avisos por SMS **não** existem.
+
+## Sumário
+
+- [O que é o projeto](#o-que-é-o-projeto)
+- [Stack tecnológica](#stack-tecnológica)
+- [Estrutura analítica do projeto (EAP)](#estrutura-analítica-do-projeto-eap)
+- [Recursos de destaque recentes](#recursos-de-destaque-recentes)
+- [Estrutura de arquivos](#estrutura-de-arquivos)
+- [Segurança e autenticação](#segurança-e-autenticação)
+- [Como executar](#como-executar)
+- [Manutenção e otimização do banco de dados](#manutenção-e-otimização-do-banco-de-dados)
+- [Testes](#testes)
+- [Limitações e problemas conhecidos](#limitações-e-problemas-conhecidos)
+- [Documentação complementar](#documentação-complementar)
+
+## O que é o projeto
+
+A TaskGO conecta dois públicos:
+
+- **Clientes**, que escolhem uma categoria de serviço, abrem um pedido e acompanham o atendimento.
+- **Profissionais**, que recebem oportunidades compatíveis com sua categoria, aceitam pedidos e conversam com o cliente.
+
+O projeto tem dois modos de execução:
+
+| Modo | Como ativar | Fonte dos dados |
+|---|---|---|
+| **Real** | Padrão | API Spring Boot e PostgreSQL |
+| **Demonstração** | `?demo=1` na URL, somente em `localhost` | Dados fictícios, com aviso na tela; não se misturam às contas reais |
+
+Preços dos planos e o simulador de ganhos aparecem apenas no modo de demonstração.
+
+## Stack tecnológica
+
+| Camada | Tecnologias |
+|---|---|
+| **Frontend** | HTML, CSS e JavaScript puros, sem framework e sem etapa de build; rotas por hash (`#/...`) |
+| **Mapas** | Leaflet 1.9.4 com tiles do OpenStreetMap |
+| **Tipografia** | Inter, Inter Tight e Plus Jakarta Sans (Google Fonts) |
+| **Backend** | Java 17, Spring Boot 3.4.5, Spring Web, Spring Security, Spring Data JPA, Actuator e Spring Mail |
+| **Banco de dados** | PostgreSQL 14 ou superior (Docker usa a versão 16), com migrações Flyway |
+| **Testes** | JUnit 5, Mockito, MockMvc, Spring Security Test e H2 no backend; `node:test` no frontend |
+| **Infraestrutura** | Docker, Docker Compose (banco, API, site e simulador Pix) e GitHub Actions |
+
+```text
+Navegador (HTML/CSS/JS)
+        │  HTTPS, cookies de sessão e token CSRF
+        ▼
+API Spring Boot (porta 8080)
+        │  JPA e Flyway
+        ▼
+PostgreSQL
+```
+
+## Estrutura analítica do projeto (EAP)
+
+Legenda: ✅ implementado · 🟡 parcial · ⛔ ainda não implementado
+
+```text
+TaskGO
+├── 1. Site público
+│   ├── 1.1 Início, Serviços, Como Funciona, Para Profissionais, Quem Somos, Planos  ✅
+│   ├── 1.2 Segurança, Ajuda/FAQ, Contato e páginas legais                           ✅
+│   └── 1.3 Tema claro/escuro e layout responsivo                                    ✅
+├── 2. Contas e acesso
+│   ├── 2.1 Cadastro de cliente e profissional, login e sessão                       ✅
+│   ├── 2.2 Perfil, troca de senha e exclusão de conta                               ✅
+│   ├── 2.3 Recuperação de senha (o envio exige SMTP configurado)                    🟡
+│   ├── 2.4 Login com Google ✅ · Apple                                              ⛔
+│   └── 2.5 Verificação de documento e facial                                        ✅
+├── 3. Pedidos e atendimento
+│   ├── 3.1 Criação, aceite, status, cancelamento e avaliação                        ✅
+│   ├── 3.2 Oportunidades paginadas, sem expor contato antes do aceite               ✅
+│   ├── 3.3 Conversa por pedido, com histórico persistido                            ✅
+│   ├── 3.4 Última localização compartilhada pelo profissional                       ✅
+│   └── 3.5 Rota, distância percorrida e previsão de chegada                         ✅
+├── 4. Comunicação
+│   ├── 4.1 Notificações dentro do aplicativo                                        ✅
+│   ├── 4.2 Formulário de contato persistido                                         ✅
+│   ├── 4.3 Painel da equipe para responder contatos                                 ⛔
+│   └── 4.4 Notificações por e-mail e push ✅ · SMS                                  ⛔
+├── 5. Financeiro
+│   ├── 5.1 Carteira, extrato e resgate por Pix (Asaas)                              ✅
+│   └── 5.2 Checkout, webhook e Plano Pro (sandbox; sem dinheiro real)               🟡
+└── 6. Qualidade e operação
+    ├── 6.1 Testes automatizados e CI                                                ✅
+    ├── 6.2 Migrações, Dockerfile e guia de implantação                              ✅
+    ├── 6.3 Testes de integração com PostgreSQL e testes E2E no repositório          ⛔
+    └── 6.4 Publicação em ambiente de produção                                       ⛔
+```
+
+## Recursos de destaque recentes
+
+- **Nova interface pública:** Início, Serviços, Como Funciona, Para Profissionais, Quem Somos, Planos, login, cadastro e recuperação de senha ganharam novo layout, nova tipografia e novos componentes, mantendo as cores do site, os textos e o tema claro/escuro. Os estilos ficam em `css/landing.css`, restritos a essas telas, para não afetar o painel.
+- **Sessão no servidor:** a identidade vem da sessão do Spring Security, e o navegador não guarda senha, hash ou token de sessão.
+- **Recuperação de senha:** token de uso único, válido por 30 minutos e armazenado somente como hash.
+- **Conversas e notificações persistidas:** mensagens idempotentes por pedido e caixa de entrada no banco. A atualização usa consulta periódica, a cada 5 segundos na conversa e a cada 20 segundos nas notificações, e não é em tempo real.
+- **Localização com consentimento:** o profissional inicia o compartilhamento em um pedido `a_caminho`. O banco guarda só a posição mais recente, que é removida quando o pedido muda de estado ou o compartilhamento termina.
+- **Contato protegido:** o formulário tem limite por IP, campo-armadilha contra robôs e validação de tamanho e e-mail.
+- **Pagamento e Plano Pro:** cobrança pelo Asaas (sandbox) ou simulada, taxa automática no cartão autorizado e o Plano Pro opcional para quem atende (R$ 29,90/mês: taxa de 10%, destaque na busca, Chamar agora antes e até 20 categorias).
+
+## Estrutura de arquivos
+
+```text
+.
+├── index.html                  # Página única; carrega todo o CSS e JS
+├── .env.example                # Modelo de variáveis locais
+├── docker-compose.yml          # Banco, API e site para desenvolvimento
+├── docker/nginx.conf           # Serve o site e repassa /api para a API
+├── scripts/                    # Comandos PowerShell: iniciar, parar, publicar, iniciar-producao, backup
+├── assets/                     # marca/ (logo e favicon), videos/, topo/ (imagem do topo), equipe/ (fotos do time)
+├── css/
+│   ├── base.css                # Cores (tokens), reset e tipografia base
+│   ├── components.css          # Botões, cards e formulários
+│   ├── site.css                # Hero, faixa de categorias, FAQ e rodapé
+│   ├── auth.css                # Telas de acesso
+│   ├── painel.css              # Painel logado
+│   ├── responsive.css          # Ajustes por tamanho de tela
+│   └── landing.css             # Visual das páginas públicas e de acesso
+├── js/
+│   ├── taskgo-config.js        # URL pública da API (nunca coloque segredos aqui)
+│   ├── core/                   # Configuração, estado, rotas, layout e utilitários
+│   ├── features/               # Mapa e estimativa de preço
+│   ├── pages/                  # Páginas públicas e autenticação
+│   ├── painel/                 # Telas do painel logado
+│   └── app/                    # Renderização e inicialização
+├── tests/                      # Testes do frontend (node:test)
+├── docs/                       # Implantação, segurança, testes e decisões
+├── .github/workflows/          # CI: testes de frontend e backend
+└── backend/
+    ├── Dockerfile
+    ├── pom.xml
+    └── src/
+        ├── main/java/com/taskgo/api/   # Controllers, serviços, entidades e repositórios
+        ├── main/resources/
+        │   ├── application*.properties # Configuração padrão, dev e prod
+        │   └── db/migration/           # Migrações Flyway
+        └── test/                       # Testes da API
+```
+
+## Segurança e autenticação
+
+**Autenticação**
+
+- Senhas são armazenadas com **BCrypt**, e as respostas da API nunca incluem senha ou hash.
+- A sessão usa o cookie `JSESSIONID` com `HttpOnly`, expira em 30 minutos e troca de identificador ao autenticar.
+- Trocar a senha incrementa `credential_version`, o que encerra as sessões antigas.
+- Toda operação que altera dados exige o token CSRF no cabeçalho `X-XSRF-TOKEN`, obtido em `GET /api/auth/csrf`.
+
+**Autorização**
+
+- Por padrão, os endpoints exigem autenticação. As exceções públicas são login, cadastro, CSRF, recuperação de senha, catálogo de profissionais, estimativa, contato e health check.
+- A identidade vem sempre da sessão, nunca de um e-mail ou ID enviado pelo navegador.
+- Pedidos e conversas são restritos aos participantes. O endereço e o contato do cliente só são revelados depois do aceite.
+- Administrador é um tipo próprio de conta: quem entra com um e-mail de `TASKGO_ADMIN_EMAILS`.
+
+**Limites de abuso** (em memória, por IP e por instância da API)
+
+| Fluxo | Limite |
+|---|---|
+| Falhas de login | 10 a cada 5 minutos |
+| Recuperação de senha | 5 a cada 15 minutos |
+| Formulário de contato | 5 a cada 10 minutos |
+
+**Cookies por perfil**
+
+| Perfil | `Secure` | `SameSite` |
+|---|---|---|
+| `dev` | `false` por padrão | `lax` por padrão |
+| `prod` | `true` | `none` por padrão |
+
+**Regras para produção**
+
+- Sirva frontend e API por HTTPS e liste em `TASKGO_CORS_ALLOWED_ORIGINS` somente as origens reais. Nunca use `*`.
+- Mantenha segredos em variáveis de ambiente da plataforma. Nunca os coloque em `js/taskgo-config.js`, que é público.
+- Com mais de uma instância da API, mova os limitadores para um armazenamento compartilhado ou para o gateway.
+- Entrar com Google: crie um ID do cliente OAuth (Aplicativo da Web) no Google Cloud, com a origem do site autorizada, e ponha em `GOOGLE_CLIENT_ID` no `.env`. Sem ele, o botão não aparece.
+- Testes do site: `npm test` (Node 20+ e Google Chrome; o teste no navegador usa o site em http://localhost:3000). Testes do backend: `mvn test` em `backend/`.
+- Pagamento em modo de teste: `TASKGO_PAGAMENTOS_MODO=simulado` (já no docker-compose). Pix pelo simulador em `pagamentos/pix-simulador` (painel em http://localhost:3100) e cartão simulado na API. Nenhum dinheiro de verdade passa pelo sistema.
+- Pagamento pelo Asaas: `TASKGO_PAGAMENTOS_MODO=asaas`, `ASAAS_API_KEY` (entre aspas simples) e `ASAAS_API_URL` no `.env`. Pix com QR do Asaas, cartão digitado na página de pagamento do Asaas (o site não recebe o número do cartão), estorno pelo Asaas e resgate do profissional por transferência Pix para a chave cadastrada na Carteira. No sandbox, o botão "Simular pagamento" confirma a cobrança. Webhook: `POST /api/pagamentos/webhook/asaas`, com o token de `ASAAS_WEBHOOK_TOKEN` cadastrado no painel do Asaas; sem webhook, a API consulta o Asaas sozinha. Para produção: chave de produção, `ASAAS_API_URL=https://api.asaas.com/v3`, conta aprovada e webhook em HTTPS público.
+
+Detalhes em [docs/seguranca-autenticacao.md](docs/seguranca-autenticacao.md) e [backend/AUTH_RECOVERY.md](backend/AUTH_RECOVERY.md).
+
+## Como executar
+
+**Pré-requisito:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado. Não precisa instalar Java, Maven nem PostgreSQL.
+
+Na raiz do projeto, no PowerShell:
+
+```powershell
+.\scripts\iniciar.ps1
+```
+
+O script abre o Docker Desktop se ele estiver fechado, cria o arquivo `.env` com uma senha aleatória para o banco, sobe banco, API e site e abre <http://localhost:3000>. Na primeira vez, a compilação da API leva alguns minutos.
+
+> [!TIP]
+> Se o PowerShell bloquear o script, use `powershell -ExecutionPolicy Bypass -File .\scripts\iniciar.ps1`.
+
+Para ver só a interface, com dados fictícios e sem banco, use o modo demonstração (próxima seção).
+
+### Demonstração do site
+
+Abra <http://localhost:3000/index.html?demo=1>. O `?demo=1` vem antes do `#` e só funciona em `localhost`; a faixa "Modo demonstração" no topo confirma que ligou. Os dados são fictícios, ficam só no navegador e não se misturam às contas reais.
+
+**Contas de demonstração**
+
+| Perfil | Pessoa | E-mail |
+|---|---|---|
+| Cliente | Ana Beatriz Souza | `cliente@taskgo.com` |
+| Profissional | Carlos Andrade | `pro@taskgo.com` |
+
+Para entrar numa delas, abra **Entrar** com o modo ligado e toque em **Entrar como cliente (Ana)** ou **Entrar como profissional (Carlos)**. Não precisa de senha. Também dá para ir direto pelo endereço:
+
+- Cliente: <http://localhost:3000/index.html?demo=1&role=cliente#/app/inicio>
+- Profissional: <http://localhost:3000/index.html?demo=1&role=profissional#/app/inicio>
+
+O formulário de e-mail e senha da tela de Entrar continua consultando a API, então não abre essas contas. Para sair, use **Sair** no menu da conta.
+
+Na demonstração, depois de enviar um pedido em **Contratar**, dois profissionais fictícios mandam propostas em alguns segundos. Na conta de profissional, uma proposta enviada em **Oportunidades** é aceita pelo cliente fictício logo depois.
+
+### Configuração no `.env`
+
+| Variável | Para quê |
+|---|---|
+| `TASKGO_ADMIN_EMAILS` | E-mails (separados por vírgula) que veem a aba **Moderação**: recursos contra avisos e banimentos. |
+| `SMTP_HOST`, `SMTP_PORT` | Servidor de e-mail. Para Gmail: `smtp.gmail.com` e `587`. |
+| `SMTP_USERNAME` | O endereço do Gmail que envia. |
+| `SMTP_PASSWORD` | A **senha de app** do Gmail (16 letras), não a senha normal. Gere em <https://myaccount.google.com/apppasswords> com a verificação em 2 etapas ligada. |
+| `SMTP_FROM` | Remetente que aparece no e-mail; normalmente o mesmo Gmail. |
+
+Depois de mudar o `.env`, rode `docker compose up -d api` para a API ler os valores novos.
+
+### Demonstração do app Android
+
+O app em `app-android/` (Kotlin + Jetpack Compose) é um protótipo **separado do site**. Ele não usa a API nem o Docker, não precisa de internet e funciona com o cabo desconectado depois de instalado. Pessoas, pedidos, propostas, GPS e valores são simulados.
+
+**Pré-requisitos:** Android Studio instalado (traz o SDK) e um celular Android com a **depuração USB** ligada (Configurações › Sobre o telefone › tocar 7 vezes em "Número da versão" › Opções do desenvolvedor). Em celulares Xiaomi, ligue também **Instalar via USB**.
+
+Com o celular no cabo, desbloqueado e com a depuração autorizada, rode na pasta `app-android`:
+
+```powershell
+.\rodar-no-celular.ps1
+```
+
+O script compila, instala e abre o app. Depois disso, o app TaskGO fica no celular como qualquer outro.
+
+**Contas do app:** não há login. Na entrada, escolha **Sou profissional** (Carlos Andrade) ou **Preciso de um serviço** (Ana Beatriz). Em **Perfil** dá para trocar de perfil, mudar o tema (Escuro, Claro ou Do sistema) e **Recomeçar demonstração**. O código de chegada da demonstração é **2217**.
+
+> [!NOTE]
+> O Gradle do app precisa de Java 21; o Java 25 que vem com o Android Studio não funciona com o plugin do Kotlin. O script procura o Java 21 em `%USERPROFILE%\.jdks`. Se não houver, baixe no Android Studio: Settings › Build Tools › Gradle › Gradle JDK › Download JDK › 21. Para abrir o projeto no Android Studio, use **Open** na pasta `app-android`.
+
+**Como funciona:** o `docker-compose.yml` sobe três serviços. O `web` (nginx) serve o site e repassa `/api` para a API pelo mesmo endereço, então não há CORS nem configuração no frontend. Só a porta 3000 fica exposta, e só nesta máquina; banco e API ficam na rede interna do Docker. As pastas do site são montadas direto do projeto: depois de editar CSS ou JS, basta recarregar a página.
+
+**Comandos do dia a dia**
+
+| Ação | Comando |
+|---|---|
+| Subir tudo | `.\scripts\iniciar.ps1` |
+| Parar | `.\scripts\parar.ps1` |
+| Ver logs da API | `docker compose logs -f api` |
+| Aplicar mudanças no backend (Java) | `docker compose up -d --build api` |
+| Abrir o banco no terminal | `docker compose exec db psql -U taskgo_app -d taskgo_db` |
+| Apagar o banco local e **todos os seus dados** | `docker compose down`, depois `docker volume rm taskgo-dev-db` |
+
+> [!NOTE]
+> O banco usa o volume `taskgo-dev-db`, o mesmo do roteiro antigo, então contas já cadastradas continuam. Na subida, o Docker avisa que o volume "não foi criado pelo Docker Compose"; o aviso pode ser ignorado. Se ainda existirem os contêineres antigos `taskgo-dev-db` e `taskgo-dev-api`, o `scriptsiniciar.ps1` os para antes de subir, para não abrirem o mesmo banco ao mesmo tempo.
+
+### Sem Docker (avançado)
+
+Requer JDK 17, Maven 3.9 ou superior e PostgreSQL 14 ou superior. Crie o banco com `CREATE ROLE taskgo_app LOGIN PASSWORD '...'` e `CREATE DATABASE taskgo_db OWNER taskgo_app`, depois inicie a API:
+
+```powershell
+$env:DB_URL = "jdbc:postgresql://localhost:5432/taskgo_db"
+$env:DB_USERNAME = "taskgo_app"
+$env:DB_PASSWORD = "sua-senha"
+cd backend
+mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
+```
+
+Em outro terminal, na raiz, sirva o site com `python -m http.server 5500` e, só na sua máquina, aponte o frontend para a API em `js/taskgo-config.js` com `apiBaseUrl: 'http://localhost:8080'`. Abra <http://localhost:5500/index.html> usando `localhost`, não `127.0.0.1`: nesse endereço o navegador não lê o cookie CSRF e o cadastro falha.
+
+## Manutenção e otimização do banco de dados
+
+Os exemplos usam o serviço `db` do `docker-compose.yml`. Em produção, execute o SQL na instância do provedor. Consultas de diagnóstico abrem com:
+
+```powershell
+docker compose exec db psql -U taskgo_app -d taskgo_db
+```
+
+### Backup e restauração
+
+Faça um backup antes de qualquer migração. Gere o arquivo dentro do contêiner e copie com `docker compose cp`, para que o redirecionamento do PowerShell não corrompa o conteúdo binário:
+
+```powershell
+docker compose exec db pg_dump -U taskgo_app -d taskgo_db --format=custom --no-owner --file=/tmp/taskgo.dump
+docker compose cp db:/tmp/taskgo.dump ./taskgo-backup.dump
+docker compose exec db rm /tmp/taskgo.dump
+```
+
+Para restaurar em uma instância **vazia** de homologação:
+
+```sh
+pg_restore --no-owner --dbname="$DATABASE_URL_HOMOLOG" taskgo-backup.dump
+```
+
+Teste a restauração periodicamente. Backups contêm dados pessoais: restrinja o acesso e nunca os envie ao repositório.
+
+### Migrações
+
+- O esquema é versionado pelo Flyway em `backend/src/main/resources/db/migration`.
+- **Nunca edite uma migração já aplicada.** Crie a próxima versão (`V<n>__descricao.sql`; a última é `V26__assinaturas.sql`).
+- O perfil `dev` usa `ddl-auto=update`, e o Hibernate pode criar objetos fora das migrações. Por isso, uma mudança de esquema só está pronta quando existe em uma migração.
+- O perfil `prod` usa `ddl-auto=validate` e não altera o esquema sozinho.
+
+```sql
+SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY 1;
+```
+
+### Rotina de saúde
+
+O autovacuum do PostgreSQL deve permanecer ligado. Use estas consultas para acompanhar o banco e, depois de grandes cargas ou remoções, execute `VACUUM (ANALYZE);`.
+
+```sql
+-- Tamanho do banco
+SELECT pg_size_pretty(pg_database_size(current_database()));
+
+-- Tabelas com mais linhas mortas
+SELECT relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze
+FROM pg_stat_user_tables ORDER BY n_dead_tup DESC;
+
+-- Índices pouco usados (só avalie depois de um período com tráfego real)
+SELECT relname, indexrelname, idx_scan, pg_size_pretty(pg_relation_size(indexrelid))
+FROM pg_stat_user_indexes ORDER BY idx_scan ASC;
+
+-- Conexões abertas neste banco
+SELECT count(*) FROM pg_stat_activity WHERE datname = current_database();
+```
+
+### Índices
+
+A migração `V9__indices_btree.sql` criou índices para as buscas frequentes (e-mail, pedidos por cliente e profissional, mensagens, notificações e transações). Para um índice novo, crie a próxima migração.
+
+Os índices com `UPPER`/`LOWER` acompanham as buscas sem diferenciar maiúsculas, geradas pelo Spring Data. Antes de adotar um índice, confirme o ganho com `EXPLAIN (ANALYZE, BUFFERS)` em uma cópia com volume realista, porque índices também deixam as escritas mais lentas. Em tabelas grandes de produção, prefira `CREATE INDEX CONCURRENTLY`, que não pode rodar dentro de uma transação e exige configurar a migração do Flyway para isso.
+
+### Outras otimizações identificadas
+
+- **Listas sem paginação:** mensagens de um pedido e notificações de um usuário são carregadas por inteiro. Pedidos estimados, oportunidades e extrato já são paginados, com no máximo 100 itens por página.
+- **Consultas repetidas:** `GET /api/profissionais` faz uma consulta de avaliações por profissional. Uma única consulta agregada reduziria esse custo.
+- **Consulta periódica:** conversas abertas e notificações geram requisições constantes, então vale considerar esse volume ao dimensionar a API e o banco.
+- **Conexões:** `DB_POOL_MAX_SIZE` e `DB_POOL_MIN_IDLE` valem 10 e 2 por padrão. Em ambientes pequenos, ajuste-os ao limite de conexões do plano.
+
+### Retenção de dados
+
+Não há tarefas agendadas de limpeza. Tokens de recuperação expirados ou usados podem ser removidos com:
+
+```sql
+DELETE FROM tokens_recuperacao_senha WHERE expira_em < now() OR usado_em IS NOT NULL;
+```
+
+A tabela `contatos_site` guarda dados pessoais sem prazo de exclusão. Defina uma política de retenção compatível com a LGPD antes do lançamento.
+
+## Testes
+
+```powershell
+# Frontend
+node --test tests/*.test.cjs
+
+# Sintaxe do JavaScript
+Get-ChildItem js -Recurse -Filter '*.js' | ForEach-Object { node --check $_.FullName }
+
+# Backend (JDK 17 e Maven)
+cd backend
+mvn test
+```
+
+O GitHub Actions executa essas verificações a cada push e pull request. Os testes da API usam dependências simuladas e H2, então não validam o comportamento em PostgreSQL real. Mais detalhes em [docs/TESTES.md](docs/TESTES.md).
+
+## Limitações e problemas conhecidos
+
+| Item | Situação |
+|---|---|
+| Health check sem SMTP | `/actuator/health` responde `DOWN` com a API funcionando. Localmente, use `MANAGEMENT_HEALTH_MAIL_ENABLED=false`. Em produção, configure o SMTP ou adote a mesma variável, para a plataforma não considerar o serviço fora do ar |
+| Textos do site | Podem existir palavras com caracteres quebrados |
+| Fotos e identidade | O time aparece com iniciais, sem fotos |
+
+## Documentação complementar
+
+| Documento | Conteúdo |
+|---|---|
+| [docs/IMPLANTACAO.md](docs/IMPLANTACAO.md) | Hospedagem, variáveis de ambiente e verificação após o deploy |
+| [docs/seguranca-autenticacao.md](docs/seguranca-autenticacao.md) | Regras de acesso por endpoint |
+| [docs/TESTES.md](docs/TESTES.md) | Comandos e cobertura dos testes |
+| [docs/api-pedidos-paginacao.md](docs/api-pedidos-paginacao.md) | Paginação das listagens de pedidos |
+| [docs/mensagens-notificacoes-contato.md](docs/mensagens-notificacoes-contato.md) | Conversas, notificações e contato |
+| [docs/rastreamento-e-identidade.md](docs/rastreamento-e-identidade.md) | Localização e verificação de identidade |
+| [backend/AUTH_RECOVERY.md](backend/AUTH_RECOVERY.md) | Recuperação de senha e planos para login externo |
+| [backend/FINANCEIRO.md](backend/FINANCEIRO.md) | Estado do módulo financeiro |
+| [backend/PAYMENTS.md](backend/PAYMENTS.md) | Requisitos para integrar pagamentos |

@@ -1,0 +1,60 @@
+/* ============ TOKENS ============
+   Site público e painel: escuros por padrão, com tema claro pelo botão do cabeçalho (data-theme).
+   data-surface diferencia o site ("site") do painel ("app"). */
+:root,:root[data-surface="site"]{
+  --viz-1:#2b59ff; --viz-2:#d95926;
+  --brand:#2b59ff; --brand-2:#8aa3ff; --brand-ink:#1a3fd6; --on-brand:#fff;
+  --accent:#35d08f; --warn:#ffb020; --danger:#ff6369;
+  --accent-text:#4be0a0; --warn-text:#ffc04d; --danger-text:#ff7d82;
+  --bg:#000; --bg-soft:#08080a; --surface:#0e0e11; --surface-2:#16161a; --surface-3:#212126;
+  --line:rgba(255,255,255,.17); --line-strong:rgba(255,255,255,.36);
+  --text:#fff; --text-2:#d3d5dc; --muted:#a3a6b1;
+  --focus:#8aa3ff;
+  --map-land:#ffffff; --map-bldg:#edf1f6; --map-road:#ffffff; --map-road-casing:#d8e0ea;
+  --map-water:#d8edf8; --map-park:#dcebd9; --map-label:#586a82;
+  --font-mono:'Spline Sans Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;
+  --font-text:'Spline Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --maxw:1240px;
+  --hdr:72px;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --viz-1:#2b59ff; --viz-2:#eb6834;
+  --brand-2:#1a3fd6; --accent-text:#0a7a4b; --warn-text:#8a5a00; --danger-text:#c4262e; --danger:#d9333b; --accent:#10a56a; --warn:#d98a00;
+  --bg:#fff; --bg-soft:#f3f3f5; --surface:#fff; --surface-2:#f3f3f5; --surface-3:#e7e7eb;
+  --line:rgba(0,0,0,.14); --line-strong:rgba(0,0,0,.42);
+  --text:#000; --text-2:#33353d; --muted:#5a5d68;
+  --focus:#1a3fd6;
+  color-scheme:light;
+}
+/* ============ BASE ============ */
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-text);font-size:16px;line-height:1.6;overflow-x:hidden}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3,h4{margin:0;font-family:var(--font-mono);line-height:1.15;letter-spacing:-.02em;font-weight:600;text-wrap:balance}
+h1{font-size:clamp(1.9rem,4vw,3.4rem)}
+h2{font-size:clamp(1.5rem,3vw,2.4rem)}
+h3{font-size:1.06rem;letter-spacing:-.01em}
+p{margin:0}
+::selection{background:var(--brand);color:#fff}
+.wrap{width:100%;max-width:var(--maxw);margin:0 auto;padding:0 22px}
+.muted{color:var(--muted)}
+.t2{color:var(--text-2)}
+.center{text-align:center}
+.hide{display:none!important}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+main:focus{outline:none}
+.skip-link{position:fixed;top:8px;left:8px;z-index:100;padding:10px 16px;background:var(--bg);border:1px solid var(--line-strong);color:var(--text);font-weight:600;transform:translateY(calc(-100% - 16px))}
+.skip-link:focus{transform:none}
+.leitor{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+*{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-thumb{background:var(--line-strong)}
+*::-webkit-scrollbar-track{background:transparent}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+}

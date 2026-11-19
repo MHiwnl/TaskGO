@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="preto">#000000</color>
+    <!-- Fundo preto desde o primeiro quadro, como o site. -->
+    <style name="Tema.TaskGO" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/preto</item>
+        <item name="android:colorBackground">@color/preto</item>
+    </style>
+</resources>

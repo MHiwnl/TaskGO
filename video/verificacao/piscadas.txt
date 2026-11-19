@@ -1,0 +1,4 @@
+master_16x9.mp4: 2744 quadros; quadros acima do limite: 0; pior: 10.4% da janela piscando em t=27.02 s (limite 25%)  ok
+cut_9x16.mp4: 2744 quadros; quadros acima do limite: 0; pior: 15.3% da janela piscando em t=27.08 s (limite 25%)  ok
+cut_1x1.mp4: 2744 quadros; quadros acima do limite: 0; pior: 15.5% da janela piscando em t=26.93 s (limite 25%)  ok
+master_16x9_movimento_reduzido.mp4: 2744 quadros; quadros acima do limite: 0; pior: 0.1% da janela piscando em t=14.23 s (limite 25%)  ok

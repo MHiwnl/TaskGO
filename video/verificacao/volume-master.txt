@@ -1,0 +1,4 @@
+    I:         -16.0 LUFS
+    LRA:         3.1 LU
+master_16x9 pico real: -1.5 dBFS
+cut_9x16 pico real: -1.5 dBFS

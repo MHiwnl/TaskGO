@@ -1,0 +1,17 @@
+/* Tokens do filme: os mesmos valores de ../../css/base.css (site TaskGO). Nenhuma cor nova.
+   Três fundos, como o site: preto (tema escuro), azul da marca com grão e branco (tema claro). */
+:root{
+  --azul:#2b59ff;            /* --brand */
+  --azul-leitura:#8aa3ff;    /* --brand-2 no escuro: azul como texto sobre preto */
+  --azul-tinta:#1a3fd6;      /* --brand-2 no claro: azul como texto sobre branco */
+  --preto:#000; --branco:#fff;
+  /* estado no escuro */
+  --verde:#35d08f; --verde-texto:#4be0a0; --vermelho:#ff6369; --vermelho-texto:#ff7d82;
+  /* estado no claro */
+  --verde-claro:#10a56a; --verde-texto-claro:#0a7a4b; --vermelho-claro:#d9333b; --vermelho-texto-claro:#c4262e;
+  /* texto secundário dos dois temas */
+  --texto2-escuro:#d3d5dc; --apagado-escuro:#a3a6b1; --texto2-claro:#33353d; --apagado-claro:#5a5d68;
+  --mono:'Spline Sans Mono',ui-monospace,Consolas,monospace;
+  --texto:'Spline Sans',system-ui,'Segoe UI',sans-serif;
+  --ease:cubic-bezier(.16,1,.3,1);
+}

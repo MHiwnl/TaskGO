@@ -1,0 +1,10 @@
+idêntico   t=2.5s  4dbf74b8cfd686ef / 4dbf74b8cfd686ef
+idêntico   t=9.9s  6bc8cd479e07fb46 / 6bc8cd479e07fb46
+idêntico   t=13.3s  29e57bb5fa34c361 / 29e57bb5fa34c361
+idêntico   t=17.1s  8011d6eeb9f0165a / 8011d6eeb9f0165a
+idêntico   t=20s  113fffff6b799e1d / 113fffff6b799e1d
+idêntico   t=24.4s  ebab7d5169594800 / ebab7d5169594800
+idêntico   t=27.8s  8ae2c884a12fa6ba / 8ae2c884a12fa6ba
+idêntico   t=31.2s  0ede19ff023493fb / 0ede19ff023493fb
+idêntico   t=37.6s  b5780140928c2688 / b5780140928c2688
+9 de 9 quadros idênticos

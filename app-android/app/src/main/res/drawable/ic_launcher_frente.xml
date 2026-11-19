@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O símbolo da marca dentro da área segura do ícone adaptável (108dp, com 26dp de margem). -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/simbolo"
+    android:inset="26dp" />

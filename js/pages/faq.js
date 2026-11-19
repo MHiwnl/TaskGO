@@ -1,0 +1,16 @@
+/* ---------- FAQ ---------- */
+const FAQ=[
+  ['Como contrato um serviço?','Escolha o serviço, diga onde e quando precisa e quanto quer pagar. O pedido vai para os profissionais da região, que aceitam o seu valor ou mandam outra proposta. Você vê o perfil, a nota e as avaliações de quem aceitou e confirma quem vai atender. Para urgências, use Chamar agora: o pedido vai para quem está online mais perto.'],
+  ['Quanto custa usar a TaskGO?','Para quem contrata, nada: sem mensalidade e sem taxa. O profissional não paga mensalidade obrigatória; ele paga uma taxa só sobre o que recebe: 15% nos serviços comuns, 12% a partir de R$ 1.000 e de 12% a 6% nas obras, quanto maior o valor. Na ajuda rápida, 10%.'],
+  ['Como funciona o pagamento?','Você paga direto ao profissional, por Pix na chave dele ou em dinheiro, e só depois que o serviço termina. A chave Pix aparece no pedido nessa hora. Nas obras, cada etapa é paga depois que você a aprova; no serviço recorrente, cada vez depois que acontece.'],
+  ['Posso acompanhar o profissional no mapa?','Sim. Enquanto ele está a caminho, você vê a posição no mapa, a rota pelas ruas e quantos minutos faltam. A posição só é compartilhada durante o deslocamento e é apagada quando ele chega.'],
+  ['Como sei que o profissional é de confiança?','Toda conta que atende passa pela verificação de identidade, com documento e selfie conferidos pela equipe. No pedido você vê o selo de verificado, a nota e as avaliações de outros clientes. Ao chegar, ele só começa com o código de 4 números que aparece no seu celular.'],
+  ['Posso cancelar um pedido?','Sim. Antes de o profissional chegar, o cancelamento é grátis. Depois que ele chegou, pode haver uma taxa de compensação para ele, de 20% do valor (entre R$ 10 e R$ 50). As regras completas estão na política de cancelamento.'],
+  ['E se algo der errado?','Durante o atendimento, o botão de emergência do pedido avisa a equipe de suporte da TaskGO na hora e leva às ligações para 190 e 192. Depois, você pode denunciar: a equipe analisa cada caso e pode advertir, suspender ou banir a conta.'],
+  ['Como me torno um profissional TaskGO?','Crie a conta de profissional, envie a verificação de identidade e marque até 10 categorias que você sabe fazer. Defina de onde sai e até quantos km atende, cadastre sua chave Pix e fique online: os pedidos da sua região começam a chegar.'],
+  ['O que é o Plano Pro?','Um plano opcional para quem atende, de R$ 29,90 por mês, por cartão (renova sozinho) ou Pix (pago a cada mês). Com ele, a taxa nos serviços comuns e no recorrente cai para 10%, você aparece primeiro na busca da sua categoria com o selo Pro, recebe o Chamar agora antes e pode marcar até 20 categorias. Obras e ajuda rápida mantêm a taxa delas. Cancele quando quiser: o plano vale até o fim do mês pago.']
+];
+function faqList(items){
+  return items.map((f,i)=>'<div class="faq-item" id="faq'+i+'"><button class="faq-q" aria-expanded="false" aria-controls="faqa'+i+'" onclick="toggleFaq('+i+')">'+f[0]+ic('plus')+'</button><div class="faq-a" id="faqa'+i+'"><div>'+f[1]+'</div></div></div>').join('');
+}
+function toggleFaq(i){const el=$('#faq'+i);if(!el)return;const aberto=el.classList.toggle('open');el.querySelector('.faq-q').setAttribute('aria-expanded',String(aberto));}

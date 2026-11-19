@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>TaskGO — filme explicativo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans+Mono:ital,wght@0,300..700;1,300..700&family=Spline+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  *{box-sizing:border-box;margin:0;transition:none!important;animation:none!important}
+  html,body{background:var(--papel);overflow:hidden}
+  #filme{position:relative;overflow:hidden;background:var(--papel);color:var(--tinta);font-family:var(--texto)}
+  #grao{display:none}
+  .abs{position:absolute}
+  /* âncora: duas vozes (itálico leve e negrito azul) */
+  #ancora{font-family:var(--mono);line-height:1.08;letter-spacing:-.02em}
+  #ancora .l{display:block;overflow:hidden;padding-bottom:.08em}
+  #ancora .l span{display:inline-block;white-space:nowrap}
+  #ancora .l1{font-style:italic;font-weight:300}
+  #ancora .l2{font-weight:700;color:var(--azul-tinta)}
+  /* pedido: ordem de serviço em linhas */
+  #pedido{font-family:var(--mono)}
+  #pedido .cab{display:flex;justify-content:space-between;align-items:center;border-top:3px solid var(--tinta);padding:.35em 0 .45em}
+  #pedido .cab b{font-weight:700}
+  #pedido .estado{display:inline-flex;align-items:center;gap:.45em;font-size:.76em;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tinta-2)}
+  #pedido .estado i{width:.62em;height:.62em;border-radius:50%;background:var(--azul);display:inline-block}
+  .linha{position:relative;display:flex;align-items:center;justify-content:space-between;gap:.8em}
+  .linha .fio{position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--linha-forte);transform-origin:left center}
+  .linha .k{color:var(--tinta-2);font-size:.82em;white-space:nowrap}
+  .linha .v{position:relative;display:inline-flex;align-items:center;gap:.4em;white-space:nowrap;font-weight:500}
+  .linha .v.vazio{color:var(--tinta-2)}
+  .linha .tarja{position:absolute;inset:-.12em 0 -.12em -.25em;background:var(--azul);transform-origin:right center;display:flex;align-items:center;justify-content:flex-end;padding-right:.4em;overflow:hidden}
+  .linha .tarja i{font-style:italic;font-weight:300;color:#fff;font-size:.82em}
+  .linha .v.nao{color:var(--vermelho-texto);font-weight:600}
+  .ok{color:var(--verde-texto)}
+  svg.check{width:1em;height:1em;flex:none}
+  svg.check path{fill:none;stroke:var(--verde-texto);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+  svg.xis path{fill:none;stroke:var(--vermelho-texto);stroke-width:2.6;stroke-linecap:round}
+  /* palco */
+  #palco{overflow:hidden}
+  #palco svg.mundo{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
+  #borda{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 52% 52% at 50% 50%,rgba(242,237,228,0) 68%,var(--papel) 100%)}
+  .rot{position:absolute;font-family:var(--mono);white-space:nowrap;line-height:1.2}
+  .rot.sm{color:var(--tinta-2)}
+  .balao{position:absolute;border:1.5px solid var(--tinta);background:var(--papel);padding:.7em .9em .6em}
+  .balao .de{font-family:var(--mono);font-size:.7em;color:var(--tinta-2);margin-bottom:.35em;text-transform:uppercase;letter-spacing:.06em}
+  .balao .msg{font-weight:500;line-height:1.25}
+  .balao .meta{font-family:var(--mono);font-size:.7em;color:var(--tinta-2);margin-top:.5em;display:flex;gap:.6em;align-items:center}
+  .cartao{position:absolute;border:1.5px solid var(--tinta);background:var(--papel);padding:.8em 1em}
+  .cartao .nome{font-family:var(--mono);font-weight:700;font-size:1.25em;line-height:1.1}
+  .selo{display:inline-flex;align-items:center;gap:.35em;border:1.5px solid var(--verde-texto);color:var(--verde-texto);font-family:var(--mono);font-weight:700;font-size:.7em;padding:.15em .5em;text-transform:uppercase;letter-spacing:.05em;margin-top:.45em}
+  .cartao .item{white-space:nowrap;display:flex;align-items:center;gap:.45em;font-family:var(--mono);font-size:.7em;margin-top:.5em;color:var(--tinta)}
+  .botao{position:absolute;background:var(--azul);color:#fff;font-family:var(--mono);font-weight:700;padding:.65em 1.1em;white-space:nowrap}
+  .painel{position:absolute;border:1.5px solid var(--tinta);background:var(--papel);padding:.6em .8em}
+  .painel .t{font-family:var(--mono);font-size:.7em;color:var(--tinta-2);text-transform:uppercase;letter-spacing:.06em}
+  .digitos{display:flex;gap:.25em;margin-top:.25em;font-family:var(--mono);font-weight:700}
+  .digitos span{width:1.05em;text-align:center;border-bottom:2px solid var(--linha-forte);line-height:1.15}
+  .carimbo{position:absolute;border:3px solid var(--azul-tinta);color:var(--azul-tinta);font-family:var(--mono);font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:.2em .6em;background:rgba(242,237,228,.92)}
+  #marca{position:absolute;display:flex;align-items:center;gap:.4em;font-family:var(--mono);font-size:1em}
+  #marca img{width:1.3em;height:1.3em}
+  #marca .w{font-weight:400}#marca .w b{font-weight:700;color:var(--azul-tinta)}
+  /* legenda gravada */
+  #legenda{position:absolute;z-index:40;font-family:var(--texto);font-weight:500;line-height:1.3;color:#fff}
+  #legenda span{background:var(--tinta);padding:.12em .45em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+</style>
+</head>
+<body>
+<div id="filme">
+  <div id="ancora" class="abs"><span class="l l1"><span></span></span><span class="l l2"><span></span></span></div>
+  <div id="palco" class="abs">
+    <svg class="mundo" id="mundo" xmlns="http://www.w3.org/2000/svg"><g id="cam"></g></svg>
+    <div id="borda"></div>
+    <div id="rotulos"></div>
+  </div>
+  <div id="pedido" class="abs"></div>
+  <div id="legenda"><span></span></div>
+  <canvas id="grao"></canvas>
+</div>
+<script src="timeline.js"></script>
+<script src="duracoes.js"></script>
+<script src="film.js"></script>
+<script src="audio.js"></script>
+</body>
+</html>

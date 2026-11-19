@@ -1,0 +1,180 @@
+/* ============ HEADER ============ */
+header.site{position:sticky;top:0;z-index:60;background:var(--bg);border-bottom:1px solid var(--line)}
+.nav{height:var(--hdr);display:flex;align-items:center;gap:26px}
+.logo{display:inline-flex;align-items:center;gap:9px;font-family:var(--font-mono);font-weight:400;font-size:1.3rem;letter-spacing:-.04em}
+.logo .lt{display:inline-flex;align-items:baseline}
+.logo b{font-weight:700;margin-left:1px;color:var(--brand)}
+.logo-simbolo{flex:none;width:32px;height:32px}
+/* Sobre áreas azuis, a marca usa a versão monocromática branca: azul sobre azul sumiria. */
+.azul .logo-simbolo{filter:brightness(0) invert(1)}
+.azul .logo .lt,.azul .logo b{color:#fff}
+:root[data-theme="dark"] .logo .lt,.logo .lt{color:var(--text)}
+.nav-links{display:flex;gap:2px}
+/* Logo e ações com a mesma largura flexível: os links ficam no centro do cabeçalho. */
+.nav>.logo{flex:1 1 0;min-width:max-content}
+.nav-links a{padding:8px 10px;font-family:var(--font-mono);font-size:.72rem;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--text-2)}
+.nav-links a:hover{color:var(--text);text-decoration:underline;text-underline-offset:5px}
+.nav-links a.active{color:var(--text);text-decoration:underline;text-decoration-color:var(--brand);text-decoration-thickness:2px;text-underline-offset:5px}
+.nav-right{flex:1 1 0;min-width:max-content;justify-content:flex-end;display:flex;align-items:center;gap:10px}
+.icon-btn{width:40px;height:40px;border:1px solid var(--line);background:transparent;display:grid;place-items:center;cursor:pointer}
+.icon-btn:hover{border-color:var(--text)}
+.icon-btn svg{width:17px;height:17px;stroke:var(--text-2)}
+.burger{display:none}
+.mobile-nav{display:none}
+/* ============ BOTÕES ============ */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:12px 18px;border:1px solid transparent;border-radius:0;font-family:var(--font-mono);font-weight:500;font-size:.88rem;letter-spacing:-.01em;cursor:pointer;white-space:nowrap}
+.btn svg{width:16px;height:16px}
+.btn-primary,.btn-grad{background:var(--brand);color:var(--on-brand)}
+.btn-primary:hover,.btn-grad:hover{background:var(--text);color:var(--bg)}
+.btn-ghost{background:transparent;border-color:var(--line-strong);color:var(--text)}
+.btn-ghost:hover{background:var(--text);border-color:var(--text);color:var(--bg)}
+.btn-soft{background:transparent;border-color:var(--brand);color:var(--brand-2)}
+.btn-soft:hover{background:var(--brand);color:var(--on-brand)}
+.btn-danger{background:transparent;border-color:var(--danger);color:var(--danger-text)}
+.btn-danger:hover{background:var(--danger);color:#000}
+.btn-lg{padding:15px 24px;font-size:.95rem}
+.btn-sm{padding:8px 12px;font-size:.8rem}
+.btn-block{width:100%}
+.btn[disabled]{opacity:.5;pointer-events:none}
+/* Ação pública: texto com seta em círculo. */
+.seta{display:inline-flex;align-items:center;gap:14px;min-height:52px;font-family:var(--font-mono);font-size:.95rem;font-weight:500}
+.seta i{flex:none;display:grid;place-items:center;width:52px;height:52px;border:1px solid var(--line-strong);border-radius:50%;font-style:normal;transition:background .18s,border-color .18s}
+.seta svg{width:18px;height:18px;transition:transform .18s}
+.seta:hover i{background:var(--text);border-color:var(--text);color:var(--bg)}
+.seta:hover svg{transform:translateX(3px)}
+.seta-forte i{background:var(--brand);border-color:var(--brand);color:#fff}
+.setas{display:flex;flex-wrap:wrap;gap:12px 36px;margin-top:32px}
+/* ============ ELEMENTOS ============ */
+.card{background:transparent;border:0;border-top:1px solid var(--line-strong);border-radius:0;padding:20px 0}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;background:transparent;border:1px solid var(--line);font-family:var(--font-mono);font-size:.78rem;font-weight:500;color:var(--text-2)}
+button.pill{cursor:pointer}
+button.pill:hover,a.pill:hover{border-color:var(--text);color:var(--text)}
+.pill svg{width:14px;height:14px}
+.pill-brand,button.pill-brand:hover,a.pill-brand:hover{background:var(--brand);border-color:var(--brand);color:#fff}
+.tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:.74rem;font-weight:600;white-space:nowrap}
+.tag-ok{color:var(--accent-text)}
+.tag-warn{color:var(--warn-text)}
+.tag-info{color:var(--brand-2)}
+.tag-danger{color:var(--danger-text)}
+.tag-muted{color:var(--muted)}
+.grid{display:grid;gap:24px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.ico-box{flex:none;display:grid;place-items:center;width:28px;height:28px}
+.ico-box svg{width:22px;height:22px;stroke:var(--text)}
+svg.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.avatar{border-radius:50%;display:grid;place-items:center;font-family:var(--font-mono);font-weight:600;color:#fff;flex:none;background:var(--brand);object-fit:cover;overflow:hidden}
+.stars{display:inline-flex;gap:2px;color:var(--warn-text)}
+.stars svg{width:15px;height:15px;fill:currentColor;stroke:none}
+/* Estado real de um recurso: escrito em texto; o marcador só reforça. */
+.estado{display:inline-flex;align-items:center;gap:7px;flex:none;font-family:var(--font-mono);font-size:.74rem;font-weight:600;white-space:nowrap;color:var(--text-2)}
+.estado::before{content:"";flex:none;width:9px;height:9px;border:1.5px solid currentColor;border-radius:50%}
+.estado-ok{color:var(--accent-text)}
+.estado-ok::before{background:currentColor}
+.estado-parcial{color:var(--warn-text)}
+.estado-parcial::before{background:linear-gradient(90deg,currentColor 50%,transparent 50%)}
+.estado-espera{color:var(--brand-2)}
+.estado-espera::before{background:radial-gradient(circle,currentColor 32%,transparent 36%)}
+.estado-lista{list-style:none;margin:28px 0 0;padding:0}
+.estado-lista li{display:grid;grid-template-columns:128px minmax(0,1fr);gap:14px;padding:13px 0;border-top:1px solid var(--line);font-size:.93rem;color:var(--text-2)}
+.estado-lista .estado{align-self:start;margin-top:3px}
+.auth-hoje-titulo{margin-top:30px}
+.auth-hoje{list-style:none;margin:12px 0 0;padding:0;border-top:1px solid var(--line-strong)}
+.auth-hoje li{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line);font-size:.93rem;color:var(--text-2)}
+.auth-hoje svg{flex:none;width:18px;height:18px;margin-top:2px;stroke:var(--text)}
+.auth-hoje-nota{margin-top:16px;font-size:.86rem;color:var(--text-2)}
+.auth-hoje-nota a{color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.auth-hoje-nota a:hover{color:var(--brand-2)}
+/* ============ FORMULÁRIOS ============ */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:22px}
+.field label{font-family:var(--font-mono);font-size:.8rem;font-weight:500;color:var(--text-2)}
+.input,.select,.textarea{width:100%;padding:10px 0;border:0;border-bottom:1px solid var(--line-strong);border-radius:0;background:transparent;color:var(--text);outline:none;font-size:.95rem}
+.input:focus,.select:focus,.textarea:focus{border-bottom-color:var(--focus);box-shadow:0 1px 0 0 var(--focus)}
+.input::placeholder,.textarea::placeholder{color:var(--muted);font-style:italic}
+.textarea{min-height:110px;resize:vertical;font-family:inherit}
+.select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a6b1' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 2px center;background-size:16px;padding-right:28px;cursor:pointer}
+.select option{background:var(--surface);color:var(--text)}
+:root[data-surface="app"] .input,:root[data-surface="app"] .select,:root[data-surface="app"] .textarea{padding:10px 12px;border:1px solid var(--line-strong)}
+:root[data-surface="app"] .select{padding-right:34px;background-position:right 10px center}
+:root[data-surface="app"] .input:focus,:root[data-surface="app"] .select:focus,:root[data-surface="app"] .textarea:focus{border-color:var(--focus);box-shadow:inset 0 0 0 1px var(--focus)}
+.hint{font-size:.78rem;color:var(--muted)}
+.switch{width:44px;height:24px;background:transparent;border:1px solid var(--line-strong);position:relative;cursor:pointer;flex:none}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;background:var(--muted);transition:left .16s}
+.switch.on{background:var(--brand);border-color:var(--brand)}
+.switch.on::after{left:23px;background:#fff}
+.check-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.check-row:last-child{border-bottom:0}
+/* Menu da conta no cabeçalho */
+.conta{position:relative}
+.conta-botao{gap:8px;max-width:190px}
+.conta-nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conta-botao svg:last-child{width:14px;height:14px;transition:transform .16s}
+.conta-botao[aria-expanded="true"] svg:last-child{transform:rotate(180deg)}
+.conta-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:70;min-width:200px;padding:4px 0;background:var(--bg);border:1px solid var(--line-strong);animation:desce .18s var(--ease-out,ease-out)}
+.conta-menu[hidden]{display:none}
+.conta-menu a,.conta-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;border:0;background:none;color:var(--text);font-family:var(--font-mono);font-size:.86rem;text-align:left;cursor:pointer}
+.conta-menu svg{width:16px;height:16px}
+.conta-menu a:hover,.conta-menu button:hover,.conta-menu a:focus-visible,.conta-menu button:focus-visible{background:var(--brand);color:#fff;outline:none}
+.conta-menu button{border-top:1px solid var(--line)}
+@media (max-width:560px){.conta-nome{display:none}}
+.demo-contas{display:grid;gap:10px;margin:0 0 24px}
+.input[readonly]{color:var(--text-2);background:transparent;border-style:dashed;cursor:default}
+
+/* Aviso com destino: o campo onde se resolve o problema pisca a borda por um instante. */
+.destaque-aviso{outline:2px solid var(--brand);outline-offset:4px;transition:outline-color .6s}
+@media (prefers-reduced-motion:no-preference){.destaque-aviso{animation:destaque-aviso 1.2s ease-out 2}}
+@keyframes destaque-aviso{0%{outline-color:var(--brand)}50%{outline-color:transparent}100%{outline-color:var(--brand)}}
+
+.denuncia-enviada{display:inline-flex;align-items:center;gap:6px;font-size:.84rem;color:var(--text-2)}
+.denuncia-enviada .ic{width:16px;height:16px;color:var(--ic-verde)}
+
+/* Lista nativa (onde ainda existe): grupos e item marcado no visual escuro do site. */
+.select optgroup{background:var(--surface);color:var(--muted);font-style:italic;font-weight:500}
+.select option:checked{background:var(--brand);color:#fff}
+
+/* Seletor de serviço: gatilho com a mesma linha dos campos e lista que abre no fluxo, sem sobrepor nada. */
+.sel-svc-gatilho{width:100%;display:flex;align-items:center;gap:10px;padding:10px 0;border:0;border-bottom:1px solid var(--line-strong);border-radius:0;background:transparent;color:var(--text);font:inherit;font-size:.95rem;text-align:left;cursor:pointer}
+.sel-svc-gatilho>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sel-svc-gatilho .ic{width:18px;height:18px;flex:none}
+.sel-svc-gatilho .sel-svc-seta{color:var(--muted);transition:transform .2s cubic-bezier(.16,1,.3,1)}
+.sel-svc-gatilho[aria-expanded="true"] .sel-svc-seta{transform:rotate(180deg)}
+.sel-svc-gatilho:hover{border-bottom-color:var(--text-2)}
+.sel-svc-gatilho:focus-visible,.sel-svc-gatilho[aria-expanded="true"]{outline:none;border-bottom-color:var(--focus);box-shadow:0 1px 0 0 var(--focus)}
+.sel-svc-vazio{color:var(--muted);font-style:italic}
+.sel-svc-painel{border:1px solid var(--line-strong);border-top:0;background:var(--surface);display:flex;flex-direction:column;max-height:min(380px,58vh)}
+.sel-svc-painel[hidden]{display:none}
+.sel-svc-busca{display:flex;align-items:center;gap:10px;padding:4px 14px;border-bottom:1px solid var(--line)}
+.sel-svc-busca .ic{width:16px;height:16px;color:var(--muted);flex:none}
+.sel-svc-busca .input{border:0;box-shadow:none;padding:10px 0}
+.sel-svc-busca .input::-webkit-search-cancel-button{display:none}
+.sel-svc-lista{list-style:none;margin:0;padding:0 0 6px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.sel-svc-grupo{position:sticky;top:0;z-index:1;padding:12px 14px 6px;background:var(--surface);font-family:var(--font-mono);font-style:italic;font-size:.74rem;color:var(--muted)}
+.sel-svc-op{display:flex;align-items:center;gap:12px;padding:9px 14px;font-size:.92rem;color:var(--text-2);cursor:pointer}
+.sel-svc-op>span{flex:1}
+.sel-svc-op .ic{width:18px;height:18px;flex:none}
+.sel-svc-op.ativo{background:var(--surface-2);color:var(--text)}
+.sel-svc-op.marcado{color:var(--text);font-weight:600}
+.sel-svc-op .sel-svc-ok{color:var(--focus)}
+.sel-svc-nada{padding:16px 14px;color:var(--muted);font-size:.88rem}
+.sel-svc .hint{margin-top:2px}
+
+/* Botão do Google: nunca passa da largura do formulário. */
+.google-botao{max-width:100%;overflow:hidden}
+
+/* Confirmação no visual do site (no lugar da caixa do navegador) */
+.modal-confirma{max-width:460px}
+.confirma-topo{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:start}
+.confirma-topo h3{margin:2px 0 6px;font-size:1.08rem}
+.confirma-topo p{margin:0;color:var(--text-2);font-size:.92rem;line-height:1.5}
+.confirma-ico{width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--line-strong);color:var(--brand-2)}
+.confirma-ico .ic{width:20px;height:20px}
+.confirma.perigo .confirma-ico{border-color:color-mix(in srgb,var(--danger) 55%,transparent);color:var(--danger-text);background:color-mix(in srgb,var(--danger) 10%,transparent)}
+.confirma-valor{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:18px 0 0;padding:14px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line)}
+.confirma-valor span{color:var(--text-2);font-size:.88rem}
+.confirma-valor b{font-family:var(--font-mono);font-size:1.4rem;font-variant-numeric:tabular-nums}
+.confirma.perigo .confirma-valor b{color:var(--danger-text)}
+.confirma-itens{list-style:none;margin:14px 0 4px;padding:0;display:grid;gap:10px}
+.confirma-itens li{display:grid;grid-template-columns:16px 1fr;gap:10px;font-size:.9rem;color:var(--text-2);line-height:1.45}
+.confirma-itens .ic{width:14px;height:14px;margin-top:3px;color:var(--muted)}
+.confirma .pag-form-acoes{margin-top:20px}
