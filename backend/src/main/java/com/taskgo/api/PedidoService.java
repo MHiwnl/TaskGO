@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class PedidoService {
     private final PedidoContratadoRepository repository;
     private final UsuarioRepository usuarios;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager em;
     public PedidoService(PedidoContratadoRepository repository) { this(repository, null); }
     @Autowired
     public PedidoService(PedidoContratadoRepository repository, UsuarioRepository usuarios) { this.repository = repository; this.usuarios = usuarios; }
@@ -32,6 +33,9 @@ public class PedidoService {
                 || pedido.getService() == null || pedido.getService().isBlank() || pedido.getPrice() == null || pedido.getPrice() < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pedido incompleto: informe id, cliente, serviço e valor.");
         }
+        /* O id vai para HTML, atributos onclick e planilhas: só letras, números, _ e -. */
+        if (!pedido.getId().matches("[A-Za-z0-9][A-Za-z0-9_-]{0,63}"))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Identificador de pedido inválido.");
         /* Mesmo limite da tela: de R$ 1 a R$ 100.000, com no máximo 2 casas decimais. */
         double preco = pedido.getPrice();
         if (!(preco >= 1 && preco <= 100_000) || Math.abs(preco * 100 - Math.round(preco * 100)) > 1e-6)
@@ -88,7 +92,7 @@ public class PedidoService {
         /* O código de chegada nasce no servidor e só o cliente o vê (PedidoRespostaAdvice). */
         pedido.setCode(String.format("%04d", CODIGOS.nextInt(10000)));
         pedido.setCreated(System.currentTimeMillis());
-        pedido.setAcceptedAt(null); pedido.setCompletedAt(null); pedido.setPaid(null);
+        pedido.setAcceptedAt(null); pedido.setCompletedAt(null); pedido.setPaid(null); pedido.setRating(null); pedido.setCancelReason(null);
         if (pedido.getProgress() == null) pedido.setProgress(0.0);
         return repository.save(pedido);
     }
@@ -158,10 +162,13 @@ public class PedidoService {
         return repository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado."));
     }
 
-    @Transactional
+    /* noRollbackFor: a recusa do código grava a contagem de erros; todas as recusas acontecem antes de qualquer mudança no pedido. */
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public Pedido atualizar(String id, String email, Pedido atualizacao) {
         if (email == null || email.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o e-mail da conta.");
         Pedido pedido = repository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado."));
+        /* Linha travada: o contador do código de chegada não é furado por PUTs em paralelo, e cancelar e chegar não se sobrescrevem. */
+        if (em != null) em.refresh(pedido, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         String usuario = email.trim().toLowerCase(Locale.ROOT);
         boolean cliente = equalsEmail(usuario, pedido.getClientEmail());
         boolean profissional = equalsEmail(usuario, pedido.getProEmail());
@@ -181,13 +188,19 @@ public class PedidoService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Espere o cliente pagar a diferença do valor combinado.");
         if ("em_andamento".equals(novoStatus) && !"em_andamento".equals(pedido.getStatus())) {
             if (!profissional) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Só o profissional inicia o serviço, com o código do cliente.");
-            if (pedido.getCode() == null || !pedido.getCode().equals(atualizacao.getCode()))
+            long agora = System.currentTimeMillis();
+            if (LimiteErros.esperaMs(pedido.getExtra(), ERROS_CODIGO, agora) > 0)
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Código errado muitas vezes. Espere 15 minutos e confira o código com o cliente.");
+            if (pedido.getCode() == null || !pedido.getCode().equals(atualizacao.getCode())) {
+                LimiteErros.errou(pedido.getExtra(), ERROS_CODIGO, MAX_ERROS_CODIGO, JANELA_CODIGO_MS, JANELA_CODIGO_MS, agora);
+                repository.save(pedido);
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Código incorreto. Peça ao cliente para conferir o código no aplicativo dele.");
+            }
         }
         if (novoStatus != null) pedido.setStatus(novoStatus);
         if ("a_caminho".equals(novoStatus) && pedido.getAcceptedAt() == null) pedido.setAcceptedAt(System.currentTimeMillis());
         if (atualizacao.getProgress() != null && profissional) pedido.setProgress(atualizacao.getProgress());
-        if (atualizacao.getRating() != null && cliente && "concluido".equals(pedido.getStatus())) pedido.setRating(atualizacao.getRating());
+        /* Nota só pela rota de avaliar (faixa, uma vez, só quem participou). */
         if (atualizacao.getCancelReason() != null && "cancelado".equals(pedido.getStatus())) pedido.setCancelReason(atualizacao.getCancelReason());
         if ("concluido".equals(novoStatus) && pedido.getCompletedAt() == null) pedido.setCompletedAt(System.currentTimeMillis());
         return repository.save(pedido);
@@ -195,6 +208,10 @@ public class PedidoService {
 
     static final Set<String> EXTRAS_DO_CLIENTE = Set.of("lat", "lng", "bairro", "urgente", "quando", "modo", "clientName", "formaPagamento", "inicioDesejado");
     private static final java.security.SecureRandom CODIGOS = new java.security.SecureRandom();
+    /* Erros do código de chegada, no extra do pedido: 5 seguidos bloqueiam a chegada por 15 min. */
+    static final String ERROS_CODIGO = "codigoChegadaErros";
+    static final int MAX_ERROS_CODIGO = 5;
+    static final long JANELA_CODIGO_MS = 15 * 60_000L;
     private boolean equalsEmail(String a, String b) { return b != null && a.equals(b.trim().toLowerCase(Locale.ROOT)); }
     private Map<String, Object> sanitizarExtras(Map<String, ?> dados) {
         Map<String, Object> safe = new LinkedHashMap<>(); if (dados == null) return safe;

@@ -35,6 +35,12 @@ public class AuthController {
     @org.springframework.beans.factory.annotation.Autowired(required = false) void setVerificacoesRepo(VerificacaoRepository r) { this.verificacoesRepo = r; }
     @org.springframework.beans.factory.annotation.Autowired(required = false) void setBloqueiosRepo(BloqueioAgendaRepository r) { this.bloqueiosRepo = r; }
     @org.springframework.beans.factory.annotation.Autowired(required = false) void setPushInscricoes(PushInscricaoRepository r) { this.pushInscricoes = r; }
+    private CartaoRepository cartoesRepo;
+    private CobrancaRepository cobrancasRepo;
+    private CarteiraRepository carteirasRepo;
+    @org.springframework.beans.factory.annotation.Autowired(required = false) void setCobrancasRepo(CobrancaRepository r) { this.cobrancasRepo = r; }
+    @org.springframework.beans.factory.annotation.Autowired(required = false) void setCarteirasRepo(CarteiraRepository r) { this.carteirasRepo = r; }
+    @org.springframework.beans.factory.annotation.Autowired(required = false) void setCartoesRepo(CartaoRepository r) { this.cartoesRepo = r; }
     private final PasswordEncoder passwordEncoder;
     private final LoginAttemptLimiter loginAttemptLimiter;
     /* Em produção o CPF precisa ter dígito verificador válido e ser único (um CPF por conta).
@@ -113,6 +119,8 @@ public class AuthController {
         if (usuario == null || vazio(usuario.getEmail()) || vazio(usuario.getSenha())
                 || vazio(usuario.getNome()) || vazio(usuario.getTipo()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe nome, e-mail, tipo de conta e senha.");
+        /* O id nasce no banco: com id no corpo, o save viraria merge sobre a conta existente. */
+        usuario.setId(null);
         exigirSenhaForte(usuario.getSenha(), usuario.getEmail(), usuario.getNome());
         String fixo = papelFixo(usuario.getEmail());
         String tipo = fixo != null ? fixo : usuario.getTipo().trim().toLowerCase(Locale.ROOT);
@@ -307,11 +315,7 @@ public class AuthController {
             if (!CatalogoServicos.existe(dados.getService())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escolha a sua categoria no catálogo de serviços.");
             atual.setService(dados.getService().trim());
         }
-        if (dados.getSenha() != null && !dados.getSenha().isBlank()) {
-            exigirSenhaForte(dados.getSenha(), atual.getEmail(), atual.getNome());
-            atual.setSenha(passwordEncoder.encode(dados.getSenha()));
-            atual.setCredentialVersion(atual.getCredentialVersion()+1);
-        }
+        /* Senha não muda por aqui: só em PUT /api/auth/senha, que pede a senha atual (sessão roubada não troca a senha). */
         /* Perfil só altera os campos estruturados acima. O "extra" do corpo é ignorado para o cliente não se
            auto-verificar nem forjar CNPJ via @JsonAnySetter; foto, chave Pix e preferências têm rotas próprias. */
         return resposta(repository.save(atual));
@@ -361,15 +365,31 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Contas da equipe (administrador e suporte) não podem ser excluídas pelo site. Tire o e-mail da configuração antes.");
         if (request == null || vazio(request.senha())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a senha da conta.");
         if (!passwordEncoder.matches(request.senha(), usuario.getSenha())) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Não foi possível confirmar a senha da conta.");
-        List<String> pedidoIds = pedidoContratadoRepository.findByClientEmailIgnoreCaseOrProEmailIgnoreCaseOrderByCreatedDesc(usuario.getEmail(), usuario.getEmail()).stream().map(Pedido::getId).toList();
-        if (!pedidoIds.isEmpty()) mensagemRepository.deleteByPedidoIdIn(pedidoIds);
+        /* Dinheiro em aberto não pode ficar sem dono: pagamento em andamento ou saldo na carteira primeiro se resolvem. */
+        if (cobrancasRepo != null && cobrancasRepo.temEmAberto(usuario.getId(), Cobranca.PENDENTE, System.currentTimeMillis()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Há um pagamento em andamento nesta conta (Pix no prazo ou cartão em conferência). Tente de novo depois que ele vencer ou for confirmado.");
+        Carteira carteira = carteirasRepo == null ? null : carteirasRepo.findByUsuarioId(usuario.getId()).orElse(null);
+        if (carteira != null && (carteira.getSaldoDisponivel().signum() > 0 || carteira.getSaldoPendente().signum() > 0 || carteira.getSaldoBloqueado().signum() > 0))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Há saldo na sua carteira. Resgate o valor antes de excluir a conta.");
         notificacaoRepository.deleteByUsuarioId(usuario.getId());
         if (pushInscricoes != null) pushInscricoes.deleteByUsuarioId(usuario.getId());
         if (verificacoesRepo != null) verificacoesRepo.deleteByUsuarioId(usuario.getId());
         if (bloqueiosRepo != null) bloqueiosRepo.deleteByUsuarioId(usuario.getId());
         if (privacidade != null) privacidade.apagarRestos(usuario.getId());
         pedidoRepository.deleteByEmailClienteIgnoreCase(usuario.getEmail());
-        pedidoContratadoRepository.deleteByClientEmailIgnoreCaseOrProEmailIgnoreCase(usuario.getEmail(), usuario.getEmail());
+        /* Pedido com a outra pessoa fica para ela (histórico, recibo, conversa): só os dados desta conta saem dele.
+           Pedido sem outra pessoa (ninguém aceitou) some junto com a conta. */
+        String anonimo = "excluida-" + usuario.getId() + "@conta.invalid";
+        for (Pedido x : pedidoContratadoRepository.findByClientEmailIgnoreCaseOrProEmailIgnoreCaseOrderByCreatedDesc(usuario.getEmail(), usuario.getEmail())) {
+            boolean souCliente = usuario.getEmail().equalsIgnoreCase(String.valueOf(x.getClientEmail()));
+            String outro = souCliente ? x.getProEmail() : x.getClientEmail();
+            if (outro == null || outro.isBlank()) { mensagemRepository.deleteByPedidoIdIn(List.of(x.getId())); pedidoContratadoRepository.delete(x); continue; }
+            if (souCliente) { x.setClientEmail(anonimo); x.setClientId(null); x.setAddress(null); x.getExtra().remove("clientName"); x.getExtra().remove("lat"); x.getExtra().remove("lng"); }
+            else { x.setProEmail(anonimo); x.setProfessionalName("Conta excluída"); }
+            pedidoContratadoRepository.save(x);
+        }
+        if (cartoesRepo != null) cartoesRepo.deleteAll(cartoesRepo.findByUsuarioIdOrderByCriadoEmAsc(usuario.getId()));
+        if (carteira != null) carteirasRepo.delete(carteira);
         repository.delete(usuario);
         HttpSession session = httpRequest.getSession(false); if (session != null) session.invalidate();
     }

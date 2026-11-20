@@ -19,7 +19,8 @@ Thumbs.db
 Desktop.ini
 design-systems
 .impeccable
-.github
+.github/*
+!.github/workflows/
 COMMANDS-Impeccable-Designs.md
 DESIGN.md
 

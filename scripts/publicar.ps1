@@ -30,7 +30,7 @@ if ($Preparar) {
 }
 
 if ($EnviarEnv) {
-    if (-not (Test-Path .env.producao)) { throw 'Crie o arquivo .env.producao antes (veja docs/PUBLICAR-ORACLE.md).' }
+    if (-not (Test-Path .env.producao)) { throw 'Crie o arquivo .env.producao antes (veja docs/PUBLICAR.md).' }
     Escrever 'Enviando o .env.producao (vira ~/taskgo/.env no servidor)...'
     Rodar ssh ($ssh + @($destino, 'mkdir -p ~/taskgo'))
     Rodar scp ($ssh + @('.env.producao', "${destino}:~/taskgo/.env"))
@@ -47,6 +47,6 @@ Rodar tar @('-czf', $pacote, '--exclude=backend/target', 'index.html', 'css', 'j
 Escrever 'Enviando para o servidor...'
 Rodar scp ($ssh + @($pacote, "${destino}:/tmp/taskgo.tgz"))
 Escrever 'Atualizando e subindo o site (a primeira vez demora uns minutos)...'
-Rodar ssh ($ssh + @($destino, 'set -e; mkdir -p ~/taskgo/backups; cd ~/taskgo; test -f .env || { echo "Falta o .env: rode com -EnviarEnv"; exit 1; }; tar -xzf /tmp/taskgo.tgz -C ~/taskgo; rm /tmp/taskgo.tgz; docker compose -f docker-compose.prod.yml up -d --build; docker compose -f docker-compose.prod.yml ps'))
+Rodar ssh ($ssh + @($destino, 'set -e; mkdir -p ~/taskgo/backups; cd ~/taskgo; test -f .env || { echo "Falta o .env: rode com -EnviarEnv"; exit 1; }; tar -xzf /tmp/taskgo.tgz -C ~/taskgo; rm /tmp/taskgo.tgz; docker compose -f docker-compose.prod.yml --profile servidor up -d --build; docker compose -f docker-compose.prod.yml --profile servidor ps'))
 Remove-Item $pacote -Force
 Escrever 'Publicado. Confira o site no seu domínio em 1 ou 2 minutos.'

@@ -5,13 +5,17 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.UUID;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,10 +45,10 @@ public class FotoPedidoService {
         try { bruto = Base64.getDecoder().decode(dataUrl.substring(dataUrl.indexOf(',') + 1)); }
         catch (IllegalArgumentException e) { throw erro(HttpStatus.BAD_REQUEST, "Foto corrompida. Tente de novo."); }
         if (bruto.length > BYTES_MAX) throw erro(HttpStatus.PAYLOAD_TOO_LARGE, "Foto grande demais (máximo 1,5 MB).");
+        conferirResolucao(bruto);
         BufferedImage img;
         try { img = ImageIO.read(new ByteArrayInputStream(bruto)); } catch (Exception e) { img = null; }
         if (img == null) throw erro(HttpStatus.BAD_REQUEST, "Formato não aceito. Use JPEG ou PNG.");
-        if ((long) img.getWidth() * img.getHeight() > 40_000_000L) throw erro(HttpStatus.BAD_REQUEST, "Foto com resolução alta demais.");
         double escala = Math.min(1.0, (double) LADO_MAX / Math.max(img.getWidth(), img.getHeight()));
         int w = Math.max(1, (int) Math.round(img.getWidth() * escala)), h = Math.max(1, (int) Math.round(img.getHeight() * escala));
         BufferedImage saida = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
@@ -60,6 +64,19 @@ public class FotoPedidoService {
             wr.dispose();
             return new Imagem(out.toByteArray(), w, h);
         } catch (Exception e) { throw erro(HttpStatus.BAD_REQUEST, "Não foi possível processar a foto."); }
+    }
+
+    /* Lê só o cabeçalho e recusa a resolução antes de decodificar (imagem bomba). Formato sem leitor também é recusado. */
+    static void conferirResolucao(byte[] bruto) {
+        long pixels = 0;
+        try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(bruto))) {
+            Iterator<ImageReader> leitores = in == null ? null : ImageIO.getImageReaders(in);
+            if (leitores == null || !leitores.hasNext()) throw erro(HttpStatus.BAD_REQUEST, "Formato não aceito. Use JPEG ou PNG.");
+            ImageReader leitor = leitores.next();
+            try { leitor.setInput(in); pixels = (long) leitor.getWidth(0) * leitor.getHeight(0); }
+            finally { leitor.dispose(); }
+        } catch (IOException | RuntimeException e) { throw erro(HttpStatus.BAD_REQUEST, "Formato não aceito. Use JPEG ou PNG."); }
+        if (pixels > 40_000_000L) throw erro(HttpStatus.BAD_REQUEST, "Foto com resolução alta demais.");
     }
 
     @Transactional

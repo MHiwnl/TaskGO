@@ -69,32 +69,37 @@ function historicoMovimentos(){
   if(!financePageData)return '<section class="carteira-bloco"><h2 class="sub">Histórico</h2><p class="muted">Carregando…</p></section>';
   const lista=(financePageData.transactions&&financePageData.transactions.content)||[];
   return '<section class="carteira-bloco"><h2 class="sub">Histórico</h2>'+
-    (lista.length?'<ul class="mov-lista">'+lista.map(t=>{const saida=movimentoSaida(t);
+    (lista.length?'<ul class="mov-lista">'+lista.map(t=>{const saida=saiDaCarteira(t);
       return '<li><div><b>'+esc(ROTULO_MOVIMENTO[t.tipo]||TX_ROTULO[t.tipo]||t.tipo)+'</b><small>'+dataHora(t.criadaEm)+'</small></div><span class="mov-valor'+(saida?' saida':'')+'">'+(saida?'− ':'')+money(t.valor)+'</span></li>';}).join('')+'</ul>':
       '<p class="muted" style="margin-top:8px">Os serviços que você receber e as taxas pagas aparecem aqui.</p>')+'</section>';
 }
 
 /* Relatório do mês de quem atende: entradas e taxas do histórico, com planilha (CSV) para a declaração do MEI. */
+/* Relatório: entradas = o que o cliente pagou; saídas = taxas. Troco, saques e estornos ficam fora (o recebido já é o preço, sem o troco). */
 const movimentoSaida=t=>/^(TAXA_|PENDENCIA_PAGA$)/.test(t.tipo);
+/* Histórico: o troco enviado também sai da carteira. */
+const saiDaCarteira=t=>movimentoSaida(t)||t.tipo==='TROCO_ENVIADO';
+const movimentoEntrada=t=>/^(RECEBIDO_|REPASSE$|PENDENCIA_PAGA_DIRETO$)/.test(t.tipo);
 const mesLocal=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');};
-let RELATORIO={mes:mesLocal(Date.now()),lista:null,carregando:false,erro:''};
+let RELATORIO={mes:mesLocal(Date.now()),lista:null,carregando:false,erro:'',uid:null,incompleto:false};
 async function carregarRelatorio(){
   if(RELATORIO.carregando)return;
   const mes=RELATORIO.mes,[a,m]=mes.split('-').map(Number),ini=new Date(a,m-1,1).getTime(),fim=new Date(a,m,1).getTime(),lista=[];
-  RELATORIO.carregando=true;RELATORIO.erro='';
+  const quem=me()&&me().id;RELATORIO.carregando=true;RELATORIO.erro='';let incompleto=true;
   try{
     for(let p=0;p<20;p++){
       const r=await apiJSON('/api/financeiro/transacoes?page='+p+'&size=100'),c=(r&&r.content)||[];
       lista.push(...c.filter(t=>t.criadaEm>=ini&&t.criadaEm<fim));
-      if(r.last||!c.length||c[c.length-1].criadaEm<ini)break;
+      if(r.last||!c.length||c[c.length-1].criadaEm<ini){incompleto=false;break;}
     }
-    if(RELATORIO.mes===mes)RELATORIO.lista=lista;
-  }catch(e){RELATORIO.erro=erroLegivel(e,'Não foi possível carregar o relatório.');}
+    if(RELATORIO.mes===mes&&RELATORIO.uid===quem){RELATORIO.lista=lista.filter(t=>movimentoEntrada(t)||movimentoSaida(t));RELATORIO.incompleto=incompleto;}
+  }catch(e){if(RELATORIO.uid===quem)RELATORIO.erro=erroLegivel(e,'Não foi possível carregar o relatório.');}
   finally{RELATORIO.carregando=false;render();}
 }
 function secaoRelatorio(){
+  const quem=me()&&me().id;if(RELATORIO.uid!==quem)RELATORIO=Object.assign(RELATORIO,{uid:quem,lista:null,erro:'',incompleto:false});
   if(RELATORIO.lista===null&&!RELATORIO.carregando&&!RELATORIO.erro)setTimeout(carregarRelatorio,0);
-  const l=RELATORIO.lista||[],soma=f=>l.filter(f).reduce((a,t)=>a+Number(t.valor),0),entra=soma(t=>!movimentoSaida(t)),sai=soma(movimentoSaida);
+  const l=RELATORIO.lista||[],soma=f=>l.filter(f).reduce((a,t)=>a+Number(t.valor),0),entra=soma(movimentoEntrada),sai=soma(movimentoSaida);
   const meses=Array.from({length:12},(_,i)=>{const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);return mesLocal(d.getTime());});
   const nome=m=>{const [a,n]=m.split('-').map(Number);return new Date(a,n-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});};
   const linha=(r,v)=>'<div><dt>'+r+'</dt><dd>'+v+'</dd></div>';
@@ -102,14 +107,14 @@ function secaoRelatorio(){
     '<div class="field" style="max-width:260px;margin-top:10px"><label for="relMes">Mês</label><select class="select" id="relMes" onchange="RELATORIO.mes=this.value;RELATORIO.lista=null;RELATORIO.erro=\'\';render()">'+
       meses.map(m=>'<option value="'+m+'"'+(m===RELATORIO.mes?' selected':'')+'>'+nome(m)+'</option>').join('')+'</select></div>'+
     (RELATORIO.erro?'<p class="pag-recusa">'+esc(RELATORIO.erro)+'</p>':RELATORIO.lista===null?'<p class="muted">Carregando…</p>':
-      '<dl class="resumo-pedido">'+linha('Recebido',money(entra))+linha('Taxas da TaskGO','− '+money(sai))+linha('Líquido','<b>'+money(entra-sai)+'</b>')+linha('Movimentos',String(l.length))+'</dl>'+
+      '<dl class="resumo-pedido">'+linha('Recebido',money(entra))+linha('Taxas da TaskGO','− '+money(sai))+linha('Líquido','<b>'+money(entra-sai)+'</b>')+linha('Movimentos',String(l.length))+'</dl>'+(RELATORIO.incompleto?'<p class="hint">Histórico longo demais para carregar inteiro: os totais deste mês podem estar incompletos.</p>':'')+
       (l.length?'<button type="button" class="btn btn-ghost btn-sm" style="margin-top:14px" onclick="baixarRelatorio()">'+ic('file')+'Baixar planilha</button>':''))+'</section>';
 }
 function baixarRelatorio(){
   const n=v=>Number(v).toFixed(2).replace('.',','),l=(RELATORIO.lista||[]).slice().sort((a,b)=>a.criadaEm-b.criadaEm);
   const linhas=[['Data','Movimento','Entrada','Saída','Pedido']].concat(l.map(t=>{const s=movimentoSaida(t);
     return [new Date(t.criadaEm).toLocaleDateString('pt-BR'),ROTULO_MOVIMENTO[t.tipo]||(typeof TX_ROTULO!=='undefined'&&TX_ROTULO[t.tipo])||t.tipo,s?'':n(t.valor),s?n(t.valor):'',t.referencia||''];}));
-  const csv='﻿'+linhas.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const csv='﻿'+linhas.map(r=>r.map(c=>{c=String(c);if(/^[=+\-@\t\r]/.test(c))c="'"+c;return '"'+c.replace(/"/g,'""')+'"';}).join(';')).join('\r\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='taskgo-'+RELATORIO.mes+'.csv';
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }

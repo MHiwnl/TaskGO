@@ -48,9 +48,9 @@ public class PixInterSimulado implements ProvedorPix {
     }
 
     @Override
-    public void cancelar(String txid) {
-        try { http.post().uri("/internal/simulate-cancel").contentType(MediaType.APPLICATION_JSON).body(Map.of("txid", txid)).retrieve().toBodilessEntity(); }
-        catch (RestClientException ignorar) { /* já paga, cancelada ou inexistente */ }
+    public boolean cancelar(String txid) {
+        try { http.post().uri("/internal/simulate-cancel").contentType(MediaType.APPLICATION_JSON).body(Map.of("txid", txid)).retrieve().toBodilessEntity(); return true; }
+        catch (RestClientException recusado) { return false; /* já paga, cancelada ou fora do ar: a conferência decide */ }
     }
 
     @Override

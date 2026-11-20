@@ -7,9 +7,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CobrancaRepository extends JpaRepository<Cobranca, String> {
     List<Cobranca> findByPedidoIdOrderByCriadaEmAsc(String pedidoId);
     Optional<Cobranca> findByTxid(String txid);
+    /* Pagamento que ainda pode acontecer: pendente e sem prazo (cartão em conferência) ou com o Pix ainda no prazo. */
+    @org.springframework.data.jpa.repository.Query("select count(c) > 0 from Cobranca c where c.clienteId = :cliente and c.status = :status and (c.expiraEm is null or c.expiraEm > :agora)")
+    boolean temEmAberto(@org.springframework.data.repository.query.Param("cliente") Long clienteId, @org.springframework.data.repository.query.Param("status") String status,
+                        @org.springframework.data.repository.query.Param("agora") long agora);
     Optional<Cobranca> findByIdAndClienteId(String id, Long clienteId);
     List<Cobranca> findByTipoAndStatusAndCriadaEmGreaterThanEqualOrderByCriadaEmDesc(String tipo, String status, long desde);
     List<Cobranca> findByTipoAndMetodoAndStatusAndExpiraEmGreaterThan(String tipo, String metodo, String status, long expiraDepoisDe);
+    List<Cobranca> findByMetodoAndStatusAndProvedorAndCriadaEmGreaterThan(String metodo, String status, String provedor, long criadaDepoisDe);
 
     /* Confirma o pagamento só se a cobrança ainda estiver pendente. Devolve 1 para quem confirmou e 0 para quem chegou depois:
        o aviso do provedor e a consulta da tela podem chegar ao mesmo tempo, e só um deles pode aplicar o pagamento. */

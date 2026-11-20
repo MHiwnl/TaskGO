@@ -61,7 +61,13 @@ public class PagamentoService {
     public void devolverCobranca(Cobranca c, BigDecimal parte) { if (parte.signum() > 0) estornarCobranca(c, parte.min(c.liquido()), System.currentTimeMillis()); }
     /** Cancela uma cobrança ainda em aberto (Pix ou página do Asaas). */
     @Transactional
-    public void cancelarAberta(Cobranca c) { if (Cobranca.PENDENTE.equals(c.getStatus())) { cancelarNoProvedor(c); c.cancelar("Obra cancelada."); cobrancas.save(c); } }
+    public void cancelarAberta(Cobranca c) { if (Cobranca.PENDENTE.equals(c.getStatus())) fecharAberta(c, "Obra cancelada."); }
+    /* Fecha uma cobrança aberta. Se o provedor não confirmar o cancelamento (pode ter sido paga agora), ela fica pendente
+       e a confirmação do pagamento segue o caminho normal (pedido cancelado devolve). */
+    private void fecharAberta(Cobranca c, String motivo) {
+        if (cancelarNoProvedor(c)) { c.cancelar(motivo); cobrancas.save(c); }
+        else conferirPix(c);
+    }
     public java.util.Optional<Cobranca> cobranca(String id) { return id == null ? java.util.Optional.empty() : cobrancas.findById(id); }
     @Autowired(required = false) void setDinheiro(@org.springframework.context.annotation.Lazy DinheiroService d) { this.dinheiro = d; }
     /* Para reler uma cobrança que outra transação acabou de confirmar. */
@@ -145,6 +151,7 @@ public class PagamentoService {
     @Transactional
     public CobrancaDto pagar(String pedidoId, Long clienteId, String metodo, String cartaoId, Integer parcelas) {
         exigirAtivo();
+        pedidos.findByIdForUpdate(pedidoId);
         Pedido p = pedidoDoCliente(pedidoId, clienteId);
         boolean inicial = "aguardando_pagamento".equals(p.getStatus());
         boolean complementar = Boolean.TRUE.equals(p.getExtra().get("pagamentoPendente"));
@@ -152,8 +159,18 @@ public class PagamentoService {
         BigDecimal devido = devido(p);
         if (devido.signum() <= 0) throw erro(HttpStatus.CONFLICT, "Este pedido já está pago.");
         /* Trocar de forma de pagamento: o Pix ainda em aberto é cancelado. */
-        for (Cobranca c : doPedido(pedidoId))
-            if (Cobranca.PENDENTE.equals(c.getStatus())) { cancelarNoProvedor(c); c.cancelar("Substituída por outro pagamento."); }
+        for (Cobranca c : doPedido(pedidoId)) {
+            if (!Cobranca.PENDENTE.equals(c.getStatus())) continue;
+            if ("cartao".equals(c.getMetodo()) && "asaas".equals(c.getProvedor()))
+                throw erro(HttpStatus.CONFLICT, "Há um pagamento no cartão em conferência. Espere a confirmação antes de pagar de novo.");
+            if (!cancelarNoProvedor(c)) {
+                conferirPix(c);
+                /* Pago agora há pouco: confirma em vez de recusar (lançar aqui desfaria a confirmação). */
+                if (Cobranca.PAGA.equals(c.getStatus())) return DtoDe(c);
+                throw erro(HttpStatus.CONFLICT, "O pagamento anterior ainda está em conferência. Atualize o pedido em instantes.");
+            }
+            c.cancelar("Substituída por outro pagamento.");
+        }
         String tipo = inicial ? "principal" : "complementar";
         int n = parcelas == null ? 1 : parcelas;
         /* De R$ 1.000 a 2.999: até 12x; de 7x a 12x, os juros são do cliente e ficam fora do valor do serviço. */
@@ -203,9 +220,8 @@ public class PagamentoService {
                 try {
                     com.fasterxml.jackson.databind.JsonNode r = asaas.cobrarCartaoSalvo(clienteAsaas(pagadorId), cartao.getToken(), valor, 1, desc, c.getId(), null);
                     c.externa(r.path("id").asText(), r.path("invoiceUrl").asText(null));
-                    if ("PAGA".equals(AsaasCliente.situacao(r.path("status").asText()))) c.pagar(agora);
-                    else c.recusar("O cartão não foi aprovado. Tente outro cartão ou pague com Pix.");
-                } catch (AsaasCliente.Erro e) { c.recusar(e.getMessage()); }
+                    resultadoCartao(c, r, agora);
+                } catch (AsaasCliente.Erro e) { semRespostaOuRecusa(c, e); }
             } else if (cartao.vencido(YearMonth.now(FUSO))) c.recusar("Este cartão está vencido.");
             else { CartaoSimulado.Resposta r = CartaoSimulado.cobrar(cartao); if (r.aprovado()) c.pagar(agora); else c.recusar(r.motivo()); }
             cobrancas.save(c);
@@ -316,9 +332,8 @@ public class PagamentoService {
         try {
             com.fasterxml.jackson.databind.JsonNode r = asaas.cobrarCartaoSalvo(clienteAsaas(cartao.getUsuarioId()), cartao.getToken(), valor, parcelas, descricao(p), c.getId(), null);
             c.externa(r.path("id").asText(), r.path("invoiceUrl").asText(null));
-            if ("PAGA".equals(AsaasCliente.situacao(r.path("status").asText()))) c.pagar(agora);
-            else c.recusar("O cartão não foi aprovado. Tente outro cartão ou pague com Pix.");
-        } catch (AsaasCliente.Erro e) { c.recusar(e.getMessage()); }
+            resultadoCartao(c, r, agora);
+        } catch (AsaasCliente.Erro e) { semRespostaOuRecusa(c, e); }
         cobrancas.save(c);
         if (Cobranca.PAGA.equals(c.getStatus())) aplicar(c, p);
         return c;
@@ -338,10 +353,56 @@ public class PagamentoService {
         cartoes.save(c);
     }
 
-    private void cancelarNoProvedor(Cobranca c) {
-        if (c.getTxid() == null) return;
-        if ("asaas".equals(c.getProvedor())) { if (asaas != null) asaas.cancelar(c.getTxid()); }
-        else pix.cancelar(c.getTxid());
+    /* Cartão no Asaas: aprovado paga; em análise fica pendente (o aviso do Asaas ou a conferência confirma); o resto é recusa. */
+    static void resultadoCartao(Cobranca c, com.fasterxml.jackson.databind.JsonNode r, long agora) {
+        String st = r.path("status").asText();
+        if ("PAGA".equals(AsaasCliente.situacao(st))) c.pagar(agora);
+        else if (!AsaasCliente.emAnalise(st)) c.recusar("O cartão não foi aprovado. Tente outro cartão ou pague com Pix.");
+    }
+    /* Sem resposta (503) a cobrança pode ter sido criada: fica pendente para a conferência achar pelo nosso id. Recusa (4xx) é recusa. */
+    static void semRespostaOuRecusa(Cobranca c, AsaasCliente.Erro e) { if (e.status != 503) c.recusar(e.getMessage()); }
+
+    /* Cartões pendentes no Asaas (em análise ou sem resposta): confere a cada 2 minutos; depois de 48 h, cancela e libera. */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 120_000, initialDelay = 90_000)
+    public void conferirCartoesPendentes() {
+        if (!asaasAtivo()) return;
+        long agora = System.currentTimeMillis();
+        /* Sem limite curto de idade: enquanto o Asaas não confirmar o cancelamento, continua tentando. */
+        for (String id : cobrancas.findByMetodoAndStatusAndProvedorAndCriadaEmGreaterThan("cartao", Cobranca.PENDENTE, "asaas", agora - 365 * 86_400_000L).stream().map(Cobranca::getId).toList())
+            porCobranca(id, () -> cobrancas.findById(id).filter(c -> Cobranca.PENDENTE.equals(c.getStatus())).ifPresent(c -> conferirCartao(c, agora)));
+    }
+    private void conferirCartao(Cobranca c, long agora) {
+        {
+                if (c.getTxid() == null) {
+                    com.fasterxml.jackson.databind.JsonNode achada = asaas.porReferencia(c.getId()).path("data").path(0);
+                    if (achada.isMissingNode() || achada.path("id").asText("").isBlank()) {
+                        if (agora - c.getCriadaEm() > 30 * 60_000L) { c.recusar("O cartão não foi cobrado. Tente de novo."); cobrancas.save(c); }
+                        return;
+                    }
+                    c.externa(achada.path("id").asText(), achada.path("invoiceUrl").asText(null)); cobrancas.save(c);
+                }
+                conferirPix(c);
+                /* Em análise há mais de 48 h: cancela no Asaas e libera o pedido para outra forma. Se o cancelamento não for confirmado, espera. */
+                if (Cobranca.PENDENTE.equals(c.getStatus()) && agora - c.getCriadaEm() > 48 * 3_600_000L && cancelarNoProvedor(c)) {
+                    c.recusar("O cartão não foi confirmado em 48 horas. Pague de outra forma."); cobrancas.save(c);
+                }
+        }
+    }
+
+    /* Uma transação por cobrança: um erro não desfaz as confirmações das outras. */
+    private org.springframework.transaction.support.TransactionTemplate tx;
+    @Autowired(required = false) void setTx(org.springframework.transaction.PlatformTransactionManager m) { this.tx = new org.springframework.transaction.support.TransactionTemplate(m); }
+    private void porCobranca(String id, Runnable r) {
+        try { if (tx == null) r.run(); else tx.executeWithoutResult(s -> r.run()); }
+        catch (RuntimeException e) { log.warn("Conferência da cobrança {} falhou: {}", id, e.getMessage()); }
+    }
+
+    /* true se a cobrança não pode mais ser paga no provedor (cancelada agora ou antes). */
+    private boolean cancelarNoProvedor(Cobranca c) {
+        /* Asaas sem id: a cobrança pode existir lá (resposta perdida). Só a conferência por referência decide. */
+        if (c.getTxid() == null) return !"asaas".equals(c.getProvedor());
+        if ("asaas".equals(c.getProvedor())) return asaas == null || asaas.cancelar(c.getTxid());
+        return pix.cancelar(c.getTxid());
     }
 
     /* Aviso do Asaas (webhook): confere a cobrança direto na API dele. */
@@ -371,16 +432,13 @@ public class PagamentoService {
     private final ThreadLocal<BigDecimal> jurosAtual = new ThreadLocal<>();
 
     /* Pix do Plano Pro pendente: confere no provedor a cada 5 s, com a tela aberta ou não; sem depender do aviso do provedor.
-       Pega também os que venceram há pouco, para cancelar o vencido ou aplicar um pagamento feito no último instante.
+       Pega também os vencidos (até 7 dias), para cancelar o vencido ou aplicar um pagamento feito no último instante, mesmo se o provedor ficou fora no vencimento.
        shortcut: uma consulta ao provedor por Pix pendente a cada 5 s; com muitos Pix abertos ao mesmo tempo, espaçar por idade. */
     @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 5_000, initialDelay = 20_000)
-    @Transactional
     public void conferirPixDoPlano() {
         if (!ativo()) return;
-        for (Cobranca c : cobrancas.findByTipoAndMetodoAndStatusAndExpiraEmGreaterThan("plano", "pix", Cobranca.PENDENTE, System.currentTimeMillis() - 10 * 60_000L)) {
-            try { conferirPix(c); }
-            catch (RuntimeException e) { log.warn("Conferência do Pix do plano {} falhou: {}", c.getId(), e.getMessage()); }
-        }
+        for (String id : cobrancas.findByTipoAndMetodoAndStatusAndExpiraEmGreaterThan("plano", "pix", Cobranca.PENDENTE, System.currentTimeMillis() - 7 * 86_400_000L).stream().map(Cobranca::getId).toList())
+            porCobranca(id, () -> cobrancas.findById(id).ifPresent(this::conferirPix));
     }
 
     /* Pix: confere no provedor (o aviso só diz que algo mudou; a confirmação vem da consulta). */
@@ -438,7 +496,7 @@ public class PagamentoService {
                 aplicar(c, p);
             });
         } else if ("CANCELADA".equals(s)) { c.cancelar("Pix cancelado."); cobrancas.save(c); }
-        else if (c.getExpiraEm() != null && agora > c.getExpiraEm()) { cancelarNoProvedor(c); c.cancelar("O Pix expirou. Gere outro."); cobrancas.save(c); }
+        else if (c.getExpiraEm() != null && agora > c.getExpiraEm() && cancelarNoProvedor(c)) { c.cancelar("O Pix expirou. Gere outro."); cobrancas.save(c); }
     }
 
     /* Pagamento confirmado: o valor fica retido e o pedido segue. */
@@ -598,7 +656,7 @@ public class PagamentoService {
         if (!ativo()) return;
         List<Cobranca> lista = doPedido(p.getId());
         long agora = System.currentTimeMillis();
-        for (Cobranca c : lista) if (Cobranca.PENDENTE.equals(c.getStatus())) { cancelarNoProvedor(c); c.cancelar("Pedido cancelado."); cobrancas.save(c); }
+        for (Cobranca c : lista) if (Cobranca.PENDENTE.equals(c.getStatus())) fecharAberta(c, "Pedido cancelado.");
         BigDecimal pago = lista.stream().map(Cobranca::liquido).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (pago.signum() <= 0) return;
         Long cliente = clienteId(p);

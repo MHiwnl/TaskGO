@@ -21,6 +21,8 @@ public class ConfirmacaoEmailService {
             TENTATIVAS = "emailCodigoTentativas", ENVIADO = "emailCodigoEnviadoEm";
     static final long VALIDADE_MS = 15 * 60_000L, ESPERA_REENVIO_MS = 60_000L;
     static final int MAX_TENTATIVAS = 5;
+    /* Erros do código contam por conta em 24 h: reenviar o código não zera. */
+    static final long JANELA_ERROS_MS = 24 * 3_600_000L;
     private static final SecureRandom RANDOM = new SecureRandom();
     private final UsuarioRepository usuarios;
     private final EmailRecuperacaoSenha email;
@@ -50,20 +52,21 @@ public class ConfirmacaoEmailService {
     /* Confere o código; certo, a conta fica confirmada e é devolvida para abrir a sessão. */
     public Usuario confirmar(String endereco, String codigo) {
         Usuario u = usuarios.findByEmailIgnoreCase(normalizar(endereco)).orElseThrow(this::invalido);
-        if (confirmado(u)) return u;
-        int tentativas = u.getExtra().get(TENTATIVAS) instanceof Number n ? n.intValue() : 0;
+        /* Conta já confirmada não passa por aqui: senão bastaria o e-mail para abrir a sessão de qualquer pessoa. */
+        if (confirmado(u)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esta conta já está confirmada. Entre com a sua senha.");
+        long agora = System.currentTimeMillis();
         long expira = u.getExtra().get(EXPIRA) instanceof Number n ? n.longValue() : 0L;
-        if (tentativas >= MAX_TENTATIVAS) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Muitas tentativas com este código. Peça um código novo.");
-        if (System.currentTimeMillis() > expira) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O código venceu. Peça um código novo.");
+        if (LimiteErros.esperaMs(u.getExtra(), TENTATIVAS, agora) > 0) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Muitas tentativas de confirmação nas últimas 24 horas. Tente de novo depois.");
+        if (agora > expira) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O código venceu. Peça um código novo.");
         String limpo = codigo == null ? "" : codigo.replaceAll("[^0-9]", "");
         if (!MessageDigest.isEqual(hash(limpo).getBytes(StandardCharsets.UTF_8), String.valueOf(u.getExtra().get(HASH)).getBytes(StandardCharsets.UTF_8))) {
-            u.getExtra().put(TENTATIVAS, tentativas + 1);
+            int restam = LimiteErros.errou(u.getExtra(), TENTATIVAS, MAX_TENTATIVAS, JANELA_ERROS_MS, JANELA_ERROS_MS, agora);
             usuarios.save(u);
-            int restam = MAX_TENTATIVAS - tentativas - 1;
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, restam > 0 ? "Código incorreto. Restam " + restam + (restam == 1 ? " tentativa." : " tentativas.") : "Código incorreto. Peça um código novo.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, restam > 0 ? "Código incorreto. Restam " + restam + (restam == 1 ? " tentativa." : " tentativas.") : "Código incorreto. Muitas tentativas: tente de novo depois.");
         }
         u.getExtra().put(CONFIRMADO, true);
-        for (String k : new String[]{HASH, EXPIRA, TENTATIVAS, ENVIADO}) u.getExtra().remove(k);
+        for (String k : new String[]{HASH, EXPIRA, ENVIADO}) u.getExtra().remove(k);
+        LimiteErros.zerar(u.getExtra(), TENTATIVAS);
         return usuarios.save(u);
     }
 
@@ -72,7 +75,6 @@ public class ConfirmacaoEmailService {
         long agora = System.currentTimeMillis();
         u.getExtra().put(HASH, hash(codigo));
         u.getExtra().put(EXPIRA, agora + VALIDADE_MS);
-        u.getExtra().put(TENTATIVAS, 0);
         u.getExtra().put(ENVIADO, agora);
         try {
             email.enviarTexto(u.getEmail(), "Seu código TaskGO: " + codigo,

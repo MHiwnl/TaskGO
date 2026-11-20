@@ -603,6 +603,7 @@ public class ObraService {
 
     /* Libera o que está retido na etapa (menos a garantia, na última etapa). */
     private void aprovar(EtapaObra e, Pedido p) {
+        if (etapas.reservarAprovacao(e.getId(), EtapaObra.ENTREGUE, EtapaObra.APROVADA) == 0) return;
         long agora = System.currentTimeMillis();
         if (pagamentos.direto()) {
             /* Pagamento direto: aprovada, o cliente paga a etapa ao profissional, que confirma o recebimento. */
@@ -940,25 +941,41 @@ public class ObraService {
 
     /* ======================= prazos (a cada minuto) ======================= */
 
+    /* Uma transação por item: um item com dado ruim não desfaz nem trava os outros. */
+    private org.springframework.transaction.support.TransactionTemplate tx;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setTx(org.springframework.transaction.PlatformTransactionManager m) { this.tx = new org.springframework.transaction.support.TransactionTemplate(m); }
+    private void porItem(String id, Runnable r) {
+        try { if (tx == null) r.run(); else tx.executeWithoutResult(s -> r.run()); }
+        catch (RuntimeException e) { org.slf4j.LoggerFactory.getLogger(ObraService.class).warn("Prazo de obra {} falhou: {}", id, e.getMessage()); }
+    }
+
     @Scheduled(fixedDelay = 60_000, initialDelay = 45_000)
-    @Transactional
     public void prazos() {
         long agora = System.currentTimeMillis();
-        for (TransacaoFinanceira t : transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE"))
-            pagamentos.cobranca(t.getReferencia()).ifPresent(c -> {
+        for (String id : transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE").stream().map(TransacaoFinanceira::getId).toList())
+            porItem(id, () -> transacoes.findById(id).filter(t -> "PENDENTE".equals(t.getStatus())).ifPresent(t -> pagamentos.cobranca(t.getReferencia()).ifPresent(c -> {
                 try { pagamentos.devolverCobranca(c, t.getValor()); t.situacao("CONCLUIDA"); transacoes.save(t); }
                 catch (PagamentoService.EstornoAdiado ainda) { /* tenta de novo no próximo minuto */ }
-            });
-        for (EtapaObra e : etapas.findByStatus(EtapaObra.ENTREGUE))
-            if (e.getLiberarApos() != null && e.getLiberarApos() <= agora) pedidos.findById(e.getPedidoId()).ifPresent(p -> { if (!"cancelado".equals(p.getStatus())) aprovar(e, p); });
-        if (!pagamentos.direto()) for (VisitaTecnica v : visitas.findByStatus(VisitaTecnica.REALIZADA))
-            if (v.getRealizadaEm() != null && v.getRealizadaEm() + PRAZO_APROVAR <= agora) { liberarVisita(v); visitas.save(v); }
-        for (Pedido p : pedidos.concluidosComGarantia())
+            })));
+        for (String id : etapas.findByStatus(EtapaObra.ENTREGUE).stream().map(EtapaObra::getId).toList())
+            porItem(id, () -> etapas.findById(id).filter(e -> EtapaObra.ENTREGUE.equals(e.getStatus()) && e.getLiberarApos() != null && e.getLiberarApos() <= agora)
+                .ifPresent(e -> pedidos.findById(e.getPedidoId()).ifPresent(p -> { if (!"cancelado".equals(p.getStatus())) aprovar(e, p); })));
+        if (!pagamentos.direto()) for (String id : visitas.findByStatus(VisitaTecnica.REALIZADA).stream().map(VisitaTecnica::getId).toList())
+            porItem(id, () -> visitas.findById(id).filter(v -> VisitaTecnica.REALIZADA.equals(v.getStatus()) && v.getRealizadaEm() != null && v.getRealizadaEm() + PRAZO_APROVAR <= agora)
+                .ifPresent(v -> { liberarVisita(v); visitas.save(v); }));
+        for (String id : pedidos.concluidosComGarantia().stream().map(Pedido::getId).toList())
+            porItem(id, () -> pedidos.findById(id).ifPresent(p -> garantiaVencida(p, agora)));
+    }
+
+    private void garantiaVencida(Pedido p, long agora) {
+        {
             if (p.getExtra().get("obraGarantia") instanceof Map<?, ?> g && "retida".equals(g.get("status")) && ((Number) g.get("ate")).longValue() <= agora) {
                 BigDecimal valor = new BigDecimal(String.valueOf(g.get("valor")));
                 fecharGarantia(p, valor, BigDecimal.ZERO, "liberada");
                 idDoEmail(p.getProEmail()).ifPresent(pro -> avisar(pro, p.getId(), "Garantia liberada", "Os 7 dias passaram sem defeito: a garantia caiu na sua carteira.", "garantia-liberada:" + p.getId()));
             }
+        }
     }
 
     /* ======================= apoio ======================= */

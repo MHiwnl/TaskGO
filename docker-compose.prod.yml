@@ -116,9 +116,20 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        # O dump vai primeiro para um arquivo: com "pg_dump | gzip" o sh só via o gzip, e um pg_dump que falhava virava backup vazio.
+        # Até 5 tentativas (o banco pode estar subindo); um dump falho nunca substitui o backup bom do dia.
         while true; do
           f=/backups/taskgo-$$(date +%Y-%m-%d).sql.gz
-          pg_dump -h db -U taskgo_app taskgo_db | gzip > "$$f.tmp" && mv "$$f.tmp" "$$f" && echo "backup ok: $$f"
+          ok=0
+          for t in 1 2 3 4 5; do
+            if pg_dump -h db -U taskgo_app taskgo_db > /backups/.dump.sql && [ -s /backups/.dump.sql ]; then
+              gzip -c /backups/.dump.sql > "$$f.tmp" && mv "$$f.tmp" "$$f" && ok=1 && echo "backup ok: $$f"
+              break
+            fi
+            echo "backup falhou (tentativa $$t de 5), tentando de novo em 60 s"; sleep 60
+          done
+          rm -f /backups/.dump.sql "$$f.tmp"
+          [ "$$ok" = 1 ] || echo "BACKUP FALHOU: $$f"
           find /backups -name 'taskgo-*.sql.gz' -mtime +14 -delete
           sleep 86400
         done

@@ -147,7 +147,21 @@ class AuthControllerTest {
         var auth=UsernamePasswordAuthenticationToken.authenticated(principal,null,principal.getAuthorities());
         controller.excluirConta(new AuthController.ExcluirContaRequest("Tarefa#Forte2026"),auth,new MockHttpServletRequest());
         verify(mensagens).deleteByPedidoIdIn(List.of("pedido-1"));
-        verify(pedidos).deleteByClientEmailIgnoreCaseOrProEmailIgnoreCase(dono.getEmail(),dono.getEmail());
+        verify(pedidos).delete(pedido);
+        verify(usuarios).delete(dono);
+    }
+
+    @Test void excluirContaNaoApagaPedidoDoOutroLado() {
+        Usuario dono=new Usuario();dono.setId(4L);dono.setEmail("pro@taskgo.com");dono.setNome("Pro");dono.setTipo("profissional");dono.setSenha(encoder.encode("Tarefa#Forte2026"));
+        Pedido pedido=new Pedido();pedido.setId("pedido-2");pedido.setClientEmail("cliente@taskgo.com");pedido.setProEmail(dono.getEmail());pedido.setProfessionalName("Pro");
+        when(usuarios.findById(4L)).thenReturn(Optional.of(dono));
+        when(pedidos.findByClientEmailIgnoreCaseOrProEmailIgnoreCaseOrderByCreatedDesc(dono.getEmail(),dono.getEmail())).thenReturn(List.of(pedido));
+        var principal=new TaskgoPrincipal(4L,dono.getEmail(),dono.getNome(),"profissional",null);
+        controller.excluirConta(new AuthController.ExcluirContaRequest("Tarefa#Forte2026"),UsernamePasswordAuthenticationToken.authenticated(principal,null,principal.getAuthorities()),new MockHttpServletRequest());
+        verify(pedidos,never()).delete(pedido);
+        verify(mensagens,never()).deleteByPedidoIdIn(org.mockito.ArgumentMatchers.anyList());
+        assertEquals("Conta excluída",pedido.getProfessionalName());
+        assertNotEquals(dono.getEmail(),pedido.getProEmail());
         verify(usuarios).delete(dono);
     }
 }

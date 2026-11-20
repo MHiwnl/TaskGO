@@ -20,6 +20,7 @@ window.fetch=async function(input,init={}){
     const atual=me();if(atual&&String(atual.id).startsWith('db_'))S.users=S.users.filter(u=>u!==atual);
     S.session=null;Store.save();
     if(typeof desligarEventos==='function')desligarEventos();
+    window.__contaDoPedido=atual&&String(atual.email||'').toLowerCase();if(typeof limparCachesDaConta==='function')limparCachesDaConta(true);
     toast('Sua sessão expirou. Entre de novo para continuar; o que você preencheu foi guardado.','err');
     /* Depois deste aviso, os erros da mesma chamada não viram outro aviso. */
     window.__sessaoVencida=true;

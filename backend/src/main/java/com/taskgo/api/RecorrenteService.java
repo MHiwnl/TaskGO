@@ -422,20 +422,34 @@ public class RecorrenteService {
 
     /* ======================= prazos (a cada minuto) ======================= */
 
+    /* Uma transação por vez: uma vez com dado ruim não desfaz nem trava as outras. */
+    private org.springframework.transaction.support.TransactionTemplate tx;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setTx(org.springframework.transaction.PlatformTransactionManager m) { this.tx = new org.springframework.transaction.support.TransactionTemplate(m); }
+    private void porVez(String id, Runnable r) {
+        try { if (tx == null) r.run(); else tx.executeWithoutResult(s -> r.run()); }
+        catch (RuntimeException e) { org.slf4j.LoggerFactory.getLogger(RecorrenteService.class).warn("Prazo da vez {} falhou: {}", id, e.getMessage()); }
+    }
+
     @Scheduled(fixedDelay = 60_000, initialDelay = 50_000)
-    @Transactional
     public void prazos() {
         long agora = System.currentTimeMillis();
         /* Feita e não confirmada em 24 h: vai para o profissional. */
-        for (VisitaRecorrente v : visitas.findByStatus(VisitaRecorrente.FEITA))
-            if (v.getLiberarApos() != null && v.getLiberarApos() <= agora) pedidos.findById(v.getPedidoId()).ifPresent(p -> {
+        for (String id : visitas.findByStatus(VisitaRecorrente.FEITA).stream().map(VisitaRecorrente::getId).toList())
+            porVez(id, () -> visitas.findById(id).filter(v -> VisitaRecorrente.FEITA.equals(v.getStatus()))
+                .filter(v -> v.getLiberarApos() != null && v.getLiberarApos() <= agora).ifPresent(v -> pedidos.findById(v.getPedidoId()).ifPresent(p -> {
                 if (direto()) { v.aPagar(); avisar(clienteId(p), p.getId(), "Pague a vez de " + DM.format(LocalDate.parse(v.getData())), "A vez foi confirmada. Pague " + reais(v.getValor()) + " ao profissional.", "rec-auto:" + v.getId()); }
                 else liberar(v, p);
-                visitas.save(v); talvezEncerrar(p.getId()); });
+                visitas.save(v); talvezEncerrar(p.getId()); })));
         LocalDate hoje = LocalDate.now(FUSO);
-        for (VisitaRecorrente v : visitas.findByStatus(VisitaRecorrente.PENDENTE)) {
+        for (String id : visitas.findByStatus(VisitaRecorrente.PENDENTE).stream().map(VisitaRecorrente::getId).toList())
+            porVez(id, () -> visitas.findById(id).filter(v -> VisitaRecorrente.PENDENTE.equals(v.getStatus())).ifPresent(v -> prazoPendente(v, agora, hoje)));
+    }
+
+    private void prazoPendente(VisitaRecorrente v, long agora, LocalDate hoje) {
+        {
             Pedido p = pedidos.findById(v.getPedidoId()).orElse(null);
-            if (p == null) continue;
+            if (p == null) return;
             LocalDate d = LocalDate.parse(v.getData());
             /* Ninguém aceitou até o dia: a vez não acontece. Semana sem pagamento no dia: a vez é cancelada. */
             if (direto() ? d.isBefore(hoje.minusDays(1)) : d.isBefore(hoje)) {

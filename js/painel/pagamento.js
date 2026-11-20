@@ -160,6 +160,8 @@ function painelPix(r){
     '<p class="pag-espera" role="status"><span class="pag-ponto" aria-hidden="true"></span>Esperando o pagamento · expira em <b id="pixExpira">'+tempoRestante(a.expiraEm)+'</b></p></div></div>';
 }
 function painelCartao(r){
+  /* Cartão salvo em análise ou sem resposta do Asaas: não pede o cartão de novo, só espera a conferência. */
+  if(r.aberta&&r.aberta.metodo==='cartao'&&(r.aberta.cartao||!r.aberta.link)){ligarEsperaPix(r.aberta);return '<div class="pag-painel"><p class="pag-espera" role="status"><span class="pag-ponto" aria-hidden="true"></span>Estamos conferindo o pagamento'+(r.aberta.cartao?' no '+esc(r.aberta.cartao):' no cartão')+' com o Asaas. Esta tela atualiza sozinha.</p></div>';}
   const ab=r.aberta&&r.aberta.metodo==='cartao'&&r.aberta.link?r.aberta:null;
   /* Asaas: cobrança aberta na página segura dele; esta tela espera a confirmação. */
   if(ab){ligarEsperaPix(ab);return '<div class="pag-painel"><p class="t2">Digite o cartão na página segura do Asaas. Esta tela atualiza sozinha quando o pagamento for aprovado.</p>'+

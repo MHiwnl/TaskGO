@@ -19,7 +19,7 @@ function pageContratar(){
   if(me().role==='profissional')return dashHead('Contratar','Pedir serviços é com uma conta de cliente. Na sua conta de profissional, os pedidos chegam em Oportunidades.')+'<a class="btn btn-primary" href="#/app/oportunidades">Ver oportunidades '+ic('arrow')+'</a>';
   /* Para fazer pedidos, a identidade precisa estar verificada. */
   if(precisaVerificacao())return route.page==='app'?dashHead('Contratar','Para fazer pedidos, a TaskGO confere a sua identidade uma vez.')+painelVerificacaoServico('pedir'):folha('contratar',duo('verifique sua identidade','para fazer pedidos',1),'cabeca')+'<section class="folha-densa" style="padding-top:0"><div class="wrap folha-in"><div class="folha-corpo">'+painelVerificacaoServico('pedir')+'</div></div></section>';
-  if(route.q.servico&&W.step===1&&W.presetService!==route.q.servico){W.service=route.q.servico;W.presetService=route.q.servico;}
+  if(route.q.servico&&W.step===1&&W.presetService!==route.q.servico){W.service=route.q.servico;W.presetService=route.q.servico;W.proEmail=W.proId='';}
   const p=passoAtual();
   const body=!p?telaModo():p==='servico'?wServico():p==='problema'?wProblemaAjuda():p==='local'?(W.modo==='agora'||W.modo==='ajuda'?wLocalAgora():wLocalAgendar()):p==='detalhes'?wDetalhes():p==='valor'?wValor():p==='confirmar'?wConfirmar():wLocalAgora();
   const aviso=W.reaproveitado&&p?'<div class="aviso-dados" role="status">'+ic('refresh')+'<p><b>Seus dados continuam aqui.</b> Ajuste o que quiser e envie de novo.</p><button type="button" class="icon-btn" aria-label="Fechar aviso" onclick="W.reaproveitado=false;render()">'+ic('x')+'</button></div>':'';
@@ -116,7 +116,7 @@ function gradeServicos(){
   if(todasCategorias&&!buscaServico.trim())return GRUPOS_SERVICOS.map(g=>'<p class="opt-grupo">'+esc(g[0])+'</p>'+g[1].map(id=>botao(svc(id))).join('')).join('');
   return lista.map(botao).join('');
 }
-function aceitarSugestaoServico(id){buscaServico='';W.service=id;W.oferta=null;const b=$('#buscaServico');if(b)b.value='';render();toast('Escolhido: '+svc(id).n,'ok');}
+function aceitarSugestaoServico(id){buscaServico='';W.service=id;W.oferta=null;W.proEmail=W.proId='';const b=$('#buscaServico');if(b)b.value='';render();toast('Escolhido: '+svc(id).n,'ok');}
 /* A grade guarda a altura que tinha antes da busca: a tela não pula enquanto a pessoa digita. */
 function buscarServico(v){
   buscaServico=v;

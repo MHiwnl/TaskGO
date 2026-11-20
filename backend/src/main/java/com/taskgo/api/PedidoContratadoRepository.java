@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 
 public interface PedidoContratadoRepository extends JpaRepository<Pedido, String> {
     @Query("select avg(p.rating), count(p.rating) from Pedido p where lower(p.proEmail)=lower(:email) and lower(p.status)='concluido' and p.rating is not null")
@@ -98,6 +100,11 @@ public interface PedidoContratadoRepository extends JpaRepository<Pedido, String
     Page<Pedido> encontrarDisponiveisPorServico(@Param("status") String status, @Param("service") String service, Pageable pageable);
     @Query("select p from Pedido p where lower(p.status)=lower(:status) and p.proEmail is null and p.service in :services")
     Page<Pedido> encontrarDisponiveisPorServicos(@Param("status") String status, @Param("services") java.util.Collection<String> services, Pageable pageable);
+
+    /* Pagar trava o pedido: dois cliques em Pagar viram uma cobrança só. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Pedido p where p.id = :id")
+    java.util.Optional<Pedido> findByIdForUpdate(@Param("id") String id);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update Pedido p set p.proEmail = :email, p.proId = :proId, p.professionalName = :name, p.status = 'a_caminho', p.acceptedAt = :acceptedAt, p.progress = 0 where p.id = :id and lower(p.status) = 'aguardando' and (p.proEmail is null or lower(p.proEmail) = lower(:email))")

@@ -34,6 +34,7 @@ public class DinheiroService {
 
     private final PendenciaRepository pendencias;
     private final PedidoContratadoRepository pedidos;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager em;
     private final UsuarioRepository usuarios;
     private final CarteiraRepository carteiras;
     private final TransacaoFinanceiraRepository transacoes;
@@ -361,8 +362,13 @@ public class DinheiroService {
 
     @Transactional
     public Object pagarPendencia(String id, Long usuarioId, String metodo, String cartaoId) {
+        /* Trava o pedido da pendência antes de ler: dois cliques em Pagar viram uma cobrança só. */
+        pendencias.findById(id).ifPresent(y -> pedidos.findByIdForUpdate(y.getPedidoId()));
         Pendencia x = pendencias.findById(id).filter(y -> y.getUsuarioId().equals(usuarioId)).orElseThrow(() -> erro(HttpStatus.NOT_FOUND, "Pendência não encontrada."));
+        if (em != null) em.refresh(x);
         if (!x.aberta()) throw erro(HttpStatus.CONFLICT, "Esta pendência já foi paga.");
+        if (x.getCobrancaId() != null && pagamentos.cobranca(x.getCobrancaId()).map(c -> Cobranca.PENDENTE.equals(c.getStatus()) && "cartao".equals(c.getMetodo())).orElse(false))
+            throw erro(HttpStatus.CONFLICT, "Há um pagamento no cartão em conferência para esta pendência. Espere a confirmação.");
         boolean doCliente = DO_CLIENTE.contains(x.getTipo());
         if (doCliente && pagamentos.direto()) throw erro(HttpStatus.CONFLICT, "Pague direto a quem atendeu: a chave Pix está no pedido. Quem atendeu confirma o recebimento.");
         if (doCliente && !java.util.Set.of("cartao", "cartao_novo", "carteira").contains(String.valueOf(metodo)))

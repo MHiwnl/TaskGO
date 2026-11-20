@@ -54,10 +54,31 @@ public class SegurancaContaController {
 
     public static boolean doisFatoresAtivo(Usuario u) { return u.getExtra().get(TOTP) instanceof String s && !s.isBlank(); }
 
+    /* Erros seguidos no 2FA (no extra da conta, então novo login não zera): 5 em 15 min bloqueiam por 15 min. */
+    static final String TFA_ERROS = "tfaErros";
+    static final int MAX_ERROS_2FA = 5;
+    static final long JANELA_2FA_MS = 15 * 60_000L;
+
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager em;
+
     /* Confere o código do aplicativo ou um código de recuperação (que só vale uma vez). */
     @Transactional
     public boolean conferirSegundaEtapa(Usuario u, String codigo) {
         if (!doisFatoresAtivo(u) || codigo == null) return false;
+        /* Lê o contador de novo com a linha travada: 50 códigos em paralelo contam 50 erros. */
+        if (em != null && u.getId() != null) { Usuario travado = em.find(Usuario.class, u.getId()); if (travado != null) { em.refresh(travado, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE); u = travado; } }
+        long agora = System.currentTimeMillis();
+        long espera = LimiteErros.esperaMs(u.getExtra(), TFA_ERROS, agora);
+        if (espera > 0) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Muitos códigos errados nesta conta. Tente de novo em " + (espera + 59_999) / 60_000 + " min.");
+        boolean ok = confere(u, codigo);
+        /* Sem exceção aqui: a contagem tem de ser gravada mesmo quando o código está errado. */
+        if (ok) LimiteErros.zerar(u.getExtra(), TFA_ERROS);
+        else LimiteErros.errou(u.getExtra(), TFA_ERROS, MAX_ERROS_2FA, JANELA_2FA_MS, JANELA_2FA_MS, agora);
+        usuarios.save(u);
+        return ok;
+    }
+
+    private boolean confere(Usuario u, String codigo) {
         if (Totp.confere((String) u.getExtra().get(TOTP), codigo, System.currentTimeMillis())) return true;
         String limpo = codigo.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
         if (limpo.length() != 10) return false;
@@ -67,7 +88,6 @@ public class SegurancaContaController {
         List<Object> resto = new ArrayList<>(l);
         if (!resto.remove(h)) return false;
         u.getExtra().put(RECUPERACAO, resto);
-        usuarios.save(u);
         moderacao.registrar(u.getId(), "conta", "Entrou com um código de recuperação (restam " + resto.size() + ")", u.getId(), null);
         return true;
     }

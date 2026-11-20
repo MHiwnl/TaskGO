@@ -63,7 +63,7 @@ public class PedidoContratadoController {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setPublicacao(PublicacaoPedidoService publicacao) { this.publicacao = publicacao; }
     /* Campos do pagamento só o servidor escreve. */
-    private static final java.util.Set<String> EXTRAS_DO_SERVIDOR = java.util.Set.of("pagamentoPendente", "repasse", "taxa", "confirmacaoCliente");
+    private static final java.util.Set<String> EXTRAS_DO_SERVIDOR = java.util.Set.of("pagamentoPendente", "repasse", "taxa", "confirmacaoCliente", "codigoChegadaErros", "codigoChegadaErrosDesde", "codigoChegadaErrosAte");
     private void avisar(Long usuarioId, String pedidoId, String titulo, String texto, String chave) {
         if (notificacoes == null || usuarioId == null) return;
         try { notificacoes.criar(usuarioId, pedidoId, "pedido", titulo, texto, chave); } catch (RuntimeException ignorar) { /* aviso repetido */ }
@@ -84,6 +84,8 @@ public class PedidoContratadoController {
         if (pedido.getProEmail() != null && !pedido.getProEmail().isBlank()) {
             Usuario pro = usuarios.findByEmailIgnoreCase(pedido.getProEmail().trim())
                     .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Profissional selecionado não encontrado."));
+            if (!AjudaRapida.eh(pedido) && !(servicosPro != null ? servicosPro.faz(pro, pedido.getService()) : String.valueOf(pedido.getService()).equalsIgnoreCase(String.valueOf(pro.getService()))))
+                throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Este profissional não atende a categoria deste pedido.");
             if (exigencia != null && !exigencia.liberado(pro))
                 throw new org.springframework.web.server.ResponseStatusException(HttpStatus.CONFLICT, "Este profissional ainda não pode receber pedidos.");
             if (!"profissional".equalsIgnoreCase(pro.getTipo()) || pro.getProId() == null || pro.getProId().isBlank()

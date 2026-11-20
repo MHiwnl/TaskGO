@@ -8,7 +8,8 @@ public interface ProvedorPix {
     CobrancaPix criar(String txid, BigDecimal valor, String descricao, int expiracaoSegundos);
     /* Situação da cobrança no provedor: ATIVA, PAGA, CANCELADA... */
     String status(String txid);
-    void cancelar(String txid);
+    /** true só se o provedor confirmou o cancelamento; false se recusou (pode ter sido paga) ou não respondeu. */
+    boolean cancelar(String txid);
     /* Só existe em simuladores. */
     default void simularPagamento(String txid) { throw new UnsupportedOperationException(); }
 

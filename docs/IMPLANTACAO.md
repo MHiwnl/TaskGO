@@ -11,7 +11,7 @@ Este guia prepara os serviços para hospedagem; não significa que o TaskGO já 
 
 ## Desenvolvimento local
 
-1. Crie um banco e um usuário PostgreSQL locais. Para iniciar apenas um PostgreSQL local com persistência Docker, defina `DB_PASSWORD` no terminal e execute `docker compose up -d postgres` na raiz. A porta é vinculada a `127.0.0.1`, não à rede pública.
+1. O jeito mais simples é `.\scripts\iniciar.ps1`, que sobe banco, API, site e simulador Pix pelo Docker. Para subir só o banco: `docker compose up -d db` (o serviço `db` não publica porta; para acessar de fora do Docker, use `docker compose exec db psql -U taskgo_app -d taskgo_db`).
 2. No PowerShell, configure a conexão local e inicie o backend explicitamente no perfil dev:
 
    ```powershell
@@ -20,10 +20,10 @@ Este guia prepara os serviços para hospedagem; não significa que o TaskGO já 
    $env:DB_PASSWORD='sua-senha-local'
    $env:TASKGO_CORS_ALLOWED_ORIGINS='http://localhost:5500'
    cd backend
-   .\mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+   mvn spring-boot:run -Dspring-boot.run.profiles=dev
    ```
 
-   Se o repositório não tiver Maven Wrapper, use `mvn spring-boot:run -Dspring-boot.run.profiles=dev`.
+   O projeto não tem Maven Wrapper. Sem Maven e JDK na máquina, rode pela imagem `maven:3.9.9-eclipse-temurin-17` (comandos no CLAUDE.md/README).
 3. Sirva a raiz do frontend em `http://localhost:5500` (por exemplo, Live Server). No arquivo `js/taskgo-config.js`, configure `apiBaseUrl: 'http://localhost:8080'` para desenvolvimento local.
 4. O perfil `dev` usa `ddl-auto=update` apenas para facilitar desenvolvimento. A senha continua obrigatória; não há senha padrão.
 
@@ -62,7 +62,9 @@ Configure-as no painel de segredos/variáveis da plataforma do backend. A aplica
 | `SESSION_COOKIE_SAME_SITE` | não | `none` por padrão em produção; requer HTTPS |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | para recuperação por e-mail | Segredos SMTP; fora disso o fluxo de e-mail não é enviado |
 | `PASSWORD_RESET_FRONTEND_URL` | para recuperação por e-mail | `https://taskgo.exemplo.com/#/recuperar` |
-| `PAYMENTS_ENABLED`, `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `PAYMENTS_PUBLIC_BASE_URL` | somente ao integrar pagamentos | Mantenha `PAYMENTS_ENABLED=false` enquanto o provedor/webhook não estiver configurado |
+| `TASKGO_PAGAMENTOS_MODO` | não | `desligado` (padrão), `simulado` ou `asaas` |
+| `TASKGO_PAGAMENTOS_MODELO` | não | `retido` (padrão) ou `direto` (cliente paga o profissional; só a taxa passa pelo Asaas) |
+| `ASAAS_API_KEY`, `ASAAS_API_URL`, `ASAAS_WEBHOOK_TOKEN` | com `asaas` | Segredos do Asaas; webhook em `POST /api/pagamentos/webhook/asaas` |
 
 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` e `TASKGO_CORS_ALLOWED_ORIGINS` não têm valores substitutos no perfil padrão/prod: ausências impedem o startup. O arquivo `.env.example` serve apenas como referência local e não é carregado automaticamente pelo Spring.
 

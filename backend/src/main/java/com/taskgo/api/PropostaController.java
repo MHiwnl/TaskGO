@@ -33,6 +33,8 @@ public class PropostaController {
     @org.springframework.beans.factory.annotation.Autowired(required = false) void setExigencia(ExigenciaVerificacao e) { this.exigencia = e; }
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setPagamentos(PagamentoService pagamentos) { this.pagamentos = pagamentos; }
+    private ServicosProfissional servicosPro;
+    @org.springframework.beans.factory.annotation.Autowired(required = false) void setServicosPro(ServicosProfissional s) { this.servicosPro = s; }
 
     public PropostaController(PropostaRepository propostas, PedidoContratadoRepository pedidos, UsuarioRepository usuarios,
                               NotificacaoService notificacoes, ModeracaoService moderacao, EventosService eventos) {
@@ -70,6 +72,7 @@ public class PropostaController {
         String autor;
         if ("profissional".equalsIgnoreCase(u.tipo())) {
             profissional = usuarios.findById(u.id()).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            if (!atende(profissional, p)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Este profissional não atende a categoria deste pedido.");
             if (!DisponibilidadeController.online(profissional))
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Você está offline. Fique online para enviar propostas.");
             if (agenda != null) agenda.exigirLivre(profissional, p);
@@ -79,6 +82,7 @@ public class PropostaController {
             if (propostas.findByPedidoIdAndProfissionalIdOrderByCriadaEmAsc(pedidoId, body.profissionalId()).isEmpty())
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Só é possível contrapropor a quem já mandou proposta.");
             profissional = usuarios.findById(body.profissionalId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profissional não encontrado."));
+            if (!atende(profissional, p)) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Este profissional não atende a categoria deste pedido.");
             autor = "cliente";
         } else throw new ResponseStatusException(HttpStatus.FORBIDDEN);
 
@@ -170,6 +174,11 @@ public class PropostaController {
         return x;
     }
 
+    /* Ajuda rápida não é categoria do catálogo: não passa pela checagem (igual à ObraService). */
+    private boolean atende(Usuario pro, Pedido p) {
+        if (AjudaRapida.eh(p)) return true;
+        return servicosPro != null ? servicosPro.faz(pro, p.getService()) : String.valueOf(p.getService()).equalsIgnoreCase(String.valueOf(pro.getService()));
+    }
     private Pedido pedido(String id) { return pedidos.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado.")); }
     private Pedido pedidoAberto(String id) {
         Pedido p = pedido(id);

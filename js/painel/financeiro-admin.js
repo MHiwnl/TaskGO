@@ -18,7 +18,7 @@ function painelFinanceiro(){
   const numero=(rot,val,nota)=>'<div><span class="t2">'+rot+'</span><b>'+val+'</b>'+(nota?'<small>'+nota+'</small>':'')+'</div>';
   const dados=(d.porDia||[]).map(x=>({dia:x.dia,recebido:Math.round(Number(x.valor)*100)/100}));
   return (d.teste?'<p class="aviso-linha" role="note">Conta Asaas de teste: os valores não são dinheiro de verdade.</p>':'')+
-    ((d.resgatesVerificar||[]).length?'<p class="aviso-linha" role="alert">Resgates sem resposta do Asaas, confira no painel do Asaas: '+d.resgatesVerificar.map(x=>esc(x.profissional)+' '+money(x.valor)+' em '+dataHora(x.em)).join(' · ')+'</p>':'')+
+    ((d.resgatesVerificar||[]).length?'<div class="aviso-linha" role="alert"><p>Resgates sem resposta do Asaas. Confira no painel do Asaas e marque o que aconteceu:</p>'+d.resgatesVerificar.map(x=>'<p>'+esc(x.profissional)+' · '+money(x.valor)+' · '+dataHora(x.em)+' <button type="button" class="btn btn-ghost btn-sm" data-resgate="'+esc(x.id)+'" data-saiu="1" onclick="resolverResgate(this)">Saiu</button> <button type="button" class="btn btn-ghost btn-sm" data-resgate="'+esc(x.id)+'" data-saiu="0" onclick="resolverResgate(this)">Não saiu, devolver</button></p>').join('')+'</div>':'')+
     '<div class="fin-numeros">'+
       numero('Recebido hoje',money(d.hoje))+numero('Recebido neste mês',money(d.mes),money(d.planosMes)+' do Plano Pro')+numero('Assinantes Pro',String(d.assinantesPro||0),'com o mês pago')+
       numero('Livre para transferir',saldo!=null?money(saldo):'—',saldo!=null?money(d.saldoAsaas)+' no Asaas, o resto é dos usuários':(d.saldoErro||'Asaas desligado'))+
@@ -32,7 +32,8 @@ function painelFinanceiro(){
 }
 function secaoTransferencia(d){
   const envios=d.transferencias||[];
-  const historico=envios.length?'<ul class="lista-painel fin-envios">'+envios.map(t=>'<li><div><b>'+money(t.valor)+'</b><small class="muted">'+dataHora(t.em)+' · '+esc(t.destino||'')+'</small></div><span class="tag '+(t.status==='DONE'?'tag-ok':t.status==='FAILED'||t.status==='CANCELLED'?'tag-danger':'tag-warn')+'">'+esc({DONE:'Concluída',PENDING:'Em andamento',BANK_PROCESSING:'No banco',FAILED:'Falhou',CANCELLED:'Cancelada'}[t.status]||t.status)+'</span></li>').join('')+'</ul>':'';
+  const historico=envios.length?'<ul class="lista-painel fin-envios">'+envios.map(t=>'<li><div><b>'+money(t.valor)+'</b><small class="muted">'+dataHora(t.em)+' · '+esc(t.destino||'')+'</small></div><span class="tag '+(t.status==='DONE'?'tag-ok':t.status==='FAILED'||t.status==='CANCELLED'?'tag-danger':'tag-warn')+'">'+esc({DONE:'Concluída',PENDING:'Em andamento',BANK_PROCESSING:'No banco',FAILED:'Falhou',FALHOU:'Não saiu',CANCELLED:'Cancelada',VERIFICAR:'Sem resposta'}[t.status]||t.status)+'</span>'+
+    (t.status==='VERIFICAR'?' <button type="button" class="btn btn-ghost btn-sm" data-transf="'+esc(t.id)+'" data-saiu="1" onclick="resolverTransferencia(this)">Saiu</button> <button type="button" class="btn btn-ghost btn-sm" data-transf="'+esc(t.id)+'" data-saiu="0" onclick="resolverTransferencia(this)">Não saiu</button>':'')+'</li>').join('')+'</ul>':'';
   if(!d.asaas)return '<section class="card"><h2 class="sub admin-ttl">Transferir</h2><p class="muted">A transferência fica disponível com o Asaas ligado.</p>'+historico+'</section>';
   const f=FORMATO_CHAVE[FIN.tipo];
   return '<section class="card"><h2 class="sub admin-ttl">Transferir para uma chave Pix</h2>'+
@@ -55,13 +56,31 @@ function pedirTransferencia(e){
     '<dl class="resumo-pedido"><div><dt>Valor</dt><dd>'+money(valor)+'</dd></div><div><dt>Para</dt><dd>'+esc(TIPOS_CHAVE[FIN.tipo])+' '+esc(chave)+'</dd></div></dl>'+
     '<div class="pag-form-acoes"><button class="btn btn-ghost" onclick="closeModal()">Voltar</button><button class="btn btn-primary" id="finOk" onclick="transferirAgora()">'+ic('check')+'Transferir '+money(valor)+'</button></div>');
 }
+/* Resgate em conferência: depois de olhar no painel do Asaas, a equipe conclui ou devolve o saldo. */
+async function resolverResgate(b){
+  const saiu=b.dataset.saiu==='1';
+  if(!confirm(saiu?'Confirmar que a transferência saiu no Asaas?':'Confirmar que a transferência NÃO saiu? O valor volta para o saldo do profissional.'))return;
+  b.disabled=true;
+  try{await apiJSON('/api/admin/financeiro/resgates/'+encodeURIComponent(b.dataset.resgate)+'/resolver','POST',{saiu},'Não foi possível salvar.');toast(saiu?'Resgate concluído.':'Valor devolvido ao profissional.','ok');}
+  catch(e){toast(erroLegivel(e,'Não foi possível salvar.'),'err');}
+  finally{FIN.dados=null;carregarFinanceiro(true);render();}
+}
+/* Transferência da TaskGO sem resposta do Asaas: enquanto não for marcada, nenhuma outra sai. */
+async function resolverTransferencia(b){
+  const saiu=b.dataset.saiu==='1';
+  if(!confirm(saiu?'Confirmar que esta transferência saiu no Asaas?':'Confirmar que esta transferência NÃO saiu no Asaas?'))return;
+  b.disabled=true;
+  try{await apiJSON('/api/admin/financeiro/transferencias/'+encodeURIComponent(b.dataset.transf)+'/resolver','POST',{saiu},'Não foi possível salvar.');toast('Transferência marcada.','ok');}
+  catch(e){toast(erroLegivel(e,'Não foi possível salvar.'),'err');}
+  finally{FIN.dados=null;carregarFinanceiro(true);render();}
+}
 async function transferirAgora(){
   if(FIN.enviando)return;
   const b=$('#finOk');if(b)b.disabled=true;
   FIN.enviando=true;
   try{
     const r=await apiJSON('/api/admin/financeiro/transferir','POST',{valor:Number($('#finValor').value),tipo:FIN.tipo,chave:$('#finChave').value,descricao:$('#finDesc').value},'Não foi possível transferir.');
-    closeModal();toast('Transferência de '+money(r.valor)+' enviada para '+r.destino+'.','ok');
+    closeModal();if(r.aviso)toast(r.aviso,'err');else toast('Transferência de '+money(r.valor)+' enviada para '+r.destino+'.','ok');
     FIN.dados=null;
   }catch(e){closeModal();toast(erroLegivel(e,'Não foi possível transferir.'),'err');}
   finally{FIN.enviando=false;carregarFinanceiro(true);render();}

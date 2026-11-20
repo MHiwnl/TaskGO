@@ -218,6 +218,7 @@ function mostrarCadastroConcluido({nome='',aguardar,onConcluir,onErro}={}){
 /* Sessão aberta no servidor: monta a conta local, sincroniza e leva para o lugar certo. */
 async function entrarComUsuarioApi(usuarioApi,email){
   const emailApi=String(usuarioApi.email||email).trim().toLowerCase();
+  limparCachesDaConta(window.__contaDoPedido===emailApi);window.__contaDoPedido=null;
   /* O tipo vem do servidor e é usado como está: cada papel tem o seu tipo de conta. */
   const role=String(usuarioApi.tipo||'').toLowerCase();
   if(!TIPOS_CONTA.includes(role))throw new Error('Tipo de conta desconhecido. Fale com o suporte.');
@@ -402,11 +403,33 @@ async function doAuth(e){
     go(destinoAposEntrar());
   });
 }
+/* Tudo que é de uma conta e fica na memória da aba: zera ao sair, quando a sessão vence e antes de entrar com outra conta.
+   manterPedido: o pedido em preenchimento fica para a mesma conta continuar depois de entrar de novo.
+   Cada arquivo dono do estado carrega depois deste, por isso o typeof. */
+function limparCachesDaConta(manterPedido){
+  if(!manterPedido&&typeof W_VAZIO==='function')W=W_VAZIO();
+  if(typeof pertoAgora!=='undefined')pertoAgora=null;
+  if(typeof RESGATE!=='undefined')RESGATE={chave:undefined,enviando:false};
+  if(typeof PGD!=='undefined'){PGD.pend=null;PGD.troca=null;}
+  if(typeof PG!=='undefined'){PG.cartoes=null;PG.saldo=null;}
+  if(typeof CATS!=='undefined')CATS.lista=null;
+  if(typeof AJ!=='undefined')AJ.estado=null;
+  if(typeof pararAlerta==='function')pararAlerta();
+  if(typeof chamadosSuporte!=='undefined')chamadosSuporte=null;
+  if(typeof financePageData!=='undefined'){financePageData=null;financePageUserId=null;financePageError='';}
+  clearInterval(window.__taskgoNotificationPoll);window.__taskgoNotificationPoll=null;
+  clearInterval(window.__taskgoOrderSync);window.__taskgoOrderSync=null;
+  if(typeof OB!=='undefined'){clearInterval(OB.pixTimer);OB.pixTimer=null;OB.dados=null;OB.pedido=null;OB.pag=null;OB.id=null;}
+  if(typeof FIN!=='undefined')FIN.dados=null;
+  if(typeof avisosAdmin!=='undefined')avisosAdmin.lista=null;
+  if(typeof JA_DENUNCIADOS!=='undefined')JA_DENUNCIADOS=null;
+}
 async function logout(){
   /* Na demonstração, sair só tira a conta do endereço; os dados fictícios ficam. */
   if(DEMO_MODE){S.session=null;Store.save();location.href=location.pathname+'?demo=1#/home';return;}
   try{const response=await fetch(API_BASE_URL+'/api/auth/logout',{method:'POST',credentials:'include',headers:await obterCabecalhosCsrf()});if(!response.ok&&response.status!==401)throw new Error('HTTP '+response.status);}
   catch(error){toast('Não foi possível encerrar a sessão no servidor. Tente novamente.','err');return;}
+  limparCachesDaConta();
   const current=me();if(current?.id?.startsWith('db_'))S.users=S.users.filter(user=>user!==current);
   desligarEventos();desligarPresenca();convitesAgora=[];AJ.estado=null;pintarConvites();segurancaConta=null;S.situacaoConta=null;window.__situacaoCarregada=null;PAINEL.hoje=null;PAINEL.atencao=null;PAINEL.pagamentos=null;PAINEL.exportacoes=null;PAINEL.busca={q:'',res:null,carregando:false,erro:''};PAINEL.auditoria.itens=null;adminDados={recursos:null,usuarios:null,erro:''};
   S.session=null;S.orders=[];S.tx=[];S.chats=[];S.notifs=[];

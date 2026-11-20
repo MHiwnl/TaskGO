@@ -51,7 +51,7 @@ function dashPedido(id){
      '<div class="card" style="margin-top:20px;border-top-color:var(--brand)">'+
      '<div style="display:flex;gap:14px;align-items:flex-start"><div class="ico-box">'+ic('bell')+'</div><div style="flex:1"><b>Novo pedido recebido</b><p class="muted" style="font-size:.88rem;margin-top:6px">'+esc(cli.name)+' solicitou '+esc(s.n)+' por '+money(o.price)+'. Revise o endereço e confirme se pode atender.</p></div></div>'+ 
      '<div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="recusarPedidoCliente(\''+o.id+'\')">Recusar pedido</button><button class="btn btn-grad" onclick="confirmarPedidoCliente(\''+o.id+'\')">'+ic('check')+' Confirmar atendimento</button></div></div>'
-     :o.proEmail?'<div class="card" style="margin-top:20px"><b>Enviado para '+esc(o.professionalName||'o profissional')+'</b><p class="muted" style="font-size:.88rem;margin-top:6px">Assim que confirmar, você recebe um aviso. Se não puder atender, o pedido é cancelado e você pode enviar para todos.</p></div>':painelPropostasCliente(o)):'')+
+     :o.proEmail?'<div class="card" style="margin-top:20px"><b>Enviado para '+esc(o.professionalName||'o profissional')+'</b><p class="muted" style="font-size:.88rem;margin-top:6px">Você recebe um aviso quando ele responder. Se ele recusar, o pedido é cancelado. Sem resposta, cancele e peça de novo para todos em Contratar.</p></div>':painelPropostasCliente(o)):'')+
     (o.status==='em_andamento'&&!rec?
      '<div class="card" style="margin-top:20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">'+
      '<div class="ico-box">'+ic('play')+'</div><div style="flex:1;min-width:200px"><b>Serviço em andamento</b>'+

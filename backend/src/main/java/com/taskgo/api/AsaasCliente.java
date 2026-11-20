@@ -99,7 +99,17 @@ public class AsaasCliente {
     }
     public JsonNode qrPix(String cobranca) { return get("/payments/" + cobranca + "/pixQrCode"); }
     public JsonNode cobranca(String cobranca) { return get("/payments/" + cobranca); }
-    public void cancelar(String cobranca) { try { delete("/payments/" + cobranca); } catch (Erro ignorar) { /* já paga ou já cancelada */ } }
+    /* true só se a cobrança ficou cancelada no Asaas. Se o DELETE falhar, confere: pode ter sido paga no último instante. */
+    public boolean cancelar(String cobranca) {
+        try { delete("/payments/" + cobranca); return true; }
+        catch (Erro e) {
+            try { return "CANCELADA".equals(situacao(cobranca(cobranca).path("status").asText())); } catch (Erro semResposta) { return false; }
+        }
+    }
+    /* Cobrança criada sem resposta (tempo esgotado): acha pelo nosso id, que vai em externalReference. */
+    public JsonNode porReferencia(String referencia) { return get("/payments?externalReference=" + referencia); }
+    /* Cartão em análise de risco ou ainda processando: não é recusa. */
+    static boolean emAnalise(String statusAsaas) { return "AWAITING_RISK_ANALYSIS".equals(statusAsaas) || "PENDING".equals(statusAsaas); }
     public JsonNode estornar(String cobranca, BigDecimal valor, String motivo) {
         Map<String, Object> c = new LinkedHashMap<>(); c.put("value", valor); c.put("description", motivo);
         return post("/payments/" + cobranca + "/refund", c);

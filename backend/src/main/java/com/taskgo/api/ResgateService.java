@@ -135,6 +135,14 @@ public class ResgateService {
         fecharMovimento(s, "CONCLUIDA");
         avisar(s.getUsuarioId(), "Resgate enviado", PagamentoService.reais(s.getValor()) + " foram para a sua chave Pix.", "resgate:" + s.getId());
     }
+    /* A equipe conferiu no Asaas um resgate sem resposta: saiu (conclui) ou não saiu (devolve o saldo). */
+    @Transactional
+    public SolicitacaoSaque resolverVerificar(String id, boolean saiu) {
+        SolicitacaoSaque s = saques.findById(id).orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Resgate não encontrado."));
+        if (!"VERIFICAR".equals(s.getStatus())) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Este resgate não está em conferência.");
+        if (saiu) concluir(s); else falhou(s, "A transferência não saiu. O valor voltou para o seu saldo.");
+        return s;
+    }
     private void verificar(SolicitacaoSaque s) {
         s.situacao("VERIFICAR"); saques.save(s);
         org.slf4j.LoggerFactory.getLogger(ResgateService.class).error("Resgate {} sem resposta do Asaas: conferir no painel antes de devolver ou concluir.", s.getId());

@@ -15,7 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 /* O código de chegada é a prova de que o profissional está diante do cliente:
-   em toda resposta com pedidos, ele só vai para o cliente dono do pedido. */
+   em toda resposta com pedidos, ele só vai para o cliente dono do pedido.
+   Endereço e ponto no mapa só vão para o outro lado depois que o cliente confirma quem atende. */
 @RestControllerAdvice
 public class PedidoRespostaAdvice implements ResponseBodyAdvice<Object> {
     private final ObjectMapper mapper;
@@ -38,6 +39,9 @@ public class PedidoRespostaAdvice implements ResponseBodyAdvice<Object> {
         if (email != null && p.getClientEmail() != null && email.trim().toLowerCase(Locale.ROOT).equals(p.getClientEmail().trim().toLowerCase(Locale.ROOT))) return p;
         @SuppressWarnings("unchecked") Map<String, Object> copia = mapper.convertValue(p, Map.class);
         copia.remove("code");
+        if ("aguardando".equalsIgnoreCase(String.valueOf(p.getStatus())) || "pendente".equals(p.getExtra().get("confirmacaoCliente"))) {
+            copia.remove("address"); copia.remove("lat"); copia.remove("lng");
+        }
         return copia;
     }
 }
