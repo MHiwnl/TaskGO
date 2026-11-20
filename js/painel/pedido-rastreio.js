@@ -1,5 +1,22 @@
 /* ---------- DETALHE DO PEDIDO / RASTREIO ---------- */
 let trackTimer=null;
+/* Previsão: início real do pedido + duração típica do serviço (/api/precos). Sem amostra suficiente, nada. */
+function previsaoTermino(o){
+  if(DEMO_MODE||!o.iniciadoEm)return '';
+  const r=FAIXAS_PRECO[o.service];
+  if(r===undefined){FAIXAS_PRECO[o.service]=null;apiJSON('/api/precos/'+encodeURIComponent(o.service)).then(x=>{FAIXAS_PRECO[o.service]=x;render();}).catch(()=>{delete FAIXAS_PRECO[o.service];});return '';}
+  if(!r||r.duracaoMedia==null)return '';
+  return '<p class="muted" style="font-size:.88rem;margin-top:6px">Previsão de término por volta de '+new Date(o.iniciadoEm+r.duracaoMedia*60000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</p>';
+}
+/* Termos fechados no aceite da proposta (extra "combinado" do pedido). */
+function textoCombinado(o){
+  const c=o.combinado;if(!c)return '';
+  const partes=[];
+  if(c.prazoDias!=null)partes.push('Prazo combinado: '+(c.prazoDias===0?'hoje':c.prazoDias+(c.prazoDias===1?' dia':' dias')));
+  if(c.garantiaDias!=null)partes.push('Garantia declarada: '+c.garantiaDias+' dias');
+  if(c.materialIncluso!=null)partes.push('Material incluso: '+(c.materialIncluso?'sim':'não'));
+  return partes.join(' · ');
+}
 function dashPedido(id){
   const o=S.orders.find(x=>x.id===id);
   if(o&&o.obra)return dashObra(id);
@@ -55,7 +72,7 @@ function dashPedido(id){
     (o.status==='em_andamento'&&!rec?
      '<div class="card" style="margin-top:20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">'+
      '<div class="ico-box">'+ic('play')+'</div><div style="flex:1;min-width:200px"><b>Serviço em andamento</b>'+
-     '<p class="muted" style="font-size:.88rem">Iniciado após validação do código. Ao terminar, confirme a conclusão para liberar o pagamento.</p></div>'+
+     '<p class="muted" style="font-size:.88rem">Iniciado após validação do código. Ao terminar, confirme a conclusão para liberar o pagamento.</p>'+previsaoTermino(o)+'</div>'+
      '<button class="btn btn-grad" onclick="concluirServico(\''+o.id+'\')">'+ic('check')+' Concluir serviço</button></div>':'')+
     (o.status==='concluido'?
      '<div class="card" style="margin-top:20px">'+
@@ -67,6 +84,7 @@ function dashPedido(id){
        '<a class="btn btn-ghost btn-sm" href="#/app/contratar?servico='+o.service+'">'+ic('refresh')+' Contratar novamente</a>')+'</div></div>':'')+
     blocoFotosPedido(o)+
     (o.notes?'<div class="card" style="margin-top:20px"><b style="font-size:.9rem">Descrição do pedido</b><p class="muted" style="font-size:.9rem;margin-top:8px">'+esc(o.notes)+'</p></div>':'')+
+    (isPro&&textoRespostas(o.service,o.respostas)?'<div class="card" style="margin-top:20px"><b style="font-size:.9rem">Perguntas do pedido</b><p class="muted" style="font-size:.9rem;margin-top:8px">'+textoRespostas(o.service,o.respostas)+'</p></div>':'')+
   '',''+
     (['aguardando','aguardando_pagamento'].includes(o.status)&&!isPro?'':'<div class="card" style="margin-bottom:16px"><h2 class="sub" style="font-size:1rem;margin-bottom:16px">'+(isPro?'Cliente':'Profissional')+'</h2>'+
     '<div style="display:flex;gap:12px;align-items:center">'+avatar(counterpart(o),52)+
@@ -83,6 +101,7 @@ function dashPedido(id){
     (rec?[['Endereço',o.address||'—'],['Categoria',s.n],['Pagamento',modeloDireto()?'Pix ao profissional, a cada vez':'Por semana, pela TaskGO'],['Cada vez',money(o.price)],['Total',money(o.recorrente.total)]]:
     [['Endereço',o.address||'—'],['Categoria',s.n],['Pagamento',DEMO_MODE?'Demonstração':rotuloPagamentoPedido(o)],[['aguardando','aguardando_pagamento'].includes(o.status)?'Você oferece':'Valor combinado',money(o.price)]])
     .map(r=>'<div style="display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid var(--line)"><span class="muted" style="font-size:.85rem">'+r[0]+'</span><b style="font-size:.85rem;text-align:right">'+esc(r[1])+'</b></div>').join('')+
+    (textoCombinado(o)?'<p class="muted" style="font-size:.84rem;margin-top:12px">'+textoCombinado(o)+'</p>':'')+
     (['a_caminho','agendado','aguardando','aguardando_pagamento'].includes(o.status)||rec&&o.status==='em_andamento'?'<button class="btn btn-danger btn-block" style="margin-top:16px" onclick="cancelarPedido(\''+o.id+'\')">'+(rec&&['agendado','em_andamento'].includes(o.status)?'Cancelar próximas vezes':'Cancelar pedido')+'</button>':'')+
     '</div>'+
     (['concluido','cancelado'].includes(o.status)?'':'<div class="card" style="margin-top:16px">'+

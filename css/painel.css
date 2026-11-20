@@ -314,6 +314,16 @@ table.tb td{padding:13px 12px;border-bottom:1px solid var(--line)}
 .prop-vazio>svg{flex:none;width:22px;height:22px;color:var(--brand)}
 .prop-vazio p{margin-top:4px;font-size:.88rem}
 @media (max-width:640px){.prop{grid-template-columns:1fr}.prop-valor{text-align:left}.prop-acoes .btn{flex:1}}
+.prop-comparar{margin-bottom:12px}
+.prop-comparar caption{text-align:left;padding-bottom:8px;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.prop-comparar th small{display:block;font-weight:400;color:var(--muted)}
+.prop-comparar td{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.prop-termos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 18px;margin-bottom:18px}
+.prop-termos .hint{margin-top:4px}
+.prop-material{min-width:0;border:0;margin:0;padding:0}
+.prop-material legend{font-size:.8rem;color:var(--text-2);margin-bottom:10px}
+.prop-material label{display:inline-flex;align-items:center;gap:6px;margin-right:18px;font-size:.92rem}
+@media (max-width:640px){.prop-termos{grid-template-columns:1fr}}
 
 /* ---------- Oportunidades (profissional) ---------- */
 .disponibilidade{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 0;margin-bottom:8px;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line)}

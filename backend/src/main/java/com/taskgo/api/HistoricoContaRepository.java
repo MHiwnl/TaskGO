@@ -6,6 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface HistoricoContaRepository extends JpaRepository<HistoricoConta, String> {
     List<HistoricoConta> findByUsuarioIdOrderByCriadoEmDesc(Long usuarioId);
     void deleteByUsuarioId(Long usuarioId);
+    /* Ranking: cancelamentos feitos pelo próprio profissional desde :desde, por usuarioId: [usuarioId, total]. */
+    @org.springframework.data.jpa.repository.Query("select h.usuarioId, count(h) from HistoricoConta h where h.usuarioId in :ids and h.tipo = 'cancelamento' and h.criadoEm >= :desde group by h.usuarioId")
+    List<Object[]> cancelamentosDe(@org.springframework.data.repository.query.Param("ids") java.util.Collection<Long> ids, @org.springframework.data.repository.query.Param("desde") long desde);
     @org.springframework.data.jpa.repository.Modifying @org.springframework.data.jpa.repository.Query("delete from HistoricoConta h where h.criadoEm < :limite")
     int apagarAntesDe(@org.springframework.data.repository.query.Param("limite") long limite);
 

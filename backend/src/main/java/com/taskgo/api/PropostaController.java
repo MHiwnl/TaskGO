@@ -1,7 +1,10 @@
 package com.taskgo.api;
 
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +38,10 @@ public class PropostaController {
     void setPagamentos(PagamentoService pagamentos) { this.pagamentos = pagamentos; }
     private ServicosProfissional servicosPro;
     @org.springframework.beans.factory.annotation.Autowired(required = false) void setServicosPro(ServicosProfissional s) { this.servicosPro = s; }
+    private RankingProfissionais ranking;
+    @org.springframework.beans.factory.annotation.Autowired(required = false) void setRanking(RankingProfissionais r) { this.ranking = r; }
+    private PresencaProfissionalRepository presencas;
+    @org.springframework.beans.factory.annotation.Autowired(required = false) void setPresencas(PresencaProfissionalRepository p) { this.presencas = p; }
 
     public PropostaController(PropostaRepository propostas, PedidoContratadoRepository pedidos, UsuarioRepository usuarios,
                               NotificacaoService notificacoes, ModeracaoService moderacao, EventosService eventos) {
@@ -48,7 +55,7 @@ public class PropostaController {
     public List<PropostaDto> listar(@PathVariable String pedidoId, Authentication auth) {
         TaskgoPrincipal u = principal(auth);
         Pedido p = pedido(pedidoId);
-        if (dono(p, u)) return propostas.findByPedidoIdOrderByCriadaEmAsc(pedidoId).stream().map(this::dto).toList();
+        if (dono(p, u)) return comparavel(propostas.findByPedidoIdOrderByCriadaEmAsc(pedidoId), p);
         if ("profissional".equalsIgnoreCase(u.tipo())) return propostas.findByPedidoIdAndProfissionalIdOrderByCriadaEmAsc(pedidoId, u.id()).stream().map(this::dto).toList();
         throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
@@ -67,6 +74,7 @@ public class PropostaController {
         if (body != null && body.valor() != null && body.valor() >= 1000 && DinheiroService.emDinheiro(p)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este pedido é em dinheiro, que vale só abaixo de R$ 1.000.");
         if (body == null || body.valor() == null || body.valor() <= 0 || body.valor() > VALOR_MAXIMO)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe um valor entre R$ 1 e R$ 100.000.");
+        if ("profissional".equalsIgnoreCase(u.tipo())) validarTermos(body);
         double valor = Math.round(body.valor() * 100) / 100.0;
         Usuario profissional;
         String autor;
@@ -90,7 +98,9 @@ public class PropostaController {
         /* A nova proposta substitui a pendente anterior do mesmo par. */
         propostas.findByPedidoIdAndProfissionalIdOrderByCriadaEmAsc(pedidoId, profissional.getId()).stream()
                 .filter(Proposta::pendente).forEach(x -> x.encerrar(Proposta.SUBSTITUIDA, agora));
-        Proposta nova = propostas.save(new Proposta(java.util.UUID.randomUUID().toString(), pedidoId, profissional, autor, valor, agora));
+        boolean doProfissional = "profissional".equals(autor);
+        Proposta nova = propostas.save(new Proposta(java.util.UUID.randomUUID().toString(), pedidoId, profissional, autor, valor, agora,
+                doProfissional ? body.prazoDias() : null, doProfissional ? body.garantiaDias() : null, doProfissional ? body.materialIncluso() : null));
 
         Long destino = "profissional".equals(autor) ? idCliente(p) : profissional.getId();
         String valorTexto = String.format(Locale.forLanguageTag("pt-BR"), "R$ %.2f", valor);
@@ -116,6 +126,17 @@ public class PropostaController {
         if (ok == 0) throw new ResponseStatusException(HttpStatus.CONFLICT, "Este pedido não está mais disponível.");
         Pedido fechado = pedidos.findById(pedidoId).orElseThrow();
         fechado.setPrice(x.getValor());
+        /* Os termos combinados são os da última proposta do profissional; a contraproposta do cliente não traz os seus.
+           Chave só do servidor: o cliente não a grava (PedidoService.EXTRAS_DO_CLIENTE não a inclui). */
+        Proposta fonte = propostas.findByPedidoIdAndProfissionalIdOrderByCriadaEmAsc(pedidoId, x.getProfissionalId()).stream()
+                .filter(o -> "profissional".equals(o.getAutor())).reduce((a, b) -> b).orElse(null);
+        if (fonte != null && fonte.getPrazoDias() != null) {
+            Map<String, Object> combinado = new LinkedHashMap<>();
+            combinado.put("prazoDias", fonte.getPrazoDias());
+            combinado.put("garantiaDias", fonte.getGarantiaDias());
+            combinado.put("materialIncluso", fonte.getMaterialIncluso());
+            fechado.getExtra().put("combinado", combinado);
+        }
         pedidos.save(fechado);
         /* Valor maior que o pago: cobra a diferença (a sobra de um valor menor volta ao concluir). */
         if (pagamentos != null) pagamentos.aposMudarValor(fechado);
@@ -193,16 +214,45 @@ public class PropostaController {
         return p;
     }
 
-    public record NovaProposta(Double valor, Long profissionalId) {}
+    /* Só a proposta do profissional traz os termos; a contraproposta do cliente herda os da última dele. */
+    private static void validarTermos(NovaProposta b) {
+        if (b.prazoDias() == null || b.prazoDias() < 0 || b.prazoDias() > 90)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o prazo de 0 (hoje) a 90 dias.");
+        if (b.garantiaDias() == null || b.garantiaDias() < 0 || b.garantiaDias() > 365)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a garantia de 0 a 365 dias.");
+        if (b.materialIncluso() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe se o material está incluso.");
+    }
+
+    public record NovaProposta(Double valor, Long profissionalId, Integer prazoDias, Integer garantiaDias, Boolean materialIncluso) {
+        public NovaProposta(Double valor, Long profissionalId) { this(valor, profissionalId, null, null, null); }
+    }
     /* A proposta leva a nota do profissional: o cliente escolhe sabendo com quem vai lidar. */
-    private PropostaDto dto(Proposta x) {
+    private PropostaDto dto(Proposta x) { return dtoComparavel(x, null, null); }
+
+    /* Cliente dono: distância de cada profissional até o pedido e serviços concluídos, em consultas só para a lista. */
+    private List<PropostaDto> comparavel(List<Proposta> lista, Pedido p) {
+        if (ranking == null) return lista.stream().map(this::dto).toList();
+        Map<Long, Usuario> porId = new HashMap<>();
+        usuarios.findAllById(lista.stream().map(Proposta::getProfissionalId).distinct().toList()).forEach(u -> porId.put(u.getId(), u));
+        Map<Long, RankingProfissionais.Metricas> metricas = ranking.metricas(porId.values());
+        return lista.stream().map(x -> {
+            Usuario pro = porId.get(x.getProfissionalId());
+            /* Do ponto de partida (nunca da posição ao vivo) e em km inteiros: vários pedidos não triangulam onde o profissional está. */
+            Double km = pro == null ? null : AreaAtendimentoController.distancia(AreaAtendimentoController.ponto(pro, null), p);
+            RankingProfissionais.Metricas m = metricas.get(x.getProfissionalId());
+            return dtoComparavel(x, km == null ? null : (double) Math.max(1, Math.round(km)), m == null ? null : (int) m.concluidos());
+        }).toList();
+    }
+
+    private PropostaDto dtoComparavel(Proposta x, Double km, Integer concluidos) {
         Object[] r = ProfissionalController.resumo(pedidos.resumoAvaliacoes(x.getProfissionalEmail()));
         Double nota = r[0] instanceof Number n ? Math.round(n.doubleValue() * 10) / 10.0 : null;
         int total = r[1] instanceof Number n ? n.intValue() : 0;
         return new PropostaDto(x.getId(), x.getPedidoId(), x.getProfissionalId(), x.getProfissionalNome(), x.getAutor(), x.getValor(),
-                x.getStatus(), x.getCriadaEm(), x.getRespondidaEm(), nota, total);
+                x.getStatus(), x.getCriadaEm(), x.getRespondidaEm(), nota, total, x.getPrazoDias(), x.getGarantiaDias(), x.getMaterialIncluso(), km, concluidos);
     }
 
     public record PropostaDto(String id, String pedidoId, Long profissionalId, String profissionalNome, String autor, double valor,
-                              String status, long criadaEm, Long respondidaEm, Double profissionalNota, int profissionalAvaliacoes) {}
+                              String status, long criadaEm, Long respondidaEm, Double profissionalNota, int profissionalAvaliacoes,
+                              Integer prazoDias, Integer garantiaDias, Boolean materialIncluso, Double km, Integer concluidos) {}
 }

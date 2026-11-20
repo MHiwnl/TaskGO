@@ -34,10 +34,11 @@ public class ChamarAgoraService {
     private final PresencaProfissionalRepository presencas;
     private final EventosService eventos;
     private final NotificacaoService notificacoes;
+    private final RankingProfissionais ranking;
 
     public ChamarAgoraService(PedidoContratadoRepository pedidos, UsuarioRepository usuarios, PresencaProfissionalRepository presencas,
-                              EventosService eventos, NotificacaoService notificacoes) {
-        this.pedidos = pedidos; this.usuarios = usuarios; this.presencas = presencas; this.eventos = eventos; this.notificacoes = notificacoes;
+                              EventosService eventos, NotificacaoService notificacoes, RankingProfissionais ranking) {
+        this.pedidos = pedidos; this.usuarios = usuarios; this.presencas = presencas; this.eventos = eventos; this.notificacoes = notificacoes; this.ranking = ranking;
     }
 
     public static boolean modoAgora(Pedido p) { return p != null && "agora".equals(p.getExtra().get("modo")); }
@@ -125,7 +126,10 @@ public class ChamarAgoraService {
         try { fora.add(Long.valueOf(p.getClientId())); } catch (RuntimeException ignorar) { /* pedido sem id de cliente */ }
         List<Candidato> perto = proximos(p.getService(), lat, lng, fora);
         Set<Long> pros = planos == null ? Set.of() : planos.pros(perto.stream().map(c -> c.usuario().getId()).toList());
-        List<Candidato> novos = ordemDaOnda(perto, c -> pros.contains(c.usuario().getId())).stream().limit(POR_ONDA).toList();
+        /* Dentro da onda, quem tem mais qualidade e está mais perto vem antes; o Pro ainda antecipa uma onda. */
+        Map<Long, RankingProfissionais.Metricas> qualidade = ranking.metricas(perto.stream().map(Candidato::usuario).toList());
+        List<Candidato> porQualidade = perto.stream().sorted(Comparator.comparingDouble((Candidato c) -> -RankingProfissionais.pontuacaoOnda(c.km(), RAIO_KM, qualidade.get(c.usuario().getId())))).toList();
+        List<Candidato> novos = ordemDaOnda(porQualidade, c -> pros.contains(c.usuario().getId())).stream().limit(POR_ONDA).toList();
         Map<String, Object> extra = new LinkedHashMap<>(e);
         if (novos.isEmpty()) {
             if (onda > 0 && !Boolean.TRUE.equals(e.get("semMais"))) { extra.put("semMais", true); gravar(p, extra); }

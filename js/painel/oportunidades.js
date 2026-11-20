@@ -49,7 +49,7 @@ function cartaoOportunidade(pedido,modo){
     (pedido.urgente?'<span class="tag-urgente">'+ic('bolt')+' Urgente · para agora</span>':'')+(nova?'<span class="tag-nova">Nova</span>':'')+
     (pedido.recorrente?'<span class="tag-obra tag-rec">'+ic('refresh')+' Recorrente · '+Number(pedido.recorrente.vezes)+' vezes · total '+money(pedido.recorrente.total)+'</span>':'')+
     '<div class="op-corpo"><div class="ico-box">'+ic(servico?servico.ico:'wrench',servico?'ic-svc-'+servico.id:'')+'</div>'+
-    '<div class="op-info"><b>'+esc(servico?servico.n:pedido.service)+'</b><p class="muted">'+esc(pedido.notes||'Pedido sem descrição.')+'</p>'+
+    '<div class="op-info"><b>'+esc(servico?servico.n:pedido.service)+'</b><p class="muted">'+esc(pedido.notes||'Pedido sem descrição.')+'</p>'+(textoRespostas(pedido.service,pedido.respostas)?'<p class="muted">'+textoRespostas(pedido.service,pedido.respostas)+'</p>':'')+
     '<small class="muted">'+(pedido.km!=null?'<b class="op-km">'+distanciaOportunidade(pedido)+'</b> · ':'')+(pedido.bairro?esc(pedido.bairro)+' · ':'')+(pedido.created?'há '+haQuanto(pedido.created)+' · ':'')+'endereço depois do aceite</small>'+
     '<span class="op-cliente">'+fotoPerfil(pedido.clienteUid,pedido.clienteNome||'Cliente',28,!!pedido.clienteTemFoto)+esc(pedido.clienteNome||'Cliente')+' · '+(n?stars(nota)+' '+nota.toFixed(1)+' ('+n+')':'cliente novo, sem avaliações')+'</span></div>'+
     '<div class="op-valor"><span class="muted">'+(pedido.recorrente?'Por vez':'Oferece')+'</span><b>'+money(pedido.price)+'</b></div></div>'+

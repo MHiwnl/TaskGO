@@ -70,6 +70,8 @@ public class PedidoService {
            ondas do Chamar Agora, pagamento...) só o servidor escreve. */
         Map<String,Object> extrasSeguros=sanitizarExtras(pedido.getExtra());
         extrasSeguros.keySet().retainAll(EXTRAS_DO_CLIENTE);
+        Map<String,String> respostas=CatalogoServicos.respostasValidas(pedido.getService(),extrasSeguros.get("respostas"));
+        extrasSeguros.remove("respostas"); if (respostas!=null) extrasSeguros.put("respostas",respostas);
         if (obra) {
             /* Obra: o valor informado é o teto do cliente; o preço final vem do orçamento aceito. Sem dinheiro. */
             extrasSeguros.put("obra", true); extrasSeguros.put("obraTeto", preco); extrasSeguros.remove("formaPagamento");
@@ -92,7 +94,7 @@ public class PedidoService {
         /* O código de chegada nasce no servidor e só o cliente o vê (PedidoRespostaAdvice). */
         pedido.setCode(String.format("%04d", CODIGOS.nextInt(10000)));
         pedido.setCreated(System.currentTimeMillis());
-        pedido.setAcceptedAt(null); pedido.setCompletedAt(null); pedido.setPaid(null); pedido.setRating(null); pedido.setCancelReason(null);
+        pedido.setAcceptedAt(null); pedido.setCompletedAt(null); pedido.setIniciadoEm(null); pedido.setPaid(null); pedido.setRating(null); pedido.setCancelReason(null);
         if (pedido.getProgress() == null) pedido.setProgress(0.0);
         return repository.save(pedido);
     }
@@ -197,6 +199,8 @@ public class PedidoService {
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Código incorreto. Peça ao cliente para conferir o código no aplicativo dele.");
             }
         }
+        /* Início real do serviço: gravado uma vez, na primeira vez que o código de chegada é aceito. */
+        if ("em_andamento".equals(novoStatus) && !"em_andamento".equals(pedido.getStatus()) && pedido.getIniciadoEm() == null) pedido.setIniciadoEm(System.currentTimeMillis());
         if (novoStatus != null) pedido.setStatus(novoStatus);
         if ("a_caminho".equals(novoStatus) && pedido.getAcceptedAt() == null) pedido.setAcceptedAt(System.currentTimeMillis());
         if (atualizacao.getProgress() != null && profissional) pedido.setProgress(atualizacao.getProgress());
@@ -206,7 +210,7 @@ public class PedidoService {
         return repository.save(pedido);
     }
 
-    static final Set<String> EXTRAS_DO_CLIENTE = Set.of("lat", "lng", "bairro", "urgente", "quando", "modo", "clientName", "formaPagamento", "inicioDesejado");
+    static final Set<String> EXTRAS_DO_CLIENTE = Set.of("lat", "lng", "bairro", "urgente", "quando", "modo", "clientName", "formaPagamento", "inicioDesejado", "respostas");
     private static final java.security.SecureRandom CODIGOS = new java.security.SecureRandom();
     /* Erros do código de chegada, no extra do pedido: 5 seguidos bloqueiam a chegada por 15 min. */
     static final String ERROS_CODIGO = "codigoChegadaErros";

@@ -23,11 +23,20 @@ public class Proposta {
     @Column(nullable = false) private String status;
     @Column(name = "criada_em", nullable = false) private long criadaEm;
     @Column(name = "respondida_em") private Long respondidaEm;
+    /* Termos declarados pelo profissional; nulos nas contrapropostas do cliente e nas propostas antigas. */
+    @Column(name = "prazo_dias") private Integer prazoDias;
+    @Column(name = "garantia_dias") private Integer garantiaDias;
+    @Column(name = "material_incluso") private Boolean materialIncluso;
 
     protected Proposta() {}
     public Proposta(String id, String pedidoId, Usuario profissional, String autor, double valor, long criadaEm) {
+        this(id, pedidoId, profissional, autor, valor, criadaEm, null, null, null);
+    }
+    public Proposta(String id, String pedidoId, Usuario profissional, String autor, double valor, long criadaEm,
+                    Integer prazoDias, Integer garantiaDias, Boolean materialIncluso) {
         this.id = id; this.pedidoId = pedidoId; this.profissionalId = profissional.getId(); this.profissionalEmail = profissional.getEmail();
         this.profissionalNome = profissional.getNome(); this.autor = autor; this.valor = valor; this.status = PENDENTE; this.criadaEm = criadaEm;
+        this.prazoDias = prazoDias; this.garantiaDias = garantiaDias; this.materialIncluso = materialIncluso;
     }
     public String getId() { return id; }
     public String getPedidoId() { return pedidoId; }
@@ -39,6 +48,9 @@ public class Proposta {
     public String getStatus() { return status; }
     public long getCriadaEm() { return criadaEm; }
     public Long getRespondidaEm() { return respondidaEm; }
+    public Integer getPrazoDias() { return prazoDias; }
+    public Integer getGarantiaDias() { return garantiaDias; }
+    public Boolean getMaterialIncluso() { return materialIncluso; }
     public boolean pendente() { return PENDENTE.equals(status); }
     public void encerrar(String novoStatus, long quando) { this.status = novoStatus; this.respondidaEm = quando; }
 }

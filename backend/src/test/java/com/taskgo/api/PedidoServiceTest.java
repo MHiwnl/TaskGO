@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -61,6 +63,24 @@ class PedidoServiceTest {
         assertThrows(ResponseStatusException.class, () -> service.criar(curta));
     }
 
+    /* O início real é gravado uma vez, quando o código de chegada é aceito; o cliente não escolhe esse horário. */
+    @Test void inicioGravadoUmaVezAoIniciarERecusadoDoCliente() {
+        Pedido sem = pedido("chegou"); sem.setCode("4821");
+        when(repository.findById("o_123")).thenReturn(Optional.of(sem));
+        when(repository.save(any(Pedido.class))).thenAnswer(inv -> inv.getArgument(0));
+        Pedido inicio = pedido("em_andamento"); inicio.setCode("4821");
+        assertNotNull(service.atualizar("o_123", "pro@taskgo.com", inicio).getIniciadoEm());
+
+        Pedido jaIniciado = pedido("chegou"); jaIniciado.setCode("4821"); jaIniciado.setIniciadoEm(1000L);
+        when(repository.findById("o_123")).thenReturn(Optional.of(jaIniciado));
+        assertEquals(1000L, service.atualizar("o_123", "pro@taskgo.com", inicio).getIniciadoEm());
+
+        Pedido novo = pedido("aguardando"); novo.setIniciadoEm(123L);
+        when(repository.existsById(novo.getId())).thenReturn(false); when(repository.save(novo)).thenReturn(novo);
+        service.criar(novo);
+        assertNull(novo.getIniciadoEm());
+    }
+
     @Test void criarDescartaCamposExtrasQueSoOServidorEscreve() {
         Pedido novo = pedido("aguardando");
         novo.addExtra("clientRating", 5); novo.addExtra("chegadaImprecisa", true); novo.addExtra("notificados", List.of(1, 2));
@@ -73,6 +93,24 @@ class PedidoServiceTest {
         assertEquals("Graças", novo.getExtra().get("bairro"));
         assertEquals(-8.05, novo.getExtra().get("lat"));
         assertEquals("agendar", novo.getExtra().get("modo"));
+    }
+
+    @Test void criarMantemSoRespostasConhecidasDoServico() {
+        Pedido novo = pedido("aguardando"); novo.addExtra("modo", "agendar");
+        Map<String, Object> respostas = new LinkedHashMap<>();
+        respostas.put("tipo", "tomada"); respostas.put("seguranca", "inventada"); respostas.put("tarefa", "prateleira");
+        novo.addExtra("respostas", respostas);
+        when(repository.existsById(novo.getId())).thenReturn(false); when(repository.save(novo)).thenReturn(novo);
+        service.criar(novo);
+        assertEquals(Map.of("tipo", "tomada"), novo.getExtra().get("respostas"));
+    }
+
+    @Test void criarSemRespostaValidaNaoGuardaAChave() {
+        Pedido novo = pedido("aguardando"); novo.addExtra("modo", "agendar");
+        novo.addExtra("respostas", Map.of("tarefa", "prateleira"));
+        when(repository.existsById(novo.getId())).thenReturn(false); when(repository.save(novo)).thenReturn(novo);
+        service.criar(novo);
+        assertFalse(novo.getExtra().containsKey("respostas"));
     }
 
     @Test void criarRedefineEstadoDoPedidoComValoresConfiaveisDoServidor() {

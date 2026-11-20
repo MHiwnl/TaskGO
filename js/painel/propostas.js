@@ -37,13 +37,30 @@ function linhaNegociacao(h,pedidoId){
     (pendenteMinha?'<div class="prop-acoes"><button class="btn btn-ghost btn-sm" onclick="retirarProposta(\''+esc(pedidoId)+'\',\''+esc(ultima.id)+'\')">Retirar contraproposta</button></div>':'')+
     historico+'</article>';
 }
+/* Cliente: uma coluna por profissional, com a última proposta dele. Prazo, garantia e material vêm da última proposta
+   do próprio profissional, porque a contraproposta do cliente não traz esses termos. */
+function tabelaComparar(grupos){
+  const colunas=grupos.map(h=>({u:h[h.length-1],t:h.slice().reverse().find(p=>p.autor==='profissional')||{}}));
+  const linha=(rotulo,ajuda,celula)=>'<tr><th scope="row">'+rotulo+(ajuda?'<small>'+ajuda+'</small>':'')+'</th>'+colunas.map(c=>'<td>'+celula(c)+'</td>').join('')+'</tr>';
+  const dias=n=>n===0?'Hoje':n+(n===1?' dia':' dias');
+  return '<div class="scroll-x prop-comparar"><table class="tb"><caption>Comparar</caption>'+
+    '<thead><tr><td></td>'+colunas.map(c=>'<th scope="col">'+esc(c.u.profissionalNome||'Profissional')+'</th>').join('')+'</tr></thead><tbody>'+
+    linha('Valor','',c=>money(c.u.valor))+
+    linha('Prazo','',c=>c.t.prazoDias==null?'—':dias(c.t.prazoDias))+
+    linha('Garantia','declarada pelo profissional',c=>c.t.garantiaDias==null?'—':c.t.garantiaDias===0?'Sem garantia':dias(c.t.garantiaDias))+
+    linha('Material','',c=>c.t.materialIncluso==null?'—':c.t.materialIncluso?'Incluso':'Não incluso')+
+    linha('Nota','',c=>{const n=Number(c.u.profissionalAvaliacoes)||0;return n?(Number(c.u.profissionalNota)||0).toFixed(1)+' ('+n+(n===1?' avaliação':' avaliações')+')':'Sem avaliações';})+
+    linha('Distância','até o pedido',c=>c.u.km==null?'—':'cerca de '+Math.round(c.u.km)+' km')+
+    linha('Serviços feitos','nos últimos 6 meses',c=>c.u.concluidos==null?'—':String(c.u.concluidos))+
+    '</tbody></table></div>';
+}
 async function carregarPropostasPedido(pedidoId){
   const alvo=$('#lista-propostas');if(!alvo)return;
   try{
     const lista=await buscarPropostas(pedidoId);
     if(!$('#lista-propostas'))return;
     const grupos=negociacoes(lista);
-    alvo.innerHTML=grupos.length?grupos.map(h=>linhaNegociacao(h,pedidoId)).join(''):
+    alvo.innerHTML=grupos.length?(grupos.length>1?tabelaComparar(grupos):'')+grupos.map(h=>linhaNegociacao(h,pedidoId)).join(''):
       '<div class="prop-vazio">'+ic('users')+'<div><b>Nenhuma proposta ainda</b><p class="muted">Seu pedido já está com os profissionais online da categoria. Quando alguém responder, aparece aqui na hora.</p></div></div>';
   }catch(error){
     alvo.innerHTML='<div class="prop-vazio" role="alert">'+ic('x')+'<div><b>'+esc(erroLegivel(error,'Não foi possível carregar as propostas.'))+'</b><p><button class="btn btn-ghost btn-sm" onclick="carregarPropostasPedido(\''+esc(pedidoId)+'\')">Tentar de novo</button></p></div></div>';
@@ -80,17 +97,32 @@ function abrirContraproposta(pedidoId,profissionalId,valorAtual){
     '<form onsubmit="event.preventDefault();enviarProposta(\''+esc(pedidoId)+'\','+(profissionalId?'\''+esc(profissionalId)+'\'':'null')+')">'+
     '<div class="oferta" style="margin-bottom:8px"><label for="valorProposta" class="leitor">Valor em reais</label><span class="oferta-moeda" aria-hidden="true">R$</span>'+
     '<input id="valorProposta" class="oferta-campo" type="number" inputmode="numeric" min="1" max="100000" step="5" required value="'+(Number(valorAtual)||'')+'"></div>'+
+    (doPro?'<div class="prop-termos">'+
+      '<div class="field"><label for="prazoProposta">Prazo para começar (dias)</label><input class="input" id="prazoProposta" type="number" inputmode="numeric" min="0" max="90" step="1" required><p class="hint">0 para começar hoje.</p></div>'+
+      '<div class="field"><label for="garantiaProposta">Garantia (dias)</label><input class="input" id="garantiaProposta" type="number" inputmode="numeric" min="0" max="365" step="1" required><p class="hint">0 se não oferece garantia.</p></div>'+
+      '<fieldset class="prop-material"><legend>Material incluso</legend><label><input type="radio" name="materialProposta" value="sim" required> Sim</label><label><input type="radio" name="materialProposta" value="nao"> Não</label></fieldset></div>':'')+
     '<p class="hint" style="margin-bottom:18px">'+(valorAtual?'Valor atual na mesa: '+money(valorAtual)+'.':'')+' Combinar valores fora da TaskGO não é permitido.</p>'+
     '<div style="display:flex;gap:10px"><button type="button" class="btn btn-ghost btn-block" onclick="closeModal()">Voltar</button><button class="btn btn-grad btn-block" id="btnEnviarProposta">Enviar proposta</button></div></form>');
   setTimeout(()=>{const c=$('#valorProposta');if(c){c.focus();c.select();}},40);
 }
+/* Prazo, garantia e material da proposta do profissional. Devolve null se algum campo está errado (o aviso já sai). */
+function lerTermosProposta(){
+  const inteiro=id=>{const t=(($('#'+id)||{}).value||'').trim();return t===''?NaN:Number(t);};
+  const prazoDias=inteiro('prazoProposta'),garantiaDias=inteiro('garantiaProposta'),mat=document.querySelector('input[name="materialProposta"]:checked');
+  if(!(Number.isInteger(prazoDias)&&prazoDias>=0&&prazoDias<=90)){toast('Informe o prazo de 0 (hoje) a 90 dias.','err');return null;}
+  if(!(Number.isInteger(garantiaDias)&&garantiaDias>=0&&garantiaDias<=365)){toast('Informe a garantia de 0 a 365 dias.','err');return null;}
+  if(!mat){toast('Informe se o material está incluso.','err');return null;}
+  return {prazoDias,garantiaDias,materialIncluso:mat.value==='sim'};
+}
 async function enviarProposta(pedidoId,profissionalId){
   const valor=Number(($('#valorProposta')||{}).value),botao=$('#btnEnviarProposta');
   if(!(valor>=1&&valor<=100000))return toast('Informe um valor de R$ 1 a R$ 100.000.','err');
+  const termos=me().role==='profissional'?lerTermosProposta():{};
+  if(!termos)return;
   if(botao){botao.disabled=true;botao.textContent='Enviando...';}
   try{
-    if(DEMO_MODE)demoNovaProposta(pedidoId,profissionalId,valor);
-    else await apiJSON(caminhoPropostas(pedidoId),'POST',profissionalId?{valor,profissionalId:Number(profissionalId)}:{valor},'O servidor não confirmou a proposta.');
+    if(DEMO_MODE)demoNovaProposta(pedidoId,profissionalId,valor,termos);
+    else await apiJSON(caminhoPropostas(pedidoId),'POST',Object.assign(profissionalId?{valor,profissionalId:Number(profissionalId)}:{valor},termos),'O servidor não confirmou a proposta.');
     closeModal();toast('Proposta de '+money(valor)+' enviada.','ok');
     if(route.sub==='oportunidades')carregarPedidos();else carregarPropostasPedido(pedidoId);
   }catch(error){
@@ -126,8 +158,14 @@ async function aceitarContrapropostaPro(pedidoId,propostaId){
 
 /* ================= Modo demonstração ================= */
 function demoLista(pedidoId){S.demoPropostas=S.demoPropostas||{};return (S.demoPropostas[pedidoId]=S.demoPropostas[pedidoId]||[]);}
-function demoProposta(pedidoId,pro,autor,valor){
-  return {id:'pp_'+uid(),pedidoId,profissionalId:pro.proId||pro.id,profissionalNome:pro.name,profissionalNota:pro.rating||null,profissionalAvaliacoes:pro.reviews||0,autor,valor,status:'pendente',criadaEm:Date.now(),respondidaEm:null};
+/* Termos fictícios para os profissionais simulados; a contraproposta do cliente não tem termos próprios. */
+function termosDemo(){
+  return {prazoDias:[0,1,2,3,5,7][Math.floor(Math.random()*6)],garantiaDias:[30,60,90][Math.floor(Math.random()*3)],materialIncluso:Math.random()<.5};
+}
+function demoProposta(pedidoId,pro,autor,valor,termos){
+  const t=autor==='profissional'?(termos||termosDemo()):{};
+  return {id:'pp_'+uid(),pedidoId,profissionalId:pro.proId||pro.id,profissionalNome:pro.name,profissionalNota:pro.rating||null,profissionalAvaliacoes:pro.reviews||0,autor,valor,
+    prazoDias:t.prazoDias??null,garantiaDias:t.garantiaDias??null,materialIncluso:t.materialIncluso??null,status:'pendente',criadaEm:Date.now(),respondidaEm:null};
 }
 function demoAtualizarTela(pedidoId){
   Store.save();
@@ -157,11 +195,11 @@ function demoFecharPedido(pedidoId,p){
   Store.save();return o;
 }
 function demoAceitarProposta(pedidoId,propostaId){const p=demoMudarProposta(pedidoId,propostaId,'aceita');demoFecharPedido(pedidoId,p);}
-function demoNovaProposta(pedidoId,profissionalId,valor){
+function demoNovaProposta(pedidoId,profissionalId,valor,termos){
   const lista=demoLista(pedidoId),u=me();
   if(u.role==='profissional'){
     lista.forEach(x=>{if(x.status==='pendente'&&x.profissionalId===u.proId){x.status='substituida';x.respondidaEm=Date.now();}});
-    lista.push(demoProposta(pedidoId,u,'profissional',valor));Store.save();
+    lista.push(demoProposta(pedidoId,u,'profissional',valor,termos));Store.save();
     /* O cliente fictício aceita depois de alguns segundos. */
     setTimeout(()=>{
       const p=lista.find(x=>x.status==='pendente'&&x.profissionalId===u.proId&&x.valor===valor);if(!p)return;

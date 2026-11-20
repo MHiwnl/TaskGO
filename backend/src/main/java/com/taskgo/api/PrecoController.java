@@ -31,6 +31,14 @@ public class PrecoController {
             r.put("medio", percentil(valores, .5));
             r.put("maximo", percentil(valores, .9));
         }
+        /* Duração em minutos; o percentil arredonda a 5 min, então serviços de 1 a 2 min aparecem como 0. */
+        List<Double> duracoes = new ArrayList<>(pedidos.duracoesConcluidas(servico, umAno).stream().filter(v -> v != null && v > 0).map(v -> v / 60000.0).toList());
+        duracoes.sort(Double::compare);
+        if (duracoes.size() >= AMOSTRA_MINIMA) {
+            r.put("duracaoMin", percentil(duracoes, .1));
+            r.put("duracaoMedia", percentil(duracoes, .5));
+            r.put("duracaoMax", percentil(duracoes, .9));
+        }
         return r;
     }
 

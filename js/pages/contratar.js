@@ -5,7 +5,7 @@
    para os profissionais online mais perto, como um aplicativo de corrida).
    Sem numeração de etapas: cada tela tem um título e um Voltar bem visível.
    ========================================================= */
-const W_VAZIO=()=>({fotos:[],pag:null,modo:null,step:1,service:'',urgency:'hoje',addr:'',addrId:'',notes:'',date:'',oferta:null,presetService:'',enviando:false,lat:null,lng:null,geoEstado:'',reaproveitado:false,proEmail:'',proId:'',proNome:''});
+const W_VAZIO=()=>({fotos:[],pag:null,modo:null,step:1,service:'',urgency:'hoje',addr:'',addrId:'',notes:'',date:'',oferta:null,presetService:'',enviando:false,lat:null,lng:null,geoEstado:'',reaproveitado:false,proEmail:'',proId:'',proNome:'',respostas:{}});
 let W=W_VAZIO();
 const PASSOS={agendar:['servico','local','detalhes','valor','confirmar'],agora:['servico','valor','local'],ajuda:['problema','valor','local'],obra:['servico','local','detalhes','valor','confirmar']};
 /* Ajuda rápida e Chamar agora saem na hora, em ondas, para quem está perto. */
@@ -19,7 +19,7 @@ function pageContratar(){
   if(me().role==='profissional')return dashHead('Contratar','Pedir serviços é com uma conta de cliente. Na sua conta de profissional, os pedidos chegam em Oportunidades.')+'<a class="btn btn-primary" href="#/app/oportunidades">Ver oportunidades '+ic('arrow')+'</a>';
   /* Para fazer pedidos, a identidade precisa estar verificada. */
   if(precisaVerificacao())return route.page==='app'?dashHead('Contratar','Para fazer pedidos, a TaskGO confere a sua identidade uma vez.')+painelVerificacaoServico('pedir'):folha('contratar',duo('verifique sua identidade','para fazer pedidos',1),'cabeca')+'<section class="folha-densa" style="padding-top:0"><div class="wrap folha-in"><div class="folha-corpo">'+painelVerificacaoServico('pedir')+'</div></div></section>';
-  if(route.q.servico&&W.step===1&&W.presetService!==route.q.servico){W.service=route.q.servico;W.presetService=route.q.servico;W.proEmail=W.proId='';}
+  if(route.q.servico&&W.step===1&&W.presetService!==route.q.servico){W.service=route.q.servico;W.presetService=route.q.servico;W.proEmail=W.proId='';W.respostas={};}
   const p=passoAtual();
   const body=!p?telaModo():p==='servico'?wServico():p==='problema'?wProblemaAjuda():p==='local'?(W.modo==='agora'||W.modo==='ajuda'?wLocalAgora():wLocalAgendar()):p==='detalhes'?wDetalhes():p==='valor'?wValor():p==='confirmar'?wConfirmar():wLocalAgora();
   const aviso=W.reaproveitado&&p?'<div class="aviso-dados" role="status">'+ic('refresh')+'<p><b>Seus dados continuam aqui.</b> Ajuste o que quiser e envie de novo.</p><button type="button" class="icon-btn" aria-label="Fechar aviso" onclick="W.reaproveitado=false;render()">'+ic('x')+'</button></div>':'';
@@ -31,7 +31,7 @@ function pageContratar(){
 }
 function wSet(k,v){
   W[k]=v;
-  if(k==='service'){W.oferta=null;W.proEmail=W.proId='';if(!servicoRecorrente(v))W.rec=null;}
+  if(k==='service'){W.oferta=null;W.proEmail=W.proId='';W.respostas={};if(!servicoRecorrente(v))W.rec=null;}
   render();
 }
 /* Cabeçalho de cada tela: Voltar bem à vista, à esquerda do título. */
@@ -116,7 +116,7 @@ function gradeServicos(){
   if(todasCategorias&&!buscaServico.trim())return GRUPOS_SERVICOS.map(g=>'<p class="opt-grupo">'+esc(g[0])+'</p>'+g[1].map(id=>botao(svc(id))).join('')).join('');
   return lista.map(botao).join('');
 }
-function aceitarSugestaoServico(id){buscaServico='';W.service=id;W.oferta=null;W.proEmail=W.proId='';const b=$('#buscaServico');if(b)b.value='';render();toast('Escolhido: '+svc(id).n,'ok');}
+function aceitarSugestaoServico(id){buscaServico='';W.service=id;W.oferta=null;W.proEmail=W.proId='';W.respostas={};const b=$('#buscaServico');if(b)b.value='';render();toast('Escolhido: '+svc(id).n,'ok');}
 /* A grade guarda a altura que tinha antes da busca: a tela não pula enquanto a pessoa digita. */
 function buscarServico(v){
   buscaServico=v;
@@ -162,9 +162,16 @@ function wDetalhes(){
     opcaoPag('wDias','sim',W.maisDeUmDia?'sim':'nao','Sim, mais de um dia','Vira obra: orçamento em etapas','hammer','W.maisDeUmDia=true;marcarForma(this);sugerirObra(true)')+'</div></fieldset>'+
   '<div class="field"><label for="wNotas">Descreva o que você precisa (opcional)</label><textarea class="textarea" id="wNotas" placeholder="'+esc(exemploPedido(W.service))+'" oninput="W.notes=this.value">'+esc(W.notes)+'</textarea>'+
   '<div class="hint">Conte o que acontece, onde e quantas peças ou cômodos. O profissional usa isso para entender o tamanho do serviço.</div></div>'+
-  campoFotosContratar()+
+  wPerguntas()+campoFotosContratar()+
   rodapePasso('<button class="btn btn-primary" onclick="wGo('+(W.step+1)+')">Continuar '+ic('arrow')+'</button>');
 }
+
+/* Perguntas do serviço, opcionais: cada grupo aceita uma opção; marcar de novo desmarca. */
+function wPerguntas(){
+  return perguntasDoServico(W.service).map(p=>'<fieldset class="field obra-dias"><legend class="rotulo-campo">'+esc(p.texto)+'</legend>'+
+    p.opcoes.map(o=>'<label class="chip-check"><input type="checkbox" '+(W.respostas[p.id]===o.id?'checked':'')+' onchange="wResposta(\''+p.id+'\',\''+o.id+'\',this.checked)"><span>'+esc(o.rotulo)+'</span></label>').join('')+'</fieldset>').join('');
+}
+function wResposta(pergunta,opcao,marcado){if(marcado)W.respostas[pergunta]=opcao;else delete W.respostas[pergunta];render();}
 
 /* ---------- Local (agendar e obra): endereço e mapa, antes dos detalhes ---------- */
 function wLocalAgendar(){
@@ -201,10 +208,13 @@ function exemploObra(id){
 /* ---------- Valor ---------- */
 /* Faixa do serviço: com 5 ou mais serviços concluídos no último ano, a da TaskGO (/api/precos); antes disso, a referência do catálogo. */
 const FAIXAS_PRECO={};
+/* Minutos em "40 min" ou "1h30". */
+function formatarMinutos(m){m=Math.round(m);return m<60?m+' min':Math.floor(m/60)+'h'+(m%60?String(m%60).padStart(2,'0'):'');}
 function textoFaixaPreco(id){
   const s=SERVICES.find(x=>x.id===id),r=FAIXAS_PRECO[id];if(!s)return '';
-  return r&&r.medio!=null?'Na TaskGO, '+esc(s.n)+' sai por <b>'+money(r.minimo)+' a '+money(r.maximo)+'</b> · metade até '+money(r.medio)+' ('+r.amostras+' serviços no último ano).':
-    'Referência de mercado: <b>'+money(s.min)+' a '+money(s.max)+'</b> por '+esc(s.unit)+'.';
+  const tempo=r&&r.duracaoMedia!=null?' Costuma levar '+(Number(r.duracaoMin)>=5?formatarMinutos(r.duracaoMin)+' a ':'até ')+formatarMinutos(r.duracaoMax)+'.':'';
+  return (r&&r.medio!=null?'Na TaskGO, '+esc(s.n)+' sai por <b>'+money(r.minimo)+' a '+money(r.maximo)+'</b> · metade até '+money(r.medio)+' ('+r.amostras+' serviços no último ano).':
+    'Referência de mercado: <b>'+money(s.min)+' a '+money(s.max)+'</b> por '+esc(s.unit)+'.')+tempo;
 }
 function faixaPreco(id){
   if(!SERVICES.some(x=>x.id===id))return '';
@@ -234,7 +244,7 @@ function wConfirmar(){
   '<dl class="resumo-pedido">'+
   (W.modo==='obra'?[['Serviço',s.n,1],['Endereço',W.addr,2],['Quer começar',W.inicioObra?new Date(W.inicioObra+'T12:00').toLocaleDateString('pt-BR'):'A combinar',3],['Até quanto gastar',money(Number(W.oferta)),4],['O que fazer',W.notes,3]]:
   (W.rec?[['Serviço',s.n,1],['Endereço',W.addr,2],['Repetição',resumoRec(W.rec),4],['Cada vez',money(Number(W.oferta)),4],['Total',money(Number(W.oferta)*W.rec.vezes),4]]:
-  [['Serviço',s.n,1],['Endereço',W.addr,2],['Quando',quandoTexto(),3],['Você oferece',money(Number(W.oferta)),4]]).concat(W.notes?[['Descrição',W.notes,3]]:[]))
+  [['Serviço',s.n,1],['Endereço',W.addr,2],['Quando',quandoTexto(),3],['Você oferece',money(Number(W.oferta)),4]]).concat(W.notes?[['Descrição',W.notes,3]]:[]).concat(respostasConhecidas(W.service,W.respostas).map(x=>[x[0],x[1],3])))
   .map(r=>'<div><dt>'+r[0]+'</dt><dd>'+esc(r[1])+'</dd><button type="button" class="resumo-mudar" onclick="W.step='+r[2]+';render()">Mudar</button></div>').join('')+'</dl>'+
   '<p class="hint" style="margin-top:16px">O endereço completo só aparece para o profissional que você confirmar. Antes disso, ele vê só o bairro.</p>'+
   (W.modo==='obra'?'<p class="hint">'+(modeloDireto()?'Nada é cobrado agora. Você paga cada etapa direto ao profissional, por Pix, depois de aprová-la.':'Nada é cobrado agora. Você paga cada etapa antes de ela começar, depois de escolher um orçamento.')+'</p>':
@@ -314,6 +324,7 @@ async function enviarPedido(){
   const pedido={id:'o_'+Date.now().toString(36)+uid().slice(0,4),service:W.service,price:Number(W.oferta),notes:String(W.notes||'').trim(),address:endereco,
     urgente:agora,lat:W.lat,lng:W.lng,formaPagamento:escolha&&['dinheiro','pix_direto','cartao_maquininha'].includes(escolha.metodo)?escolha.metodo:undefined,bairro:end&&end.bairro?end.bairro:null,quando:agora?'agora':W.urgency,modo:obra?'obra':agora?'agora':'agendar',inicioDesejado:obra?W.inicioObra||null:undefined,
     recorrente:rec||undefined,
+    respostas:(W.modo==='agendar'||W.modo==='obra')&&Object.keys(W.respostas).length?Object.assign({},W.respostas):undefined,
     proEmail:W.modo==='agendar'&&!rec&&W.proEmail?W.proEmail:undefined,proId:W.modo==='agendar'&&!rec&&W.proEmail?W.proId||undefined:undefined,
     sched:rec?new Date(datasRecorrentes(rec.inicio,rec.dias,rec.vezes)[0]+'T'+rec.hora).getTime():!agora&&W.urgency==='agendar'&&W.date?new Date(W.date).getTime():null,
     clientId:u.id,clientEmail:u.email,clientName:u.name,status:'aguardando',created:Date.now()};
@@ -337,7 +348,7 @@ async function enviarPedido(){
 function chamarDeNovo(id){
   const o=S.orders.find(x=>x.id===id);if(!o||!o.proEmail)return go('/app/contratar?servico='+encodeURIComponent(o?o.service:''));
   W=Object.assign(W_VAZIO(),{modo:'agendar',step:2,service:o.service,presetService:o.service,notes:o.notes||'',addr:o.address||'',addrId:'outro',
-    lat:o.lat!=null?Number(o.lat):null,lng:o.lng!=null?Number(o.lng):null,geoEstado:o.lat!=null?'manual':'',proEmail:o.proEmail,proId:o.proId||'',proNome:o.professionalName||'o mesmo profissional'});
+    lat:o.lat!=null?Number(o.lat):null,lng:o.lng!=null?Number(o.lng):null,geoEstado:o.lat!=null?'manual':'',proEmail:o.proEmail,proId:o.proId||'',proNome:o.professionalName||'o mesmo profissional',respostas:Object.assign({},o.respostas)});
   go('/app/contratar');
 }
 /* Pedido cancelado pelo cliente: volta ao Contratar com tudo preenchido, na tela de conferir. */
@@ -345,7 +356,7 @@ function reaproveitarPedido(o){
   const agora=o.quando==='agora'||o.modo==='agora';
   W=Object.assign(W_VAZIO(),{modo:o.obra?'obra':o.service==='ajuda'?'ajuda':agora?'agora':'agendar',inicioObra:o.inicioDesejado||'',service:o.service,oferta:Number(o.price)||null,notes:o.notes||'',addr:o.address&&o.address!=='Localização marcada no mapa'?o.address:'',addrId:'outro',
     rec:o.recorrente&&o.recorrente.vezes?{vezes:Number(o.recorrente.vezes),dias:(o.recorrente.dias||[]).map(Number),inicio:new Date(Date.now()+864e5).toISOString().slice(0,10),hora:o.recorrente.hora||'08:00'}:null,lat:o.lat!=null?Number(o.lat):null,lng:o.lng!=null?Number(o.lng):null,geoEstado:o.lat!=null?'manual':'',urgency:agora?'agora':(o.quando==='agendar'?'agendar':'hoje'),
-    date:o.sched?new Date(Number(o.sched)-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):'',presetService:o.service,reaproveitado:true});
+    date:o.sched?new Date(Number(o.sched)-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):'',presetService:o.service,respostas:Object.assign({},o.respostas),reaproveitado:true});
   W.step=PASSOS[W.modo].length;
 }
 /* Ponto do atendimento no mapa: é contra ele que o servidor confere a chegada do profissional.

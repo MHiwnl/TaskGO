@@ -78,7 +78,7 @@ class AuditoriaAltaTest {
                 mock(NotificacaoService.class), mock(ModeracaoService.class), mock(EventosService.class));
         propostas.setServicosPro(servicos);
         assertEquals(403, assertThrows(ResponseStatusException.class,
-                () -> propostas.enviar("o_2", new PropostaController.NovaProposta(150.0, null), logado(2L, "pro@x.com", "profissional"))).getStatusCode().value());
+                () -> propostas.enviar("o_2", new PropostaController.NovaProposta(150.0, null, 1, 30, true), logado(2L, "pro@x.com", "profissional"))).getStatusCode().value());
     }
 
     @Test void doisFatoresBloqueiaAposCincoErrosMesmoComCodigoCerto() {

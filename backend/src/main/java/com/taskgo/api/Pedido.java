@@ -38,6 +38,7 @@ public class Pedido {
     private String cancelReason;
     private Long acceptedAt;
     private Long completedAt;
+    private Long iniciadoEm;
     @Convert(converter = JsonMapConverter.class)
     @Column(columnDefinition = "text")
     private Map<String, Object> extra = new HashMap<>();
@@ -86,6 +87,8 @@ public class Pedido {
     public void setAcceptedAt(Long acceptedAt) { this.acceptedAt = acceptedAt; }
     public Long getCompletedAt() { return completedAt; }
     public void setCompletedAt(Long completedAt) { this.completedAt = completedAt; }
+    public Long getIniciadoEm() { return iniciadoEm; }
+    public void setIniciadoEm(Long iniciadoEm) { this.iniciadoEm = iniciadoEm; }
     @JsonAnySetter public void addExtra(String key, Object value) { extra.put(key, value); }
     @JsonAnyGetter public Map<String, Object> getExtra() { return extra; }
     @com.fasterxml.jackson.annotation.JsonIgnore public void setExtra(Map<String, Object> extra) { this.extra = extra == null ? new HashMap<>() : new HashMap<>(extra); }

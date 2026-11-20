@@ -193,6 +193,9 @@ public class PedidoContratadoController {
     @PutMapping("/{id}")
     public Pedido atualizar(@PathVariable String id, @RequestBody Pedido pedido, Authentication auth) {
         TaskgoPrincipal p = principal(auth);
+        /* Cancelamento de obra ou recorrente também conta no histórico (ranking por qualidade). */
+        if ("cancelado".equals(pedido.getStatus())) pedidos.findById(id).filter(x -> (ObraService.eh(x) || RecorrenteService.eh(x)) && !"cancelado".equals(x.getStatus()))
+                .ifPresent(x -> moderacao.registrar(p.id(), "cancelamento", "Cancelou o pedido de " + nomeServico(x.getService()), p.id(), x.getId()));
         /* Obra: cancelar segue as regras das etapas (aprovada fica, paga e não começada volta, em andamento vai para a equipe). */
         if (obras != null && "cancelado".equals(pedido.getStatus()) && pedidos.findById(id).map(ObraService::eh).orElse(false)) return obras.cancelar(id, p, pedido.getCancelReason());
         /* Recorrente: pagas e não feitas voltam, feitas vão para o profissional. */

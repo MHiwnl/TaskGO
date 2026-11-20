@@ -16,6 +16,10 @@ public interface PedidoContratadoRepository extends JpaRepository<Pedido, String
     /* Média e total de vários profissionais numa consulta só: [e-mail em minúsculas, média, total]. */
     @Query("select lower(p.proEmail), avg(p.rating), count(p.rating) from Pedido p where lower(p.proEmail) in :emails and lower(p.status)='concluido' and p.rating is not null group by lower(p.proEmail)")
     List<Object[]> resumoAvaliacoesDe(@Param("emails") java.util.Collection<String> emails);
+    /* Ranking por qualidade: [e-mail em minúsculas, concluídos, média de resposta em ms (aceite - criação, teto de 24 h)] desde :desde.
+       A resposta só conta pedidos aceitos pelo próprio profissional: com proposta, o aceite é a escolha do cliente e mediria o cliente. */
+    @Query("select lower(p.proEmail), sum(case when lower(p.status) = 'concluido' then 1 else 0 end), avg(case when p.id in (select x.pedidoId from Proposta x) then null when p.acceptedAt - p.created > 86400000 then 86400000 else p.acceptedAt - p.created end) from Pedido p where lower(p.proEmail) in :emails and p.created > :desde and p.created is not null and p.acceptedAt is not null and p.acceptedAt >= p.created group by lower(p.proEmail)")
+    List<Object[]> metricasDe(@Param("emails") java.util.Collection<String> emails, @Param("desde") long desde);
     java.util.Optional<Pedido> findByIdAndStatusIgnoreCaseAndProEmailIsNull(String id, String status);
     /* Pedidos abertos recentes: o Chamar Agora procura entre eles os que estão chamando profissionais. */
     @Query("select p from Pedido p where lower(p.status) = 'aguardando' and p.created > :desde order by p.created desc")
@@ -72,6 +76,9 @@ public interface PedidoContratadoRepository extends JpaRepository<Pedido, String
     /* Pedidos concluídos de uma categoria, para a faixa de preço praticada no site. */
     @Query("select p.price from Pedido p where lower(p.status) = 'concluido' and lower(p.service) = lower(:servico) and p.created > :desde and p.price is not null")
     List<Double> precosConcluidos(@Param("servico") String servico, @Param("desde") long desde);
+    /* Duração real (ms) dos concluídos de uma categoria: do início (código confirmado) ao término. */
+    @Query("select (p.completedAt - p.iniciadoEm) from Pedido p where lower(p.status) = 'concluido' and lower(p.service) = lower(:servico) and p.created > :desde and p.iniciadoEm is not null and p.completedAt > p.iniciadoEm")
+    List<Long> duracoesConcluidas(@Param("servico") String servico, @Param("desde") long desde);
     @Query("select count(p) from Pedido p where lower(p.proEmail) = lower(:email) and lower(p.status) = 'concluido'")
     long concluidosDoProfissional(@Param("email") String email);
     @Modifying(clearAutomatically = true, flushAutomatically = true)

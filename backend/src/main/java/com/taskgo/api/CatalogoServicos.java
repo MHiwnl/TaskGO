@@ -11,6 +11,8 @@ public final class CatalogoServicos {
     public static final Map<String, String> UNIDADES = new LinkedHashMap<>();
     /* Serviços cobrados por dia ou visita: podem ser contratados de forma recorrente. */
     public static final java.util.Set<String> UNIDADES_RECORRENTES = java.util.Set.of("diária", "visita", "aula", "sessão", "passeio", "atendimento");
+    /* Perguntas do Contratar por serviço (espelho de js/core/perguntas.js): pergunta -> ids das opções. */
+    public static final Map<String, Map<String, java.util.Set<String>>> PERGUNTAS = new LinkedHashMap<>();
     static {
         add("eletrica", "Elétrica & Energia", "Reparos e manutenção", "visita");
         add("hidraulica", "Hidráulica", "Reparos e manutenção", "visita");
@@ -117,9 +119,45 @@ public final class CatalogoServicos {
         add("marketing", "Marketing & Redes sociais", "Serviços profissionais", "mês");
         add("traducao", "Tradução & Revisão", "Serviços profissionais", "documento");
         add("despachante", "Despachante", "Serviços profissionais", "serviço");
+        pergunta("eletrica","tipo","tomada","chuveiro","disjuntor","fiacao","luminaria","outro");
+        pergunta("eletrica","seguranca","queimado","faisca","nao","outro");
+        pergunta("hidraulica","tipo","vazamento","entupimento","torneira","caixa","outro");
+        pergunta("hidraulica","local","banheiro","cozinha","area","externo","outro");
+        pergunta("marido","tarefa","prateleira","fechadura","porta","montagem","outro");
+        pergunta("marido","tempo","ate2h","meio_dia","dia","outro");
+        pergunta("reforma","tipo","parede","piso","reboco","banheiro","outro");
+        pergunta("reforma","tamanho","um_comodo","dois_tres","casa","outro");
+        pergunta("pintura","tipo","parede","teto","portao","fachada","outro");
+        pergunta("pintura","comodos","um","dois_tres","casa","outro");
+        pergunta("montagem","tipo","guarda_roupa","cama","estante","mesa","outro");
+        pergunta("montagem","pecas","sim","nao","outro");
+        pergunta("ar","servico","instalar","manutencao","conserto","desinstalar","outro");
+        pergunta("ar","aparelhos","um","dois","tres","outro");
+        pergunta("limpeza","tipo","rotina","pesada","pos_obra","vidros","outro");
+        pergunta("limpeza","tamanho","ate2","tres_cinco","grande","outro");
+        pergunta("frete","itens","pequenos","moveis","eletro","mudanca","outro");
+        pergunta("frete","ajudantes","sim","nao","outro");
+        pergunta("chaveiro","tipo","abrir","trocar","copia","cofre","outro");
+        pergunta("chaveiro","urgencia","agora","depois","outro");
+        pergunta("desentupidora","local","pia","vaso","esgoto","caixa","outro");
+        pergunta("desentupidora","sintoma","transborda","cheiro","lento","outro");
+        pergunta("eletro","aparelho","geladeira","lavadora","fogao","micro","outro");
+        pergunta("eletro","problema","nao_liga","barulho","vaza","nao_esfria","outro");
     }
     private static void add(String id, String nome, String grupo, String unidade) { NOMES.put(id, nome); GRUPOS.put(id, grupo); UNIDADES.put(id, unidade); }
     public static boolean recorrente(String id) { return id != null && UNIDADES_RECORRENTES.contains(UNIDADES.get(id)); }
     public static boolean existe(String id) { return id != null && NOMES.containsKey(id.trim()); }
     public static String nome(String id) { return id == null ? "" : NOMES.getOrDefault(id, id); }
+    private static void pergunta(String servico, String id, String... opcoes) { PERGUNTAS.computeIfAbsent(servico, s -> new LinkedHashMap<>()).put(id, java.util.Set.of(opcoes)); }
+    /* Só pares pergunta->opção que existem neste serviço, no máximo 4; null se não sobrar nenhum. */
+    public static Map<String, String> respostasValidas(String service, Object valor) {
+        if (!(valor instanceof Map<?, ?> mapa)) return null;
+        Map<String, java.util.Set<String>> perguntas = PERGUNTAS.getOrDefault(service, Map.of());
+        Map<String, String> limpo = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : mapa.entrySet()) {
+            if (limpo.size() == 4) break;
+            if (e.getKey() instanceof String p && e.getValue() instanceof String o && perguntas.getOrDefault(p, java.util.Set.of()).contains(o)) limpo.put(p, o);
+        }
+        return limpo.isEmpty() ? null : limpo;
+    }
 }
