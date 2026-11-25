@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=1920">
+<title>TaskGO · Mergulho no bairro (onetake B)</title></head>
+<body>
+<script src="font.js"></script>
+<script src="motion.js"></script>
+<script src="kit.js"></script>
+<script>
+/* Filme B — "Mergulho no bairro". Um plano só: a cidade vista de cima → mergulho numa casa → no celular → o pedido →
+   volta ao bairro (o Carlos aceita) → de novo no celular (Pix, a caminho, avaliação) → a cidade inteira acende.
+   A câmera é ancorada no celular: cada chave diz onde o celular fica na tela e o zoom (log), então ele nunca escapa
+   do quadro nos mergulhos. Dados: modo demonstração (js/core/data.js, catalogo.js). */
+const { clamp, lerp, seg, sstep, spring, ring, ease } = OM;
+const { g, W, H } = K;
+const DUR = 25.5;
+const C = { ground: '#eef0f4', block: '#dfe2ea', block2: '#d6dae4', park: '#d3ebdc', street: '#f8f9fb', ink: '#0b0d12', mute: '#6b7183',
+  blue: '#1a3fd6', blue2: '#3b63f0', green: '#10a56a', gold: '#f5b82e', line: '#e3e6ee', tint: '#eef2ff' };
+
+/* ── mundo ── */
+const A = [960, 540];                         // a casa da Ana; o celular está nela
+const PW = 8, PS = PW / 390;                   // celular: 390×844 unidades = 8 de mundo de largura
+const PX = u => A[0] - PW / 2 + u * PS, PY = v => A[1] - 844 * PS / 2 + v * PS;
+const ZP = 929 / (844 * PS);                   // zoom em que o celular ocupa 86 % da altura (≈ 53,7)
+const PROS = [ { x: A[0] + 330, y: A[1] + 150, ca: true }, { x: A[0] - 280, y: A[1] - 160 }, { x: A[0] + 250, y: A[1] - 210 }, { x: A[0] - 330, y: A[1] + 190 } ];
+const CAR = PROS[0];
+
+/* ── tempos ── */
+const T = {
+  pin: 1.3, dive: 1.9, inPhone: 4.3, tapTile: 5.1, form: 5.2, type: 5.85, tapAsk: 7.55, radar: 7.65,
+  out: 7.9, atMap: 9.5, link: 9.7, accept: 10.35, back: 10.6, inPhone2: 12.0, tapPay: 12.95, pix: 13.05,
+  rest: 13.75, tapCopy: 14.85, paid: 15.5, route: 16.25, arrive: 17.45, rate: 17.75, sweep: 18.2,
+  stars: [18.25, 18.4, 18.55, 18.7, 18.85], chips: [19.0, 19.25], comment: 19.45, tapSend: 20.7, sent: 20.8,
+  pullOut: 21.1, lights: 21.6, mark: 23.0, tag: 23.5,
+};
+const NOTE = 'Disjuntor desarma sempre que liga o chuveiro.';
+const COMMENT = 'Resolveu um problema que dois eletricistas não conseguiram.';
+const TILES = [ ['Elétrica &', 'Energia', C.blue, 'bolt'], ['Hidráulica', '', '#0e8fb5', 'drop'], ['Marido de', 'Aluguel', '#b5650e', 'wrench'],
+  ['Chaveiro', '', '#7a4ad6', 'key'], ['Desentupidora', '', '#0e9b74', 'drop'], ['Vidraçaria', '', '#c23d6a', 'window'] ];
+const tileRect = i => ({ x: 28 + (i % 2) * 173, y: 278 + Math.floor(i / 2) * 128, w: 161, h: 116 });
+const BTN = { x: 28, y: 742, w: 334, h: 66 };
+const CHIPS = ['Pontual', 'Educado', 'Caprichoso', 'Preço justo', 'Limpo', 'Rápido'];
+const chipRect = i => ({ x: 28 + (i % 3) * 114, y: 316 + Math.floor(i / 3) * 50, w: 106, h: 40 });
+const PICKED = { 0: 0, 2: 1 };                   // etiqueta → qual toque (T.chips) a escolhe
+
+/* ── câmera ancorada: chave = {t, f:[x,y] mundo no centro, z} → a tela do celular (âncora) interpola reto, o zoom em log ── */
+const U = (ux, uy) => [PX(ux), PY(uy)];
+const KEYS = [
+  { t: 0, f: A, z: 1 }, { t: T.dive, f: A, z: 1 },
+  { t: T.inPhone, f: A, z: ZP, c: ease.cubicInOut },
+  { t: 4.75, f: A, z: ZP }, { t: 5.2, f: U(150, 340), z: ZP * 1.22, c: ease.sineInOut },
+  { t: 5.75, f: U(195, 300), z: ZP * 1.3, c: ease.sineInOut }, { t: 6.95, f: U(195, 310), z: ZP * 1.3 },
+  { t: 7.4, f: U(195, 470), z: ZP * 1.3, c: ease.sineInOut },
+  { t: T.out, f: A, z: ZP, c: ease.sineInOut }, { t: T.atMap, f: [A[0] + 150, A[1] + 50], z: 2.1, c: ease.cubicInOut },
+  { t: T.back, f: [A[0] + 150, A[1] + 50], z: 2.1 }, { t: T.inPhone2, f: A, z: ZP, c: ease.cubicInOut },
+  { t: T.pix, f: A, z: ZP }, { t: 13.5, f: U(195, 410), z: ZP * 1.2, c: ease.expoOut }, { t: 15.0, f: U(195, 410), z: ZP * 1.2 },
+  { t: 15.7, f: A, z: ZP, c: ease.sineInOut }, { t: 16.3, f: A, z: ZP }, { t: 16.8, f: U(195, 420), z: ZP * 1.15, c: ease.sineInOut },
+  { t: T.pullOut, f: U(195, 420), z: ZP * 1.15 }, { t: T.pullOut + 1.9, f: A, z: 0.62, c: ease.cubicInOut },
+];
+const HITS = [[T.pin + 0.35, 7, 9], [T.accept, 5, 9]];
+
+function camAt(t) {
+  let i = 0; while (i < KEYS.length - 2 && KEYS[i + 1].t <= t) i++;
+  const a = KEYS[i], b = KEYS[i + 1], k = t <= a.t ? 0 : t >= b.t ? 1 : (b.c || ease.cubicInOut)(seg(t, a.t, b.t));
+  const sOf = q => [960 - (q.f[0] - A[0]) * q.z, 540 - (q.f[1] - A[1]) * q.z];       // onde a âncora fica na tela
+  const s0 = sOf(a), s1 = sOf(b), z = Math.exp(lerp(Math.log(a.z), Math.log(b.z), k));
+  let sx = lerp(s0[0], s1[0], k), sy = lerp(s0[1], s1[1], k), rot = 0;
+  for (const [th, amp, dec] of HITS) { const s = OM.shake(t, th, { amp, decay: dec, seed: Math.round(th * 100) }); sx += s.x; sy += s.y; }
+  return { x: A[0] + (960 - sx) / z, y: A[1] + (540 - sy) / z, zoom: z, rot };
+}
+
+/* ── cidade: quarteirões decididos uma vez ── */
+const CITY = (() => { const r = OM.rng(5), B = [];
+  for (let gx = -1100; gx < 3100; gx += 96) for (let gy = -900; gy < 2000; gy += 84) {
+    if (Math.abs(gx - A[0] + 48) < 60 && Math.abs(gy - A[1] + 42) < 50) continue;         // o quarteirão da casa é desenhado à parte
+    const park = r() < 0.07, w = 76 + r() * 8, h = 64 + r() * 8; B.push([gx, gy, w, h, park ? 2 : r() < 0.5 ? 1 : 0]); }
+  return B; })();
+const LIGHTS = (() => { const r = OM.rng(9), L = []; for (let i = 0; i < 70; i++) { const a = r() * 7, d = 160 + r() * 1500; L.push([A[0] + Math.cos(a) * d * 1.5, A[1] + Math.sin(a) * d * 0.85]); } return L; })();
+
+/* ── telas do app, em unidades do celular (390×844) ── */
+function statusBar() { K.text('9:41', 30, 40, { size: 17, weight: 600, color: C.ink }); K.fillRR(320, 28, 40, 16, 5, null, C.ink, 1.6); K.fillRR(323, 31, 28, 10, 3, C.ink); }
+function button(label, t, tap, color = C.blue) { const p = OM.press(t, tap, { depth: 0.08 });
+  g.save(); g.translate(BTN.x + BTN.w / 2, BTN.y + BTN.h / 2); g.scale(p.s, p.s); K.fillRR(-BTN.w / 2, -BTN.h / 2, BTN.w, BTN.h, 18, p.active ? '#2c55f0' : color);
+  K.text(label, 0, 9, { size: 24, weight: 600, color: '#fff', align: 'center' }); g.restore(); }
+function ghost(label, x, y, w, h, icon) { K.fillRR(x, y, w, h, 16, '#fff', '#cfd5e3', 1.5);
+  if (icon) ICON[icon](x + w / 2 - K.measure(label, 21, 600) / 2 - 18, y + h / 2, 0.9, C.blue);
+  K.text(label, x + w / 2 + (icon ? 12 : 0), y + h / 2 + 8, { size: 21, weight: 600, color: C.blue, align: 'center' }); }
+function rise(t, t0, f) { const r = OM.wordRise(t, t0, { dist: 18 }); g.save(); g.globalAlpha *= r.op; g.translate(0, r.y); f(); g.restore(); }
+function header(title, sub, { back = true, subColor = C.mute } = {}) {
+  if (back) { g.strokeStyle = C.ink; g.lineWidth = 3; g.lineCap = 'round'; g.beginPath(); g.moveTo(42, 66); g.lineTo(32, 78); g.lineTo(42, 90); g.stroke(); }
+  K.text(title, 28, 132, { size: 30, weight: 700, color: C.ink }); if (sub) K.text(sub, 28, 164, { size: 19, weight: 500, color: subColor });
+}
+/* ícones de traço, centro (x,y), escala s (≈ 20 unidades) */
+const ICON = {
+  bolt(x, y, s, c) { g.beginPath(); [[3, -12], [-7, 2], [0, 2], [-3, 12], [7, -2], [0, -2]].forEach((p, i) => i ? g.lineTo(x + p[0] * s, y + p[1] * s) : g.moveTo(x + p[0] * s, y + p[1] * s)); g.closePath(); g.fillStyle = c; g.fill(); },
+  drop(x, y, s, c) { g.beginPath(); g.moveTo(x, y - 12 * s); g.bezierCurveTo(x + 9 * s, y - 2 * s, x + 9 * s, y + 10 * s, x, y + 10 * s); g.bezierCurveTo(x - 9 * s, y + 10 * s, x - 9 * s, y - 2 * s, x, y - 12 * s); g.fillStyle = c; g.fill(); },
+  wrench(x, y, s, c) { g.strokeStyle = c; g.lineWidth = 3.5 * s; g.lineCap = 'round'; g.beginPath(); g.moveTo(x - 8 * s, y + 8 * s); g.lineTo(x + 3 * s, y - 3 * s); g.stroke(); g.beginPath(); g.arc(x + 6 * s, y - 6 * s, 5.5 * s, 0, 7); g.stroke(); },
+  key(x, y, s, c) { g.strokeStyle = c; g.lineWidth = 3.5 * s; g.lineCap = 'round'; g.beginPath(); g.arc(x - 5 * s, y, 5.5 * s, 0, 7); g.moveTo(x + 0.5 * s, y); g.lineTo(x + 11 * s, y); g.moveTo(x + 7 * s, y); g.lineTo(x + 7 * s, y + 5 * s); g.stroke(); },
+  window(x, y, s, c) { g.strokeStyle = c; g.lineWidth = 3 * s; g.strokeRect(x - 9 * s, y - 9 * s, 18 * s, 18 * s); g.beginPath(); g.moveTo(x, y - 9 * s); g.lineTo(x, y + 9 * s); g.moveTo(x - 9 * s, y); g.lineTo(x + 9 * s, y); g.stroke(); },
+  search(x, y, s, c) { g.strokeStyle = c; g.lineWidth = 2.6 * s; g.lineCap = 'round'; g.beginPath(); g.arc(x - 2 * s, y - 2 * s, 7 * s, 0, 7); g.moveTo(x + 3 * s, y + 3 * s); g.lineTo(x + 8 * s, y + 8 * s); g.stroke(); },
+  chat(x, y, s, c) { g.strokeStyle = c; g.lineWidth = 2.6 * s; g.lineJoin = 'round'; K.rr(x - 10 * s, y - 8 * s, 20 * s, 14 * s, 4 * s); g.stroke(); g.beginPath(); g.moveTo(x - 4 * s, y + 6 * s); g.lineTo(x - 7 * s, y + 11 * s); g.lineTo(x + 2 * s, y + 6 * s); g.stroke(); },
+  camera(x, y, s, c) { g.strokeStyle = c; g.lineWidth = 2.6 * s; K.rr(x - 10 * s, y - 6 * s, 20 * s, 14 * s, 3 * s); g.stroke(); g.beginPath(); g.arc(x, y + 1 * s, 4 * s, 0, 7); g.stroke(); },
+  pin(x, y, s, c) { g.beginPath(); g.moveTo(x, y + 11 * s); g.bezierCurveTo(x - 3 * s, y + 5 * s, x - 8 * s, y + 1 * s, x - 8 * s, y - 4 * s); g.arc(x, y - 4 * s, 8 * s, Math.PI, 0); g.bezierCurveTo(x + 8 * s, y + 1 * s, x + 3 * s, y + 5 * s, x, y + 11 * s); g.fillStyle = c; g.fill(); K.dot(x, y - 4 * s, 3 * s, '#fff'); },
+  shield(x, y, s, c) { g.beginPath(); g.moveTo(x, y - 10 * s); g.lineTo(x + 8 * s, y - 6 * s); g.lineTo(x + 7 * s, y + 4 * s); g.lineTo(x, y + 10 * s); g.lineTo(x - 7 * s, y + 4 * s); g.lineTo(x - 8 * s, y - 6 * s); g.closePath(); g.fillStyle = c; g.fill(); },
+};
+function navBar() {
+  K.fillRR(0, 770, 390, 74, 0, '#fff'); g.fillStyle = C.line; g.fillRect(0, 770, 390, 1.5);
+  [['Início', 'pin'], ['Pedidos', 'window'], ['Mensagens', 'chat'], ['Perfil', 'shield']].forEach(([s, ic], i) => {
+    const x = 49 + i * 97, c = i ? '#9aa1b5' : C.blue; ICON[ic](x, 795, 0.8, c); K.text(s, x, 826, { size: 14, weight: i ? 500 : 700, color: c, align: 'center' }); });
+}
+function wrapText(str, x, y, max, size, lh, color) { let line = '', yy = y;
+  for (const w of str.split(' ')) { const tl = line ? line + ' ' + w : w; if (K.measure(tl, size, 500) > max) { K.text(line, x, yy, { size, weight: 500, color }); line = w; yy += lh; } else line = tl; }
+  K.text(line, x, yy, { size, weight: 500, color }); return [line, yy]; }
+
+const SCREENS = {
+  inicio(t) {
+    K.text('Olá, Ana', 28, 110, { size: 32, weight: 700, color: C.ink }); K.text('Do que você precisa?', 28, 144, { size: 20, weight: 500, color: C.mute });
+    K.fillRR(28, 166, 334, 54, 27, '#f1f3f7'); ICON.search(56, 193, 1, C.mute); K.text('Buscar serviço', 78, 200, { size: 20, weight: 500, color: '#8a90a3' });
+    K.text('Mais pedidos', 28, 262, { size: 18, weight: 700, color: C.ink });
+    TILES.forEach((tl, i) => { const r = tileRect(i), p = i === 0 ? OM.press(t, T.tapTile, { depth: 0.06 }) : { s: 1 };
+      g.save(); g.translate(r.x + r.w / 2, r.y + r.h / 2); g.scale(p.s, p.s); g.translate(-r.w / 2, -r.h / 2);
+      K.fillRR(0, 0, r.w, r.h, 20, i === 0 ? C.tint : '#f5f6f9', i === 0 ? '#c9d4ff' : null, 1.5);
+      g.save(); g.globalAlpha *= 0.14; K.fillRR(14, 14, 44, 44, 12, tl[2]); g.restore(); ICON[tl[3]](36, 36, 1, tl[2]);
+      K.text(tl[0], 16, 84, { size: 19, weight: 600, color: C.ink }); if (tl[1]) K.text(tl[1], 16, 106, { size: 19, weight: 600, color: C.ink }); g.restore(); });
+    K.fillRR(28, 680, 334, 50, 25, 'rgba(16,165,106,0.10)'); K.dot(52, 705, 6, C.green);
+    K.text('4 profissionais perto de você agora', 68, 712, { size: 18, weight: 600, color: '#0b7a4f' });
+    navBar();
+  },
+  pedido(t) {
+    rise(t, T.form + 0.15, () => { header('Elétrica & Energia', 'Etapa 1 de 2 · seu pedido');
+      K.fillRR(28, 180, 163, 6, 3, C.blue); K.fillRR(199, 180, 163, 6, 3, '#e1e5ee'); });
+    rise(t, T.form + 0.25, () => {
+      K.text('O que está acontecendo?', 28, 222, { size: 19, weight: 700, color: C.ink });
+      const focus = t > T.type - 0.1 && t < T.tapAsk;
+      K.fillRR(28, 236, 334, 122, 16, '#fff', focus ? C.blue2 : C.line, focus ? 2.5 : 2);
+      const ty = OM.typeOn(t, T.type, NOTE, { cps: 36 }); const [line, y] = wrapText(ty.str, 46, 274, 300, 23, 32, C.ink);
+      if (!ty.str) K.text('Ex.: o disjuntor desarma…', 46, 274, { size: 21, weight: 500, color: '#a3a9ba' });
+      if (ty.caret && t < T.tapAsk && t > T.type - 0.1) { const cw = K.measure(line, 23, 500); g.fillStyle = C.blue2; g.fillRect(48 + cw, y - 22, 2.5, 28); }
+      g.setLineDash([6, 5]); K.fillRR(28, 370, 190, 44, 22, null, '#b9c1d4', 1.6); g.setLineDash([]); ICON.camera(54, 391, 0.85, C.blue); K.text('Adicionar foto', 72, 399, { size: 18, weight: 600, color: C.blue });
+    });
+    rise(t, T.form + 0.35, () => {
+      K.text('Quando?', 28, 456, { size: 19, weight: 700, color: C.ink });
+      K.fillRR(28, 470, 334, 52, 16, '#eef0f5'); K.fillRR(32, 474, 163, 44, 13, '#fff', '#d7dce8', 1);
+      K.text('Agora', 113, 503, { size: 20, weight: 700, color: C.blue, align: 'center' }); K.text('Agendar', 279, 503, { size: 20, weight: 500, color: C.mute, align: 'center' });
+      K.text('Onde?', 28, 566, { size: 19, weight: 700, color: C.ink }); ICON.pin(40, 596, 0.9, C.blue); K.text('Casa · Recife, PE', 58, 604, { size: 20, weight: 500, color: C.ink });
+    });
+    // estimativa junto do botão; o botão vira o radar
+    const kb = ease.expoOut(seg(t, T.radar, T.radar + 0.4));
+    K.text('Estimativa: R$ 90 – R$ 420 por visita', 195, 722, { size: 18, weight: 600, color: C.mute, align: 'center', op: 1 - kb });
+    if (kb <= 0) button('Pedir agora', t, T.tapAsk);
+    else { const cx = 195, cy = lerp(BTN.y + 33, 380, kb), w = lerp(BTN.w, 70, kb), h = lerp(BTN.h, 70, kb);
+      g.save(); g.globalAlpha *= sstep(0, 0.5, kb); g.fillStyle = '#fff'; g.fillRect(0, 190, 390, 654); g.restore();
+      K.fillRR(cx - w / 2, cy - h / 2, w, h, lerp(18, 35, kb), C.blue);
+      for (let i = 0; i < 3; i++) { const tt = (t - T.radar - 0.3 - i * 0.35); if (tt > 0) { const u = (tt % 1.05) / 1.05; g.beginPath(); g.arc(cx, cy, 35 + u * 150, 0, 7); g.strokeStyle = `rgba(26,63,214,${0.5 * (1 - u)})`; g.lineWidth = 3; g.stroke(); } }
+      const o = sstep(T.radar + 0.2, T.radar + 0.5, t);
+      K.text('Procurando perto de você', 195, 600, { size: 23, weight: 700, color: C.ink, align: 'center', op: o });
+      K.text('Avisamos assim que alguém aceitar', 195, 634, { size: 18, weight: 500, color: C.mute, align: 'center', op: o });
+      K.text('Cancelar pedido', 195, 790, { size: 20, weight: 600, color: '#c23d3d', align: 'center', op: o }); }
+  },
+  proposta(t) {
+    header('Proposta recebida', 'Carlos aceitou seu pedido', { back: false, subColor: C.green });
+    K.fillRR(20, 196, 350, 300, 24, '#f7f8fb', C.line, 1.5);
+    K.dot(76, 256, 34, C.blue); K.text('CA', 76, 265, { size: 24, weight: 700, color: '#fff', align: 'center' });
+    K.text('Carlos Andrade', 124, 250, { size: 25, weight: 700, color: C.ink }); K.star(132, 276, 9, C.gold); K.text('4,9 (312) · Eletricista', 148, 283, { size: 18, weight: 500, color: C.mute });
+    K.fillRR(40, 314, 150, 34, 17, 'rgba(26,63,214,0.10)'); ICON.shield(60, 331, 0.75, C.blue); K.text('Verificado', 74, 337, { size: 17, weight: 600, color: C.blue });
+    g.fillStyle = C.line; g.fillRect(40, 366, 310, 1.5);
+    [['R$ 280', 'valor'], ['12 min', 'chegada'], ['3,6 km', 'distância']].forEach(([v, l], i) => { const x = 40 + i * 110;
+      K.text(v, x, 420, { size: 28, weight: 700, color: C.ink }); K.text(l, x, 450, { size: 17, weight: 500, color: C.mute }); });
+    K.text('Seu pedido', 28, 540, { size: 18, weight: 700, color: C.ink }); ICON.bolt(40, 570, 0.7, C.blue);
+    wrapText(NOTE, 58, 576, 300, 19, 26, C.mute);
+    ghost('Mensagem', 28, 664, 334, 60, 'chat');
+    button('Pagar R$ 280 com Pix', t, T.tapPay);
+  },
+  pix(t) {
+    rise(t, T.pix + 0.2, () => { header('Pagar com Pix', 'Para Carlos Andrade'); });
+    const paid = sstep(T.paid, T.paid + 0.25, t);
+    g.save(); g.globalAlpha *= 1 - paid;
+    rise(t, T.pix + 0.3, () => K.text('R$ 280,00', 195, 236, { size: 42, weight: 700, color: C.ink, align: 'center' }));
+    K.fillRR(80, 260, 230, 230, 18, '#fff', C.line, 2);
+    K.drawQR(95, 275, 200, C.ink, (i, j) => spring(t - (T.pix + 0.25 + Math.hypot(i - 12, j - 12) / 17 * 0.4), 0.65, 22));
+    K.dot(195, 375, 16, C.blue);
+    rise(t, T.pix + 0.45, () => {
+      const left = Math.max(0, 600 - Math.floor(t - T.pix)), mm = String(Math.floor(left / 60)).padStart(2, '0'), ss = String(left % 60).padStart(2, '0');
+      K.fillRR(48, 508, 294, 40, 20, 'rgba(245,184,46,0.14)'); K.dot(70, 528, 5 + Math.sin(t * 6) * 1.2, '#d99a10');
+      K.text(`Esperando o pagamento · ${mm}:${ss}`, 84, 535, { size: 17, weight: 600, color: '#8a5d00' });
+      ['Copie o código Pix', 'Pague no app do seu banco', 'A confirmação aparece aqui'].forEach((s, i) => {
+        K.dot(44, 576 + i * 34, 13, '#eef1f8'); K.text(String(i + 1), 44, 582 + i * 34, { size: 15, weight: 700, color: C.blue, align: 'center' });
+        K.text(s, 68, 582 + i * 34, { size: 18, weight: 500, color: C.ink }); });
+    });
+    if (t < T.paid) { const p = OM.press(t, T.tapCopy, { depth: 0.08 }), done = t >= T.tapCopy + 0.08;
+      g.save(); g.translate(195, 775); g.scale(p.s, p.s);
+      K.fillRR(-167, -33, 334, 66, 18, done ? 'rgba(16,165,106,0.14)' : C.blue);
+      K.text(done ? 'Código copiado' : 'Copiar código Pix', 0, 9, { size: 24, weight: 600, color: done ? '#0b7a4f' : '#fff', align: 'center' }); g.restore(); }
+    g.restore();
+    // aviso "copiado" no topo
+    const tk = spring(t - (T.tapCopy + 0.08), 0.7, 18) * (1 - sstep(T.paid - 0.1, T.paid + 0.1, t));
+    if (tk > 0.01 && t < T.paid + 0.1) { g.save(); g.globalAlpha *= clamp(tk, 0, 1); g.translate(0, (1 - tk) * 30);
+      K.fillRR(70, 680, 250, 46, 23, '#14182a'); K.check(100, 703, 18, 1, '#4be0a0', 3); K.text('Código Pix copiado', 210, 710, { size: 18, weight: 600, color: '#fff', align: 'center' }); g.restore(); }
+    if (t >= T.paid) {   // pago: anéis verdes cobrem a tela, o ✓ fica
+      const rp = OM.ripple(t, T.paid, { n: 3, stagger: 0.1, dur: 0.7, rMax: 900 });
+      g.save(); g.beginPath(); g.arc(195, 360, rp.r[0], 0, 7); g.fillStyle = 'rgba(16,165,106,0.10)'; g.fill(); g.restore();
+      const kc = spring(t - T.paid, 0.6, 16); K.dot(195, 330, 70 * kc, C.green); K.check(195, 330, 70, ease.cubicOut(seg(t, T.paid + 0.15, T.paid + 0.45)), '#fff', 10);
+      rise(t, T.paid + 0.25, () => { K.text('Pagamento confirmado', 195, 460, { size: 30, weight: 700, color: C.green, align: 'center' }); K.text('R$ 280,00 · Pix', 195, 496, { size: 20, weight: 500, color: C.mute, align: 'center' }); });
+    }
+  },
+  caminho(t) {
+    const kr = ease.sineInOut(seg(t, T.route + 0.3, T.arrive)), ar = t >= T.arrive, mins = Math.max(1, Math.ceil(12 * (1 - kr)));
+    header(ar ? 'Carlos chegou' : 'Carlos está a caminho', ar ? 'Informe o código a ele' : `chega em ${mins} min · 3,6 km`, { back: false, subColor: ar ? C.green : C.mute });
+    K.fillRR(20, 190, 350, 270, 22, C.ground);
+    g.save(); K.rr(20, 190, 350, 270, 22); g.clip();
+    for (let x = 0; x < 6; x++) for (let y = 0; y < 5; y++) K.fillRR(28 + x * 60, 198 + y * 56, 50, 46, 6, C.block);
+    const R = [[340, 440], [340, 340], [210, 340], [210, 250], [90, 250]];
+    g.strokeStyle = C.blue2; g.lineWidth = 6; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath(); R.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke();
+    let L = 0; const sl = R.slice(1).map((p, i) => { const d = Math.hypot(p[0] - R[i][0], p[1] - R[i][1]); L += d; return d; });
+    let d = kr * L, j = 0; while (j < sl.length - 1 && d > sl[j]) { d -= sl[j]; j++; } const u = Math.min(1, d / sl[j]);
+    const cx = lerp(R[j][0], R[j + 1][0], u), cy = lerp(R[j][1], R[j + 1][1], u);
+    ICON.pin(90, 246, 1.3, C.green); K.dot(cx, cy, 17, C.blue); K.text('CA', cx, cy + 5, { size: 12, weight: 700, color: '#fff', align: 'center' }); g.restore();
+    const hl = ar ? sstep(T.arrive, T.arrive + 0.3, t) : 0;
+    K.fillRR(20, 478, 350, 126, 20, hl ? `rgba(16,165,106,${0.06 + 0.06 * hl})` : '#f7f8fb', hl ? C.green : C.line, hl ? 2 : 1.5);
+    K.text('Seu código de segurança', 40, 512, { size: 17, weight: 600, color: C.mute });
+    ['4', '8', '2', '7'].forEach((n, i) => { K.fillRR(40 + i * 62, 528, 50, 58, 12, '#fff', '#d7dce8', 1.5); K.text(n, 65 + i * 62, 568, { size: 30, weight: 700, color: C.ink, align: 'center' }); });
+    ghost('Mensagem', 28, 742, 334, 66, 'chat');
+  },
+  avaliar(t) {
+    rise(t, T.rate + 0.15, () => { header('Como foi o serviço?', 'Avalie o Carlos', { back: false }); });
+    for (let i = 0; i < 5; i++) { const lit = t >= T.stars[i], im = OM.impact(t, T.stars[i], { sqx: 0.3, sqy: 0.3 }); g.save(); g.translate(71 + i * 62, 228); const s = lit ? im.sx : 1; g.scale(s, s);
+      K.star(0, 0, 25, lit ? C.gold : null, lit ? null : '#c4c9d6', 2.5); g.restore(); }
+    const ex = OM.wordRise(t, T.stars[4] + 0.05); if (t > T.stars[4]) K.text('Excelente', 195, 286, { size: 21, weight: 700, color: '#b07a00', align: 'center', op: ex.op });
+    CHIPS.forEach((c, i) => { const r = chipRect(i), on = PICKED[i] !== undefined && t >= T.chips[PICKED[i]], p = PICKED[i] !== undefined ? OM.press(t, T.chips[PICKED[i]], { depth: 0.1 }) : { s: 1 };
+      g.save(); g.translate(r.x + r.w / 2, r.y + r.h / 2); g.scale(p.s, p.s);
+      K.fillRR(-r.w / 2, -r.h / 2, r.w, r.h, 20, on ? C.blue : '#fff', on ? null : '#cfd5e3', 1.5); K.text(c, 0, 6, { size: 16, weight: 600, color: on ? '#fff' : C.ink, align: 'center' }); g.restore(); });
+    const focus = t > T.comment - 0.1 && t < T.tapSend;
+    K.fillRR(28, 426, 334, 140, 16, '#fff', focus ? C.blue2 : C.line, focus ? 2.5 : 2);
+    const ty = OM.typeOn(t, T.comment, COMMENT, { cps: 55 });
+    if (!ty.str) K.text('Conte como foi (opcional)', 46, 464, { size: 20, weight: 500, color: '#a3a9ba' }); else wrapText(ty.str, 46, 464, 300, 22, 31, C.ink);
+    if (t < T.sent) button('Enviar avaliação', t, T.tapSend);
+    else { const kc = spring(t - T.sent, 0.6, 16); K.fillRR(BTN.x, BTN.y, BTN.w, BTN.h, 18, 'rgba(16,165,106,0.12)');
+      const tw = K.measure('Avaliação enviada', 22, 700), x0 = 195 - (tw + 40) / 2;
+      K.dot(x0 + 15, 775, 15 * kc, C.green); K.check(x0 + 15, 775, 15, ease.cubicOut(seg(t, T.sent + 0.05, T.sent + 0.3)), '#fff', 3.5);
+      K.text('Avaliação enviada', x0 + 40, 783, { size: 22, weight: 700, color: '#0b7a4f' }); }
+  },
+};
+/* sequência de telas: cada uma nasce do que foi tocado (o retângulo tocado cresce até virar a tela) */
+const FULL = { x: 0, y: 0, w: 390, h: 844 };
+const SEQ = [
+  { name: 'inicio', t: 0 },
+  { name: 'pedido', t: T.form, from: tileRect(0) },
+  { name: 'proposta', t: T.accept, from: { x: 160, y: 345, w: 70, h: 70 } },
+  { name: 'pix', t: T.pix, from: BTN },
+  { name: 'caminho', t: T.route, from: { x: 125, y: 260, w: 140, h: 140 } },
+  { name: 'avaliar', t: T.rate, from: { x: 20, y: 478, w: 350, h: 126 } },
+];
+function phoneUI(t) {
+  let i = 0; while (i < SEQ.length - 1 && SEQ[i + 1].t <= t) i++;
+  const cur = SEQ[i], prev = SEQ[i - 1];
+  const k = i ? ease.expoOut(seg(t, cur.t, cur.t + 0.42)) : 1;
+  if (k < 1 && prev) { K.fillRR(0, 0, 390, 844, 0, '#fff'); statusBar(); SCREENS[prev.name](t); }
+  const r = k < 1 ? OM.morphRect(t, cur.t, cur.t + 0.42, cur.from, FULL) : FULL;
+  g.save(); K.rr(r.x, r.y, r.w, r.h, lerp(20, 0, k)); g.clip(); K.fillRR(0, 0, 390, 844, 0, '#fff');
+  g.globalAlpha = sstep(0.35, 0.9, k); statusBar(); SCREENS[cur.name](t); g.restore(); g.globalAlpha = 1;
+}
+/* o dedo, em unidades do celular */
+const TC = i => [tileRect(i).x + 80, tileRect(i).y + 60];
+const CC = i => [chipRect(i).x + 53, chipRect(i).y + 22];
+const HAND = [
+  { t: 4.55, x: 300, y: 980 }, { t: 4.95, x: TC(0)[0] + 10, y: TC(0)[1] + 20 }, { t: T.tapTile, x: TC(0)[0], y: TC(0)[1] }, { t: 5.5, x: 330, y: 980 },
+  { t: 7.15, x: 330, y: 980 }, { t: 7.45, x: 210, y: 790 }, { t: T.tapAsk, x: 200, y: 778 }, { t: 7.95, x: 330, y: 1000 },
+  { t: 12.55, x: 330, y: 1000 }, { t: 12.85, x: 210, y: 790 }, { t: T.tapPay, x: 200, y: 778 }, { t: 13.35, x: 340, y: 1000 },
+  { t: 14.55, x: 330, y: 1000 }, { t: 14.78, x: 205, y: 788 }, { t: T.tapCopy, x: 198, y: 778 }, { t: 15.3, x: 340, y: 1000 },
+  { t: 17.95, x: -60, y: 420 }, { t: T.sweep, x: 71, y: 238 }, { t: T.stars[4], x: 319, y: 238 },
+  { t: T.chips[0] - 0.08, x: CC(0)[0] + 6, y: CC(0)[1] + 8 }, { t: T.chips[0], x: CC(0)[0], y: CC(0)[1] }, { t: T.chips[1], x: CC(2)[0], y: CC(2)[1] },
+  { t: 19.7, x: 430, y: 640 }, { t: 20.35, x: 420, y: 860 }, { t: 20.6, x: 210, y: 790 }, { t: T.tapSend, x: 200, y: 778 }, { t: 21.05, x: 340, y: 1000 },
+];
+const CLICKS = [T.tapTile, T.tapAsk, T.tapPay, T.tapCopy, ...T.stars, ...T.chips, T.tapSend];
+const HANDWIN = [[4.55, 5.5], [7.15, 7.95], [12.55, 13.35], [14.55, 15.3], [17.95, 21.05]];
+
+function draw(t) {
+  const cam = camAt(t), V = OM.view(cam);
+  K.screen(); g.globalAlpha = 1; g.fillStyle = C.ground; g.fillRect(0, 0, W, H);
+  K.mat(V);
+  // ruas e quarteirões (o chão é a rua)
+  for (const [x, y, w, h, kind] of CITY) K.fillRR(x, y, w, h, 6, kind === 2 ? C.park : kind ? C.block : C.block2);
+  // avenida diagonal
+  g.strokeStyle = '#fbfbfd'; g.lineWidth = 14; g.beginPath(); g.moveTo(-1100, 1900); g.lineTo(3100, -700); g.stroke();
+  // o quarteirão da casa e a casa (o telhado some quando a casa fica grande na tela → o chão de dentro e o celular)
+  K.fillRR(A[0] - 38, A[1] - 32, 76, 64, 6, C.block);
+  const houseS = 26 * cam.zoom, roof = 1 - sstep(260, 900, houseS);
+  K.fillRR(A[0] - 13, A[1] - 13, 26, 26, 2.5, '#fcfcfe');
+  if (houseS > 200) { g.save(); g.globalAlpha = 0.5 * sstep(200, 600, houseS); g.strokeStyle = '#eceef3'; g.lineWidth = 0.08;
+    for (let i = -12; i <= 12; i += 1.6) { g.beginPath(); g.moveTo(A[0] + i, A[1] - 13); g.lineTo(A[0] + i, A[1] + 13); g.stroke(); } g.restore(); }
+  // celular
+  if (houseS > 120) {
+    const op = sstep(120, 420, houseS); g.save(); g.globalAlpha = op;
+    g.shadowColor = 'rgba(20,30,60,0.25)'; g.shadowBlur = 30 * K.DPR * cam.zoom * PS; g.shadowOffsetY = 12 * K.DPR * cam.zoom * PS;
+    const bz = 14 * PS; K.fillRR(PX(0) - bz, PY(0) - bz, PW + 2 * bz, 844 * PS + 2 * bz, 58 * PS, '#0b0d12'); g.restore();
+    g.save(); g.globalAlpha = op; K.mat(K.mul(V, [PS, 0, 0, PS, PX(0), PY(0)])); K.rr(0, 0, 390, 844, 44); g.clip(); phoneUI(t);
+    // dedo
+    for (const [a, b] of HANDWIN) if (t > a && t < b) { const cu = OM.cursor(t, HAND, CLICKS);
+      K.finger(cu.x, cu.y, cu.s, sstep(a, a + 0.15, t) * (1 - sstep(b - 0.15, b, t)), false); }
+    g.restore(); K.mat(V);
+  }
+  if (roof > 0.01) { g.save(); g.globalAlpha = roof;     // telhado de duas águas visto de cima: duas metades e a cumeeira
+    K.fillRR(A[0] - 14, A[1] - 14, 28, 28, 2, '#c3c9d7'); g.fillStyle = '#b3bacb'; g.fillRect(A[0] - 14, A[1], 28, 14);
+    g.fillStyle = '#9ea6ba'; g.fillRect(A[0] - 14, A[1] - 0.6, 28, 1.2); g.restore(); }
+
+  // pinos (tamanho constante na tela)
+  const px = 1 / cam.zoom;
+  const pinOp = sstep(0.2, 0.9, t) * (1 - sstep(T.inPhone - 1.6, T.inPhone - 0.6, t)) + sstep(T.out + 0.8, T.atMap - 0.3, t) * (1 - sstep(T.back + 0.6, T.back + 1.2, t));
+  if (pinOp > 0.01) {
+    g.save(); g.globalAlpha = pinOp;
+    PROS.forEach((p, i) => { const on = t > T.out && i >= 0, acc = p.ca && t >= T.accept, im = OM.impact(t, T.accept, { sqx: 0.3, sqy: 0.3 }), s = acc ? im.sx : 1;
+      g.save(); g.translate(p.x, p.y); g.scale(px * s, px * s);
+      K.dot(0, 0, acc ? 30 : 16, acc ? C.blue : on ? '#8f98b3' : '#a9b0c4'); K.dot(0, 0, acc ? 0 : 6, '#fff');
+      if (acc) K.check(0, 0, 30, ease.cubicOut(seg(t, T.accept, T.accept + 0.3)), '#fff', 6);
+      if (acc) K.text('Carlos aceitou', 0, 64, { size: 30, weight: 700, color: C.blue, align: 'center', op: sstep(T.accept, T.accept + 0.25, t) });
+      g.restore(); });
+    // raio do pedido saindo da casa, e a linha do Carlos até a casa
+    for (let i = 0; i < 3; i++) { const tt = t - (T.out + 0.6 + i * 0.3); if (tt > 0 && tt < 1.3 && t < T.accept + 0.4) { const u = ease.cubicOut(tt / 1.3);
+      g.beginPath(); g.arc(A[0], A[1], u * 420, 0, 7); g.strokeStyle = `rgba(26,63,214,${0.45 * (1 - u)})`; g.lineWidth = 3 * px; g.stroke(); } }
+    const kl = ease.cubicInOut(seg(t, T.link, T.accept));
+    if (kl > 0) { g.setLineDash([10 * px, 10 * px]); g.strokeStyle = C.blue2; g.lineWidth = 4 * px; g.beginPath(); g.moveTo(CAR.x, CAR.y); g.lineTo(lerp(CAR.x, A[0], kl), lerp(CAR.y, A[1], kl)); g.stroke(); g.setLineDash([]);
+      g.save(); g.translate((CAR.x + A[0]) / 2 + 14 * px, (CAR.y + A[1]) / 2 - 14 * px); g.scale(px, px); K.text('3,6 km', 0, 0, { size: 28, weight: 600, color: C.blue2, op: sstep(0.5, 1, kl) }); g.restore(); }
+    g.restore();
+  }
+  // o pino da Ana cai na casa
+  if (t >= T.pin - 0.4 && t < T.inPhone) { const f = ease.expoIn(seg(t, T.pin - 0.4, T.pin)), im = OM.impact(t, T.pin, { sqx: 0.3, sqy: 0.35 }), op = 1 - sstep(T.dive + 0.6, T.dive + 1.2, t);
+    g.save(); g.globalAlpha = op; g.translate(A[0], lerp(A[1] - 300 * px, A[1] - 26 * px, f)); g.scale(px * (t > T.pin ? im.sx : 1), px * (t > T.pin ? im.sy : 1));
+    g.beginPath(); g.moveTo(0, 26); g.bezierCurveTo(-6, 14, -20, 4, -20, -10); g.arc(0, -10, 20, Math.PI, 0); g.bezierCurveTo(20, 4, 6, 14, 0, 26); g.fillStyle = C.blue; g.fill(); K.dot(0, -10, 7, '#fff'); g.restore(); }
+  // a cidade acende
+  if (t >= T.lights) { LIGHTS.forEach(([x, y], i) => { const d = Math.hypot(x - A[0], (y - A[1]) * 1.6), t0 = T.lights + d / 1800 * 1.2, k2 = spring(t - t0, 0.55, 16);
+    if (k2 <= 0) return; g.save(); g.translate(x, y); g.scale(px, px); g.globalAlpha = 0.25 * clamp(k2, 0, 1); K.dot(0, 0, 24 * k2, C.blue2); g.globalAlpha = 1; K.dot(0, 0, 9 * k2, C.blue); g.restore(); }); }
+
+  // marca: o mapa clareia, símbolo + TaskGO
+  K.screen();
+  const veil = sstep(T.mark - 0.5, T.mark + 0.2, t);
+  if (veil > 0) { g.fillStyle = `rgba(250,251,253,${0.86 * veil})`; g.fillRect(0, 0, W, H);
+    const lp = OM.popIn(t, T.mark, { rise: 30, s0: 0.86, ds: 0.14 }), LS = 300;
+    g.save(); g.globalAlpha = lp.op; g.translate(960, 380 + lp.dy); g.scale(lp.s, lp.s); g.drawImage(K.logo, -LS / 2, -LS / 2, LS, LS); g.restore();
+    const word = 'TaskGO', size = 120; let x = 960 - K.measure(word, size, 700) / 2;
+    [...word].forEach((ch, i) => { const L = OM.letterDrop(t, T.mark + 0.3, i), w = K.measure(ch, size, 700);
+      g.save(); g.globalAlpha = L.op; g.translate(x + w / 2, 680 + L.y); g.scale(L.sx, L.sy); K.text(ch, 0, 0, { size, weight: 700, color: i >= 4 ? C.blue : C.ink, align: 'center' }); g.restore(); x += w; });
+    const tg = OM.wordRise(t, T.tag); K.text('Marketplace de serviços locais', 960, 752 + tg.y, { size: 34, weight: 500, color: C.mute, align: 'center', op: tg.op });
+  }
+  return cam;
+}
+
+const phoneBox = () => ({ x: PX(0), y: PY(0), w: PW, h: 844 * PS });
+const EVENTS = [
+  { t: T.pin, kind: 'drop', x: 960 }, { t: T.dive, kind: 'dive', x: 960 }, { t: T.tapTile, kind: 'tap', x: 900 }, { t: T.form, kind: 'open', x: 960 },
+  { t: T.type, kind: 'type', x: 960, dur: NOTE.length / 36 }, { t: T.tapAsk, kind: 'tap', x: 960 }, { t: T.out, kind: 'rise', x: 960 },
+  { t: T.accept, kind: 'hit', x: 1300 }, { t: T.back, kind: 'dive', x: 960 }, { t: T.tapPay, kind: 'tap', x: 960 }, { t: T.pix, kind: 'qr', x: 960 },
+  { t: T.tapCopy, kind: 'tap', x: 960 }, { t: T.paid, kind: 'paid', x: 960 }, { t: T.route, kind: 'open', x: 960 }, { t: T.arrive, kind: 'chime', x: 960 },
+  { t: T.rate, kind: 'open', x: 960 }, ...T.stars.map((s, i) => ({ t: s, kind: 'star', i, x: 800 + i * 80 })), ...T.chips.map(c => ({ t: c, kind: 'tap', x: 960 })), { t: T.comment, kind: 'type', x: 960, dur: COMMENT.length / 55 }, { t: T.tapSend, kind: 'tap', x: 960 },
+  { t: T.sent, kind: 'chime', x: 960 }, { t: T.pullOut, kind: 'rise', x: 960 }, { t: T.lights, kind: 'lights', x: 960 }, { t: T.mark + 0.3, kind: 'logo', x: 960 },
+];
+K.run({
+  dur: DUR, draw, events: EVENTS,
+  inFrame: { phone: [T.inPhone, T.out] },
+  track: t => ({ phone: OM.projectBox(OM.view(camAt(t)), phoneBox()) }),
+  motion: (t0, t1) => { const c0 = camAt(t0), c1 = camAt(t1); return OM.screenTravel(c0, c1, camAt((t0 + t1) / 2)) + 20; },
+});
+</script>
+</body></html>

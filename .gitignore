@@ -34,6 +34,17 @@ video/build/
 video/frames/
 video/out/*.mp4
 video/verificacao/390/
+# Filmes onetake: só o código-fonte vai ao Git. Rascunhos, áudio, quadros de conferência e logs de render
+# (o .render.json traz caminho local) refazem com os comandos de video/onetake/README.md.
+video/onetake/*.mp4
+video/onetake/*.wav
+video/onetake/stills-*.png
+video/onetake/quadros-reais.png
+video/onetake/*.render.json
+# Código de terceiros com licença própria: motion.js (PolyForm Noncommercial, skill onetake) e a fonte
+# embutida (OFL) são gerados na pasta pelos comandos do README, não redistribuídos aqui.
+video/onetake/motion.js
+video/onetake/font.js
 # Faixa-guia sintética e gravações de voz (dado pessoal)
 video/narracao/guia/
 video/narracao/prep/
