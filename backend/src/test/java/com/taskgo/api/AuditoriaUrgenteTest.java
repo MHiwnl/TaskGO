@@ -31,7 +31,7 @@ class AuditoriaUrgenteTest {
         UsuarioRepository usuarios = mock(UsuarioRepository.class);
         AuthController c = new AuthController(usuarios, mock(PedidoRepository.class), mock(PedidoContratadoRepository.class), mock(MensagemRepository.class),
                 mock(NotificacaoRepository.class), new BCryptPasswordEncoder(), new LoginAttemptLimiter());
-        Usuario novo = new Usuario(); novo.setId(1L); novo.setNome("Atacante"); novo.setEmail("atk@x.com"); novo.setTipo("cliente"); novo.setSenha("Tarefa#Forte2026");
+        Usuario novo = new Usuario(); novo.setId(1L); novo.setNome("Atacante"); novo.setEmail("atk@x.com"); novo.setTipo("cliente"); novo.setSenha("Tarefa#Forte2026"); novo.addExtra("maiorDeIdade", true);
         when(usuarios.save(any(Usuario.class))).thenAnswer(i -> { Usuario u = i.getArgument(0); assertNull(u.getId(), "o id do corpo chegou ao save"); u.setId(50L); return u; });
         assertEquals(50L, c.registrar(novo, new MockHttpServletRequest()).id());
     }

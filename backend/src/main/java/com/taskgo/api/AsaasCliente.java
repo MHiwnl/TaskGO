@@ -114,6 +114,8 @@ public class AsaasCliente {
         Map<String, Object> c = new LinkedHashMap<>(); c.put("value", valor); c.put("description", motivo);
         return post("/payments/" + cobranca + "/refund", c);
     }
+    /* Devoluções já pedidas nesta cobrança: confere uma devolução que ficou sem resposta. */
+    public JsonNode listarEstornos(String cobranca) { return get("/payments/" + cobranca + "/refunds?limit=100"); }
     /* Só no sandbox: confirma o pagamento de uma cobrança. */
     public void confirmarNoSandbox(String cobranca) {
         if (!sandbox()) throw new Erro(403, "Só existe no ambiente de teste.");

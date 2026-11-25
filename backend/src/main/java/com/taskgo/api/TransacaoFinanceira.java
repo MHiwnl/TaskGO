@@ -26,4 +26,5 @@ public class TransacaoFinanceira {
     public BigDecimal getValor(){return valor;} public String getMoeda(){return moeda;} public String getStatus(){return status;}
     public String getReferencia(){return referencia;} public long getCriadaEm(){return criadaEm;}
     void situacao(String status){this.status=status;}
+    void referencia(String referencia){this.referencia=referencia;}
 }

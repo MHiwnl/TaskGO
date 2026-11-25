@@ -56,12 +56,17 @@ public class PagamentoService {
     @Autowired(required = false) void setObras(@org.springframework.context.annotation.Lazy ObraService o) { this.obras = o; }
     private RecorrenteService recorrentes;
     @Autowired(required = false) void setRecorrentes(@org.springframework.context.annotation.Lazy RecorrenteService r) { this.recorrentes = r; }
-    /** Devolve parte de uma cobrança paga (obra: etapa ou visita). */
-    /* Sem @Transactional: se o provedor recusar (EstornoAdiado), quem chama decide adiar sem desfazer o resto. */
-    public void devolverCobranca(Cobranca c, BigDecimal parte) { if (parte.signum() > 0) estornarCobranca(c, parte.min(c.liquido()), System.currentTimeMillis()); }
+    /** Devolve parte de uma cobrança paga (obra: etapa ou visita). Com transação de quem chama, o Asaas é chamado depois do commit:
+        aqui sai EstornoAdiado com a referência da reserva, e quem chama registra "em andamento". Sem transação, devolve na hora. */
+    public void devolverCobranca(Cobranca c, BigDecimal parte) {
+        BigDecimal quanto = parte.min(c.liquido());
+        if (quanto.signum() > 0) estornarCobranca(c, quanto, System.currentTimeMillis());
+    }
     /** Cancela uma cobrança ainda em aberto (Pix ou página do Asaas). */
     @Transactional
-    public void cancelarAberta(Cobranca c) { if (Cobranca.PENDENTE.equals(c.getStatus())) fecharAberta(c, "Obra cancelada."); }
+    public void cancelarAberta(Cobranca c) { cancelarAberta(c, "Obra cancelada."); }
+    @Transactional
+    public void cancelarAberta(Cobranca c, String motivo) { if (Cobranca.PENDENTE.equals(c.getStatus())) fecharAberta(c, motivo); }
     /* Fecha uma cobrança aberta. Se o provedor não confirmar o cancelamento (pode ter sido paga agora), ela fica pendente
        e a confirmação do pagamento segue o caminho normal (pedido cancelado devolve). */
     private void fecharAberta(Cobranca c, String motivo) {
@@ -390,11 +395,38 @@ public class PagamentoService {
     }
 
     /* Uma transação por cobrança: um erro não desfaz as confirmações das outras. */
-    private org.springframework.transaction.support.TransactionTemplate tx;
-    @Autowired(required = false) void setTx(org.springframework.transaction.PlatformTransactionManager m) { this.tx = new org.springframework.transaction.support.TransactionTemplate(m); }
+    private org.springframework.transaction.support.TransactionTemplate tx, txNova;
+    /* Cobranças de pendência, etapa, visita e semana: não são devolvidas pelo pedido (cada serviço devolve as suas). */
+    private static final java.util.Set<String> TIPOS_FORA_DO_PEDIDO = java.util.Set.of("pendencia", "etapa", "visita", "semana");
+    /* Marca no pedido: a devolução é de uma troca para dinheiro, então o pedido termina sem pagamento online (paid null). */
+    public static final String ESTORNO_PARA_DINHEIRO = "estornoParaDinheiro";
+    /* Referência da devolução: "estorno:<cobrança>:<desde>", onde "desde" é a hora da reserva. Liga a pendência à devolução feita. */
+    private static final String PREFIXO_REF = "estorno:";
+    @Autowired(required = false) void setTx(org.springframework.transaction.PlatformTransactionManager m) {
+        this.tx = new org.springframework.transaction.support.TransactionTemplate(m);
+        this.txNova = new org.springframework.transaction.support.TransactionTemplate(m);
+        this.txNova.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
+    /* Junta-se à transação de quem chamou ou abre uma. Exceção que sai daqui desfaz a transação compartilhada. */
+    private <T> T emTransacao(java.util.function.Supplier<T> s) { return tx == null ? s.get() : tx.execute(st -> s.get()); }
+    /* Transação própria (REQUIRES_NEW), com trava curta no Postgres. Também serve depois do commit de quem chamou (afterCommit). */
+    private <T> T emNovaTransacao(java.util.function.Supplier<T> s) { return txNova == null ? s.get() : txNova.execute(st -> { travaCurta(); return s.get(); }); }
+    /* Junta-se à transação de quem chamou, se houver; senão abre a sua. */
+    private <T> T emTransacaoOuNova(java.util.function.Supplier<T> s) { return dentroDeTransacao() ? emTransacao(s) : emNovaTransacao(s); }
+    private static boolean dentroDeTransacao() {
+        return org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()
+                && org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive();
+    }
+    /* Só o Postgres tem lock_timeout (o H2 dos testes não). Espera no máximo 5 s por uma linha travada. */
+    private Boolean postgres;
+    private void travaCurta() {
+        if (em == null) return;
+        if (postgres == null) postgres = em.unwrap(org.hibernate.Session.class).doReturningWork(c -> "PostgreSQL".equals(c.getMetaData().getDatabaseProductName()));
+        if (postgres) em.createNativeQuery("SET LOCAL lock_timeout = '5s'").executeUpdate();
+    }
     private void porCobranca(String id, Runnable r) {
         try { if (tx == null) r.run(); else tx.executeWithoutResult(s -> r.run()); }
-        catch (RuntimeException e) { log.warn("Conferência da cobrança {} falhou: {}", id, e.getMessage()); }
+        catch (RuntimeException e) { log.warn("Conferência {} falhou: {}", id, e.getMessage()); }
     }
 
     /* true se a cobrança não pode mais ser paga no provedor (cancelada agora ou antes). */
@@ -491,8 +523,8 @@ public class PagamentoService {
             /* Mensalidade do Plano Pro: não tem pedido. */
             if ("plano".equals(c.getTipo())) { planoPago(c); return; }
             pedidos.findById(c.getPedidoId()).ifPresent(p -> {
-                /* Pedido cancelado enquanto o Pix era pago: devolve na hora. */
-                if ("cancelado".equals(p.getStatus()) && !"pendencia".equals(c.getTipo()) && !"visita".equals(c.getTipo())) { estornarCobranca(c, c.getValor(), agora); return; }
+                /* Pedido cancelado enquanto o pagamento era confirmado: a devolução sai depois, fora desta transação (repetirDevolucoes). */
+                if ("cancelado".equals(p.getStatus()) && !TIPOS_FORA_DO_PEDIDO.contains(c.getTipo())) { p.setPaid("estornando"); pedidos.save(p); return; }
                 aplicar(c, p);
             });
         } else if ("CANCELADA".equals(s)) { c.cancelar("Pix cancelado."); cobrancas.save(c); }
@@ -650,29 +682,97 @@ public class PagamentoService {
         pedidos.save(p);
     }
 
-    /* Pedido cancelado: cancela o Pix em aberto e devolve o que foi pago. */
-    @Transactional
+    /* Executor do Spring Boot: a devolução depois do commit roda em outra thread, para a conexão de quem chamou
+       ser liberada antes do POST ao provedor (que pode levar até 15 s). Sem ele, fica para o job. */
+    private org.springframework.core.task.TaskExecutor executor;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setExecutor(@org.springframework.beans.factory.annotation.Qualifier("applicationTaskExecutor") org.springframework.core.task.TaskExecutor executor) { this.executor = executor; }
+
+    /* Pedido cancelado (ou troca para dinheiro): devolve o que foi pago e cancela o Pix em aberto.
+       A marca "estornando" sempre é gravada ANTES de devolver: se algo falhar no meio, o job (repetirDevolucoes) acha o pedido. */
     public void estornar(Pedido p) {
         if (!ativo()) return;
-        List<Cobranca> lista = doPedido(p.getId());
-        long agora = System.currentTimeMillis();
-        for (Cobranca c : lista) if (Cobranca.PENDENTE.equals(c.getStatus())) fecharAberta(c, "Pedido cancelado.");
-        BigDecimal pago = lista.stream().map(Cobranca::liquido).reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (pago.signum() <= 0) return;
-        Long cliente = clienteId(p);
-        try { devolver(lista, pago, agora); }
-        catch (EstornoAdiado adiado) {
-            /* O provedor ainda não aceita a devolução (pagamento recém-confirmado): o pedido segue cancelado e a devolução é repetida depois. */
-            Map<String, Object> e = new LinkedHashMap<>(p.getExtra()); e.remove("pagamentoPendente"); p.setExtra(e);
-            p.setPaid("estornando");
-            pedidos.save(p);
-            if (cliente != null) avisar(cliente, p.getId(), "Devolução em andamento", reais(pago) + " serão devolvidos assim que o banco liberar.", "estornando:" + p.getId());
+        String pedidoId = p.getId();
+        if (!dentroDeTransacao()) {
+            /* Quem chamou já gravou o cancelamento: a marca vai numa transação própria, antes de qualquer devolução. */
+            /* O cancelamento já foi gravado: daqui para a frente nada sobe para o cliente. Se até a marca falhar, a rede do job
+               (pedidos cancelados ainda com pagamento retido) acha o pedido. */
+            try {
+                emNovaTransacao(() -> { if (doPedido(pedidoId).stream().anyMatch(c -> c.liquido().signum() > 0)) marcarEstornando(pedidoId); return null; });
+                processarEstorno(pedidoId);
+            } catch (RuntimeException e) { log.warn("Devolução do pedido {} ficou para o job: {}", pedidoId, e.getMessage()); }
             return;
         }
-        Map<String, Object> e = new LinkedHashMap<>(p.getExtra()); e.remove("pagamentoPendente"); p.setExtra(e);
-        p.setPaid("estornado");
+        if (doPedido(pedidoId).stream().anyMatch(c -> c.liquido().signum() > 0)) { p.setPaid("estornando"); pedidos.save(p); }
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+            @Override public void afterCommit() {
+                Runnable devolver = () -> { try { processarEstorno(pedidoId); } catch (RuntimeException e) { log.warn("Devolução do pedido {} ficou para o job: {}", pedidoId, e.getMessage()); } };
+                if (executor == null) { log.info("Devolução do pedido {} fica para o job", pedidoId); return; }
+                try { executor.execute(devolver); } catch (RuntimeException e) { log.warn("Devolução do pedido {} ficou para o job: {}", pedidoId, e.getMessage()); }
+            }
+        });
+    }
+
+    /* Devolve o que sobrou pago de um pedido cancelado. Roda sem a transação de quem chamou: cada passo tem a sua,
+       e o POST ao provedor nunca fica dentro de uma transação. Um erro numa cobrança não impede as outras; o que ficou
+       é tentado de novo pelo job (repetirDevolucoes). */
+    public void processarEstorno(String pedidoId) {
+        if (!ativo()) return;
+        for (Cobranca c : emNovaTransacao(() -> doPedido(pedidoId)))
+            if (Cobranca.PENDENTE.equals(c.getStatus())) {
+                try { emNovaTransacao(() -> { cobrancas.findById(c.getId()).filter(x -> Cobranca.PENDENTE.equals(x.getStatus())).ifPresent(x -> fecharAberta(x, "Pedido cancelado.")); return null; }); }
+                catch (RuntimeException e) { log.warn("Cobrança {} do pedido {} não foi cancelada no provedor: {}", c.getId(), pedidoId, e.getMessage()); }
+            }
+        List<Cobranca> lista = emNovaTransacao(() -> doPedido(pedidoId));
+        BigDecimal pago = lista.stream().map(Cobranca::liquido).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (pago.signum() > 0) emNovaTransacao(() -> { marcarEstornando(pedidoId); return null; });
+        boolean pendente = false;
+        BigDecimal falta = pago;
+        for (int i = lista.size() - 1; i >= 0 && falta.signum() > 0; i--) {
+            Cobranca c = lista.get(i);
+            BigDecimal livre = c.liquido();
+            if (livre.signum() <= 0) continue;
+            BigDecimal parte = livre.min(falta);
+            falta = falta.subtract(parte);
+            try { estornarParte(c, parte); }
+            catch (RuntimeException e) { pendente = true; log.warn("Devolução de {} da cobrança {} ficou para depois: {}", reais(parte), c.getId(), e.getMessage()); }
+        }
+        if (pendente) {
+            emNovaTransacao(() -> {
+                pedidos.findById(pedidoId).ifPresent(p -> {
+                    BigDecimal restante = doPedido(pedidoId).stream().map(Cobranca::liquido).reduce(BigDecimal.ZERO, BigDecimal::add);
+                    avisar(clienteId(p), p.getId(), "Devolução em andamento", reais(restante) + " serão devolvidos assim que o banco liberar.", "estornando:" + p.getId());
+                });
+                return null;
+            });
+            return;
+        }
+        emNovaTransacao(() -> { pedidos.findById(pedidoId).filter(p -> "estornando".equals(p.getPaid())).ifPresent(p -> finalizarEstorno(p, doPedido(pedidoId))); return null; });
+    }
+
+    private void marcarEstornando(String pedidoId) {
+        pedidos.findById(pedidoId).filter(p -> !"estornando".equals(p.getPaid())).ifPresent(p -> { p.setPaid("estornando"); pedidos.save(p); });
+    }
+
+    /* Uma parte de uma cobrança de pedido cancelado. Sempre fora de transação de quem chamou (ver processarEstorno). */
+    private void estornarParte(Cobranca c, BigDecimal parte) {
+        long agora = System.currentTimeMillis();
+        if (!ehAsaas(c)) {
+            emNovaTransacao(() -> { if (!devolverAqui(c, parte, agora, agora)) throw new EstornoAdiado("Esta devolução já está em andamento."); return null; });
+            return;
+        }
+        if (emNovaTransacao(() -> cobrancas.reservarEstorno(c.getId(), parte, agora, Cobranca.PAGA)) == 0) throw new EstornoAdiado("Esta devolução já está em andamento.");
+        enviarReservada(c, agora, parte, agora);
+    }
+
+    /* Pedido devolvido por inteiro: marca como estornado e avisa o cliente pelo que voltou. */
+    private void finalizarEstorno(Pedido p, List<Cobranca> lista) {
+        BigDecimal devolvido = lista.stream().map(Cobranca::getValorEstornado).reduce(BigDecimal.ZERO, BigDecimal::add);
+        Map<String, Object> e = new LinkedHashMap<>(p.getExtra()); e.remove("pagamentoPendente"); boolean paraDinheiro = e.remove(ESTORNO_PARA_DINHEIRO) != null; p.setExtra(e);
+        p.setPaid(paraDinheiro ? null : "estornado");
         pedidos.save(p);
-        if (cliente != null) avisar(cliente, p.getId(), "Valor devolvido", reais(pago) + " voltaram para você (" + lista.stream().filter(c -> c.getValorEstornado().signum() > 0).map(c -> "cartao".equals(c.getMetodo()) ? c.getCartaoDescricao() : "Pix").distinct().reduce((a, b) -> a + " e " + b).orElse("") + ").", "estorno:" + p.getId());
+        Long cliente = clienteId(p);
+        if (cliente != null && devolvido.signum() > 0) avisar(cliente, p.getId(), "Devolução enviada", "Enviamos a devolução de " + reais(devolvido) + " (" + lista.stream().filter(c -> c.getValorEstornado().signum() > 0).map(c -> "cartao".equals(c.getMetodo()) ? java.util.Objects.toString(c.getCartaoDescricao(), "cartão") : "Pix").distinct().reduce((a, b) -> a + " e " + b).orElse("") + "). No cartão, pode levar até 10 dias úteis para aparecer na fatura.", "estorno:" + p.getId());
     }
 
     private void devolver(List<Cobranca> lista, BigDecimal quanto, long agora) {
@@ -682,40 +782,181 @@ public class PagamentoService {
             BigDecimal livre = c.liquido();
             if (livre.signum() <= 0) continue;
             BigDecimal parte = livre.min(falta);
-            estornarCobranca(c, parte, agora);
+            try { estornarCobranca(c, parte, agora); }
+            catch (EstornoAdiado adiado) { pendencia(c, parte, adiado); }
             falta = falta.subtract(parte);
         }
     }
+    /* Devolução que o provedor ainda não aceitou: vira pendência (ObraService.prazos repete a cada minuto). */
+    private void pendencia(Cobranca c, BigDecimal parte, EstornoAdiado adiado) {
+        transacoes.save(new TransacaoFinanceira(UUID.randomUUID().toString(), c.getClienteId(), "DEVOLUCAO_PENDENTE", parte, "PENDENTE", adiado.referencia(c), System.currentTimeMillis()));
+        avisar(c.getClienteId(), c.getPedidoId(), "Devolução em andamento", reais(parte) + " voltam para você assim que o banco liberar.", "devolucao-pendente:" + c.getId() + ":" + parte);
+    }
 
+    /* Devolve parte de uma cobrança. A parte é reservada antes (valor_estornando): outro processo não devolve de novo,
+       e a reserva só some quando a devolução é confirmada ou recusada. */
     private void estornarCobranca(Cobranca c, BigDecimal parte, long agora) {
+        if (ehAsaas(c)) { estornarNoAsaas(c, parte, agora); return; }
+        if (!emTransacaoOuNova(() -> devolverAqui(c, parte, agora, agora))) throw new EstornoAdiado("Esta devolução já está em andamento.", referenciaReservada(c.getId()));
+        if (em != null && em.contains(c)) em.refresh(c);
+    }
+
+    /* Carteira ou simulado: sem HTTP, reserva, crédito e confirmação ficam na mesma transação. Falso se a reserva não coube. */
+    private boolean devolverAqui(Cobranca c, BigDecimal parte, long desde, long agora) {
+        if (cobrancas.reservarEstorno(c.getId(), parte, desde, Cobranca.PAGA) == 0) return false;
         if ("carteira".equals(c.getProvedor())) {
             Carteira carteira = carteiras.findByUsuarioIdForUpdate(c.getClienteId()).orElseGet(() -> carteiras.save(new Carteira(c.getClienteId())));
             carteira.creditar(parte); carteiras.save(carteira);
         }
-        /* Asaas: devolve de verdade antes de marcar (se o Asaas recusar, nada muda aqui). */
-        if ("asaas".equals(c.getProvedor()) && asaas != null && c.getTxid() != null) {
-            try { asaas.estornar(c.getTxid(), parte, "Devolução TaskGO"); }
-            catch (AsaasCliente.Erro e) { throw new EstornoAdiado("Não foi possível devolver agora: " + e.getMessage()); }
+        concluirEstorno(c, parte, desde, agora);
+        return true;
+    }
+
+    /* Asaas: o POST nunca sai com transação de quem chamou (a linha ficaria travada durante a chamada). Com transação, a reserva
+       entra nela e o POST sai depois do commit; quem chamou recebe EstornoAdiado com a referência e registra "em andamento".
+       Sem transação, reserva, POST e confirmação saem aqui. */
+    private void estornarNoAsaas(Cobranca c, BigDecimal parte, long agora) {
+        boolean dentro = dentroDeTransacao();
+        long desde = System.currentTimeMillis();
+        if (emTransacaoOuNova(() -> cobrancas.reservarEstorno(c.getId(), parte, desde, Cobranca.PAGA)) == 0) throw new EstornoAdiado("Esta devolução já está em andamento.", referenciaReservada(c.getId()));
+        if (dentro) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                @Override public void afterCommit() { enviarDepoisDoCommit(c, desde, parte, agora); }
+            });
+            if (em != null && em.contains(c)) em.refresh(c);
+            throw new EstornoAdiado("Devolução enviada depois da confirmação.", refEstorno(c.getId(), desde));
         }
-        c.estornar(parte, agora);
-        cobrancas.save(c);
-        transacoes.save(new TransacaoFinanceira(UUID.randomUUID().toString(), c.getClienteId(), "ESTORNO", parte, "CONCLUIDA", c.getPedidoId(), agora));
+        enviarReservada(c, desde, parte, agora);
+        if (em != null && em.contains(c)) em.refresh(c);
+    }
+
+    private void enviarDepoisDoCommit(Cobranca c, long desde, BigDecimal parte, long agora) {
+        try { enviarReservada(c, desde, parte, agora); }
+        catch (RuntimeException e) { log.warn("Devolução da cobrança {} ficou para a conciliação: {}", c.getId(), e.getMessage()); }
+    }
+
+    /* POST ao Asaas com a reserva já gravada; a confirmação vai em transação própria. Recusa (4xx) solta a reserva;
+       sem resposta (tempo esgotado, queda) mantém a reserva e a conciliação confere no Asaas. */
+    private void enviarReservada(Cobranca c, long desde, BigDecimal parte, long agora) {
+        try { asaas.estornar(c.getTxid(), parte, "Devolução TaskGO " + c.getId() + ":" + desde); }
+        catch (AsaasCliente.Erro e) {
+            if (e.status >= 400 && e.status < 500) emNovaTransacao(() -> cobrancas.liberarEstorno(c.getId(), desde));
+            throw new EstornoAdiado("Não foi possível devolver agora: " + e.getMessage(), refEstorno(c.getId(), desde));
+        }
+        emNovaTransacao(() -> { concluirEstorno(c, parte, desde, agora); return null; });
+    }
+
+    private boolean ehAsaas(Cobranca c) { return "asaas".equals(c.getProvedor()) && asaas != null && c.getTxid() != null; }
+    static String refEstorno(String cobrancaId, long desde) { return PREFIXO_REF + cobrancaId + ":" + desde; }
+    static String cobrancaDaRef(String referencia) { return referencia.startsWith(PREFIXO_REF) ? referencia.substring(PREFIXO_REF.length(), referencia.lastIndexOf(':')) : referencia; }
+    /* Reserva que já está aberta na cobrança (outro processo devolve): a pendência passa a esperar por ela. Null se não há. */
+    private String referenciaReservada(String cobrancaId) {
+        Cobranca c = cobrancas.findById(cobrancaId).orElse(null);
+        if (c == null) return null;
+        if (em != null && em.contains(c)) em.refresh(c);
+        return c.getValorEstornando() == null || c.getEstornandoDesde() == null ? null : refEstorno(cobrancaId, c.getEstornandoDesde());
+    }
+
+    /* Devolução confirmada: soma na cobrança e registra o estorno (transação e auditoria). */
+    private void concluirEstorno(Cobranca c, BigDecimal parte, long desde, long agora) {
+        if (cobrancas.concluirEstorno(c.getId(), parte, agora, Cobranca.ESTORNADA) == 0) throw new IllegalStateException("Reserva da devolução da cobrança " + c.getId() + " não encontrada.");
+        /* A chave da devolução vai no id, para retomarDevolucao achar (não há restrição no banco: quem impede gravar duas vezes é o UPDATE condicional de concluirEstorno); a referência continua o pedido,
+           que é o que o extrato do cliente mostra. */
+        transacoes.save(new TransacaoFinanceira(refEstorno(c.getId(), desde), c.getClienteId(), "ESTORNO", parte, "CONCLUIDA", c.getPedidoId(), agora));
         auditar(c.getClienteId(), "Recebeu de volta " + reais(parte), null, c.getPedidoId());
     }
 
-    /* Provedor recusou a devolução por enquanto; quem chama decide se adia ou mostra o erro. */
-    static final class EstornoAdiado extends ResponseStatusException {
-        EstornoAdiado(String motivo) { super(HttpStatus.BAD_GATEWAY, motivo); }
+    /* Devolução pedida ao Asaas sem resposta: depois de 10 minutos, confere no Asaas antes de qualquer nova tentativa. */
+    private void conciliarEstornos(long agora) {
+        for (String id : cobrancas.findByValorEstornandoIsNotNullAndEstornandoDesdeLessThan(agora - 10 * 60_000L).stream().map(Cobranca::getId).toList())
+            porCobranca(id, () -> cobrancas.findById(id).ifPresent(c -> conciliarEstorno(c, agora)));
+    }
+    /* Procura a devolução pela marca que mandamos na descrição. Achou aceita: confirma. Não achou ou cancelada: solta a reserva e a próxima rodada tenta de novo.
+       Qualquer outra coisa (valor diferente, mais de uma, consulta falhou) não resolve sozinha: fica para a equipe. */
+    private void conciliarEstorno(Cobranca c, long agora) {
+        if (c.getValorEstornando() == null || c.getEstornandoDesde() == null || c.getTxid() == null || asaas == null) return;
+        long desde = c.getEstornandoDesde();
+        BigDecimal parte = c.getValorEstornando();
+        String marca = "Devolução TaskGO " + c.getId() + ":" + desde;
+        com.fasterxml.jackson.databind.JsonNode lista;
+        try { lista = asaas.listarEstornos(c.getTxid()); }
+        catch (RuntimeException e) { divergencia(c, desde, "não foi possível consultar as devoluções no Asaas (" + e.getMessage() + ")"); return; }
+        List<com.fasterxml.jackson.databind.JsonNode> achadas = new ArrayList<>();
+        for (com.fasterxml.jackson.databind.JsonNode r : lista.path("data")) if (r.path("description").asText("").contains(marca)) achadas.add(r);
+        if (achadas.size() > 1 || lista.path("hasMore").asBoolean(false)) { divergencia(c, desde, "mais de uma devolução com esta marca, ou lista incompleta"); return; }
+        String situacao = achadas.isEmpty() ? "" : achadas.get(0).path("status").asText("");
+        if (achadas.isEmpty() || "CANCELLED".equals(situacao)) {
+            /* Só solta para tentar de novo se o Asaas não devolveu nada além do que já está registrado aqui.
+               Sem isso, uma descrição alterada pelo Asaas faria "não achei" e a próxima rodada devolveria em dobro. */
+            BigDecimal noAsaas = BigDecimal.ZERO;
+            for (com.fasterxml.jackson.databind.JsonNode r : lista.path("data"))
+                if (!"CANCELLED".equals(r.path("status").asText("")) && r.path("value").isNumber()) noAsaas = noAsaas.add(r.path("value").decimalValue());
+            BigDecimal registrado = c.getValorEstornado() == null ? BigDecimal.ZERO : c.getValorEstornado();
+            if (noAsaas.compareTo(registrado) != 0) { divergencia(c, desde, "o Asaas tem devolução sem a nossa marca (" + reais(noAsaas) + " devolvidos lá, " + reais(registrado) + " aqui)"); return; }
+            cobrancas.liberarEstorno(c.getId(), desde); return;
+        }
+        boolean aceita = "DONE".equals(situacao) || "PENDING".equals(situacao) || situacao.startsWith("AWAITING_");
+        if (!aceita) { divergencia(c, desde, "situação desconhecida no Asaas: " + situacao); return; }
+        com.fasterxml.jackson.databind.JsonNode valor = achadas.get(0).path("value");
+        if (!valor.isNumber() || valor.decimalValue().compareTo(parte) != 0) { divergencia(c, desde, "valor diferente do reservado"); return; }
+        /* O Asaas aceitou: mesma confirmação do caminho normal. */
+        emNovaTransacao(() -> { concluirEstorno(c, parte, desde, agora); return null; });
+        pedidos.findById(c.getPedidoId()).filter(p -> "cancelado".equals(p.getStatus()) && "retido".equals(p.getPaid())).ifPresent(p -> { p.setPaid("estornando"); pedidos.save(p); });
+    }
+    /* Não resolve sozinho: a reserva fica e a equipe confere no Asaas. A chave do aviso impede repetir a cada rodada. */
+    private void divergencia(Cobranca c, long desde, String motivo) {
+        log.error("Devolução da cobrança {} precisa de conferência: {}", c.getId(), motivo);
+        java.util.stream.Stream.of("financeiro", "suporte").flatMap(t -> usuarios.findByTipoIgnoreCaseOrderByNomeAsc(t).stream())
+                .forEach(a -> avisar(a.getId(), c.getPedidoId(), "Devolução para conferir", "Uma devolução ficou sem confirmação do Asaas. Confira no Asaas antes de devolver de novo.", "estorno-conferir:" + c.getId() + ":" + desde + ":" + a.getId()));
     }
 
-    /* Devoluções que o provedor ainda não tinha aceitado: tenta de novo. */
+    /* Provedor recusou ou ainda não confirmou a devolução; quem chama registra "em andamento". A referência é a reserva que ficou. */
+    static final class EstornoAdiado extends ResponseStatusException {
+        private final String referencia;
+        EstornoAdiado(String motivo) { this(motivo, null); }
+        EstornoAdiado(String motivo, String referencia) { super(HttpStatus.BAD_GATEWAY, motivo); this.referencia = referencia; }
+        /* Sem reserva conhecida, a pendência fica com a cobrança (como antes). */
+        String referencia(Cobranca c) { return referencia == null ? c.getId() : referencia; }
+    }
+
+    /* Devoluções que o provedor ainda não tinha aceitado: confere as reservas antigas e tenta de novo.
+       Cada pedido em sua transação: um erro não desfaz as devoluções dos outros. */
     @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 120_000, initialDelay = 60_000)
-    @Transactional
     public void repetirDevolucoes() {
         if (!ativo()) return;
-        for (Pedido p : pedidos.findByPaid("estornando")) estornar(p);
+        conciliarEstornos(System.currentTimeMillis());
+        /* Rede de segurança: pedido cancelado que ainda tem dinheiro do próprio pedido retido (a marca "estornando" não chegou
+           a ser gravada) entra na fila. Só marca; quem devolve é o laço abaixo. Etapas e semanas (obra, recorrente) ficam de
+           fora, porque doPedido já as exclui e elas têm devolução própria. */
+        for (String id : pedidos.findByStatusAndPaid("cancelado", "retido").stream().map(Pedido::getId).toList()) {
+            try { emNovaTransacao(() -> { if (doPedido(id).stream().anyMatch(c -> c.liquido().signum() > 0)) marcarEstornando(id); return null; }); }
+            catch (RuntimeException e) { log.warn("Pedido cancelado {} não entrou na fila de devolução: {}", id, e.getMessage()); }
+        }
+        for (String id : pedidos.findByPaid("estornando").stream().map(Pedido::getId).toList()) {
+            try { processarEstorno(id); }
+            catch (RuntimeException e) { log.warn("Devolução do pedido {} falhou: {}", id, e.getMessage()); }
+        }
     }
 
+    /* Pendência de devolução (DEVOLUCAO_PENDENTE, ObraService.prazos): devolve null se já está resolvida; senão, a referência
+       que a pendência passa a ter (a da reserva nova ou a que ficou). Não repete devolução que o provedor já aceitou. */
+    public String retomarDevolucao(String referencia, BigDecimal valor) {
+        Cobranca c = cobrancas.findById(cobrancaDaRef(referencia)).orElse(null);
+        if (c == null) { log.warn("Devolução pendente {} sem cobrança: confira no banco", referencia); return referencia; }
+        if (!referencia.startsWith(PREFIXO_REF)) return devolverDeNovo(c, valor);
+        if (transacoes.existsById(referencia)) return null;
+        long desde = Long.parseLong(referencia.substring(referencia.lastIndexOf(':') + 1));
+        /* Reserva aberta com esta data: a conciliação confere no Asaas e decide. */
+        if (c.getValorEstornando() != null && c.getEstornandoDesde() != null && c.getEstornandoDesde() == desde) return referencia;
+        if (Cobranca.ESTORNADA.equals(c.getStatus())) return null;
+        return devolverDeNovo(c, valor);
+    }
+    private String devolverDeNovo(Cobranca c, BigDecimal valor) {
+        try { devolverCobranca(c, valor); return null; }
+        catch (EstornoAdiado adiado) { return adiado.referencia(c); }
+    }
+
+    /* ---------------- consulta ---------------- */
     /* ---------------- consulta ---------------- */
 
     @Transactional
@@ -771,7 +1012,7 @@ public class PagamentoService {
 
     private CobrancaDto DtoDe(Cobranca c) { return CobrancaDto.de(c); }
     /* Cobranças do próprio pedido; as de pendência (dívida paga depois) ficam fora das contas do pedido. */
-    private List<Cobranca> doPedido(String pedidoId) { return cobrancas.findByPedidoIdOrderByCriadaEmAsc(pedidoId).stream().filter(c -> !java.util.Set.of("pendencia", "etapa", "visita", "semana").contains(c.getTipo())).toList(); }
+    private List<Cobranca> doPedido(String pedidoId) { return cobrancas.findByPedidoIdOrderByCriadaEmAsc(pedidoId).stream().filter(c -> !TIPOS_FORA_DO_PEDIDO.contains(c.getTipo())).toList(); }
 
     public record NovoCartao(String numero, String titular, Integer mes, Integer ano, String cvv, Boolean padrao) {}
     public record CartaoDto(String id, String bandeira, String final4, int mes, int ano, String titular, boolean padrao, boolean vencido) {

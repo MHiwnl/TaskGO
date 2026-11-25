@@ -54,7 +54,8 @@ function pageEntrar(){
   '<div class="field"><label for="auth-email">E-mail</label><input class="input" id="auth-email" type="email" name="email" autocomplete="email" required placeholder="voce@email.com"></div>'+
   '<div class="field"><label for="auth-pass">Senha</label><div class="password-field"><input class="input" id="auth-pass" type="password" name="pass" required'+(isLogin?' autocomplete="current-password"':' minlength="12" maxlength="128" autocomplete="new-password" placeholder="12 caracteres ou mais" oninput="conferirSenhaCampo(this,(document.getElementById(\'auth-email\')||{}).value,(document.getElementById(\'auth-name\')||{}).value)"')+'><button class="password-toggle" type="button" aria-label="Mostrar senha" aria-pressed="false" onclick="alternarVisibilidadeSenha(this)">'+ic('eye')+'</button></div>'+(isLogin?'':blocoRegrasSenha('auth-pass'))+'</div>'+
   (isLogin?'<div class="lp-auth-row"><label class="muted lp-auth-check"><input type="checkbox" checked> Lembrar de mim</label><a href="#/recuperar" class="lp-auth-link">Esqueci a senha</a></div>'
-  :'<label class="muted lp-auth-check lp-auth-terms"><input type="checkbox" required> Li e aceito os <a href="#/legal/termos" class="lp-auth-link">Termos de Uso</a> e a <a href="#/legal/privacidade" class="lp-auth-link">Política de Privacidade</a>.</label>')+
+  :'<label class="muted lp-auth-check lp-auth-terms"><input type="checkbox" name="maior" required> Tenho 18 anos ou mais.</label>'+
+   '<label class="muted lp-auth-check lp-auth-terms"><input type="checkbox" required> Li e aceito os <a href="#/legal/termos" class="lp-auth-link">Termos de Uso</a> e a <a href="#/legal/privacidade" class="lp-auth-link">Política de Privacidade</a>.</label>')+
   '<button class="btn btn-grad btn-block btn-lg">'+(isLogin?'Entrar':'Criar conta')+'</button></form>'+
   (isLogin?blocoGoogle():'')+
   '</div></div></div>';
@@ -357,7 +358,8 @@ async function doAuth(e){
       proId:u.proId,
       cidade:u.city,
       endereco:u.address,
-      bio:u.bio
+      bio:u.bio,
+      maiorDeIdade:f.get('maior')==='on'
     };
     const criarConta=async()=>{
       const response=await fetch(API_BASE_URL+'/api/auth/registrar',{

@@ -16,10 +16,13 @@ let pular=null;
 
 async function cmd(method,params={}){return new Promise(r=>{const i=++id;pend[i]=r;ws.send(JSON.stringify({id:i,method,params}));});}
 async function js(expr){const r=await cmd('Runtime.evaluate',{expression:expr,awaitPromise:true,returnByValue:true});if(r.result.exceptionDetails)throw new Error(r.result.exceptionDetails.exception?.description||r.result.exceptionDetails.text);return r.result.result.value;}
-/* Espera o tempo pedido e, na primeira carga (a frio), também a página terminar de carregar e desenhar. */
+/* Espera o tempo pedido e, na primeira carga (a frio), também a página terminar de carregar e desenhar.
+   A frio (Chrome recém-aberto, scripts com ?v= novo fora do cache) passava de 6,8 s e o teste lia a página vazia:
+   agora espera o conteúdo até 20 s e, se não vier, falha dizendo isso. */
 async function ir(url,ms=1800){
   await cmd('Page.navigate',{url});await espera(ms);
-  for(let i=0;i<25;i++){if(await js("document.readyState==='complete'&&document.body.innerText.trim().length>0"))break;await espera(200);}
+  for(let i=0;i<100;i++){if(await js("document.readyState==='complete'&&document.body.innerText.trim().length>0"))return;await espera(200);}
+  throw new Error('a página não desenhou em 20 s: '+url);
 }
 async function tamanho(w,h){await cmd('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<600});await espera(400);}
 const texto=()=>js("document.querySelector('main, #app, body').innerText.replace(/\\s+/g,' ')");

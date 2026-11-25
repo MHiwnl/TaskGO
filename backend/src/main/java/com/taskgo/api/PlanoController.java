@@ -45,6 +45,9 @@ public class PlanoController {
     @PostMapping("/cancelar")
     public Map<String, Object> cancelar(Authentication auth) { return planos.cancelar(id(auth)); }
 
+    @PostMapping("/desistir")
+    public Map<String, Object> desistir(Authentication auth) { return planos.desistir(id(auth)); }
+
     private Long id(Authentication auth) {
         if (auth == null || !(auth.getPrincipal() instanceof TaskgoPrincipal p)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         return p.id();

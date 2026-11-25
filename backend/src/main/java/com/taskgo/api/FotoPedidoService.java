@@ -30,6 +30,9 @@ public class FotoPedidoService {
     private final FotoPedidoRepository fotos;
     private final PedidoContratadoRepository pedidos;
     private final UsuarioRepository usuarios;
+    /* Foto da conversa: a equipe só vê com denúncia ou recurso em análise do pedido. Opcional nos testes. */
+    private ModeracaoService moderacao;
+    @org.springframework.beans.factory.annotation.Autowired(required = false) void setModeracao(ModeracaoService m) { this.moderacao = m; }
 
     public FotoPedidoService(FotoPedidoRepository fotos, PedidoContratadoRepository pedidos, UsuarioRepository usuarios) {
         this.fotos = fotos; this.pedidos = pedidos; this.usuarios = usuarios;
@@ -111,7 +114,7 @@ public class FotoPedidoService {
     public FotoPedido abrir(String fotoId, TaskgoPrincipal quem) {
         FotoPedido f = fotos.findById(fotoId).orElseThrow(() -> erro(HttpStatus.NOT_FOUND, "Foto não encontrada."));
         Pedido p = pedidos.findById(f.getPedidoId()).orElseThrow(() -> erro(HttpStatus.NOT_FOUND, "Foto não encontrada."));
-        boolean pode = "mensagem".equals(f.getContexto()) ? participante(p, quem) || equipe(quem) : podeVerDoPedido(p, quem);
+        boolean pode = "mensagem".equals(f.getContexto()) ? participante(p, quem) || equipeDaConversa(p, quem) : podeVerDoPedido(p, quem);
         if (!pode) throw erro(HttpStatus.NOT_FOUND, "Foto não encontrada.");
         if (f.getDados() == null) throw erro(HttpStatus.NOT_FOUND, "Foto não encontrada."); /* carrega os bytes dentro da transação */
         return f;
@@ -140,5 +143,11 @@ public class FotoPedidoService {
         return quem.email().equalsIgnoreCase(String.valueOf(p.getClientEmail())) || quem.email().equalsIgnoreCase(String.valueOf(p.getProEmail()));
     }
     static boolean equipe(TaskgoPrincipal quem) { return PapelEquipe.equipe(quem.tipo()); }
+    private boolean equipeDaConversa(Pedido p, TaskgoPrincipal quem) {
+        if (moderacao == null || !PapelEquipe.areas(PapelEquipe.papelDe(quem, moderacao)).contains(PapelEquipe.Area.MODERACAO)) return false;
+        Long clienteId = idDe(p.getClientEmail()), proId = idDe(p.getProEmail());
+        return moderacao.motivoAcessoConversa(p.getId(), clienteId, proId) != null;
+    }
+    private Long idDe(String email) { return email == null ? null : usuarios.findByEmailIgnoreCase(email).map(Usuario::getId).orElse(null); }
     private static ResponseStatusException erro(HttpStatus s, String m) { return new ResponseStatusException(s, m); }
 }

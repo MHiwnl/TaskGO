@@ -54,7 +54,7 @@ function secaoDenunciasAdmin(){
   return '<section class="card" style="margin-top:16px"><h2 class="sub" style="font-size:1.05rem;margin-bottom:12px">Denúncias em análise ('+abertas.length+')</h2>'+
     (abertas.length?abertas.map(d=>'<article class="adm-recurso"><div class="adm-quem"><b>'+esc(d.denunciado.nome||'Conta')+'</b><small>'+esc(d.denunciado.email||'')+situacaoCurta(d.denunciado)+' · '+d.denunciasContraEle+' denúncia(s) no total</small></div>'+
       '<p><span class="tag tag-warn">'+esc(d.motivoTexto)+'</span>'+(d.texto?' '+esc(d.texto):'')+'</p>'+
-      '<small class="muted">Feita por '+esc(d.denunciante.nome||'')+' · '+dataHora(d.criadaEm)+(d.pedidoId?' · <button type="button" class="log-quem" onclick="verPedidoAdmin(\''+esc(d.pedidoId)+'\')">ver pedido</button>':'')+'</small>'+
+      '<small class="muted">Feita por '+esc(d.denunciante.nome||'')+' · '+dataHora(d.criadaEm)+(d.pedidoId?' · <button type="button" class="log-quem" onclick="verPedidoAdmin(\''+esc(d.pedidoId)+'\')">ver pedido</button> · <button type="button" class="log-quem" onclick="verConversaPedido(\''+esc(d.pedidoId)+'\')">ver conversa</button>':'')+'</small>'+
       '<div class="field" style="margin:12px 0 10px"><label for="dresp-'+esc(d.id)+'">Resposta para quem denunciou (opcional)</label><input class="input" id="dresp-'+esc(d.id)+'" maxlength="500"></div>'+
       '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="decidirDenuncia(\''+esc(d.id)+'\',\'improcedente\',false)">Improcedente</button>'+
       '<button class="btn btn-ghost btn-sm" onclick="decidirDenuncia(\''+esc(d.id)+'\',\'procedente\',false)">Procedente, sem aviso</button>'+

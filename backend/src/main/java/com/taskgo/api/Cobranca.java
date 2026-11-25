@@ -32,6 +32,9 @@ public class Cobranca {
     @Column(name = "criada_em", nullable = false) private long criadaEm;
     @Column(name = "paga_em") private Long pagaEm;
     @Column(name = "estornada_em") private Long estornadaEm;
+    /* Devolução pedida ao provedor e ainda não confirmada: a parte reservada e quando foi reservada (ver PagamentoService.estornarCobranca). */
+    @Column(name = "valor_estornando", precision = 19, scale = 2) private BigDecimal valorEstornando;
+    @Column(name = "estornando_desde") private Long estornandoDesde;
     @Column(name = "link_pagamento") private String linkPagamento;
     @Column(nullable = false, precision = 19, scale = 2) private BigDecimal juros = BigDecimal.ZERO.setScale(2);
 
@@ -60,6 +63,8 @@ public class Cobranca {
     public long getCriadaEm() { return criadaEm; }
     public Long getPagaEm() { return pagaEm; }
     public Long getEstornadaEm() { return estornadaEm; }
+    public BigDecimal getValorEstornando() { return valorEstornando; }
+    public Long getEstornandoDesde() { return estornandoDesde; }
     public String getLinkPagamento() { return linkPagamento; }
     public BigDecimal getJuros() { return juros; }
     void juros(BigDecimal j) { this.juros = j == null ? BigDecimal.ZERO.setScale(2) : j; }

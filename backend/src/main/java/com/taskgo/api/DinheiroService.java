@@ -275,7 +275,7 @@ public class DinheiroService {
         if (preco.compareTo(PagamentoService.MIL) >= 0) throw erro(HttpStatus.BAD_REQUEST, "A partir de R$ 1.000 não dá para pagar em dinheiro.");
         if ("concluido".equals(p.getStatus())) throw erro(HttpStatus.CONFLICT, "O serviço já foi concluído.");
         if (!"retido".equals(p.getPaid())) throw erro(HttpStatus.CONFLICT, "Este pedido não tem pagamento online para trocar.");
-        Map<String, Object> e = new LinkedHashMap<>(p.getExtra()); e.put(FORMA, DINHEIRO); e.put("trocouForma", true); e.remove("pagamentoPendente"); p.setExtra(e);
+        Map<String, Object> e = new LinkedHashMap<>(p.getExtra()); e.put(FORMA, DINHEIRO); e.put("trocouForma", true); e.remove("pagamentoPendente"); e.put(PagamentoService.ESTORNO_PARA_DINHEIRO, true); p.setExtra(e);
         pedidos.save(p);
         pagamentos.estornar(p);
         Pedido atual = pedidos.findById(pedidoId).orElseThrow();
@@ -284,7 +284,7 @@ public class DinheiroService {
             avisar(atendente, p.getId(), "O cliente vai pagar em dinheiro", "Receba " + reais(preco) + " em dinheiro no fim do serviço.", "troca-dinheiro:" + p.getId());
             eventos.enviar(atendente, "pedido", p.getId());
         }
-        auditar(clienteId, "Trocou o pagamento online para dinheiro (valor devolvido)", clienteId, p.getId());
+        auditar(clienteId, "Trocou o pagamento online para dinheiro (devolução iniciada)", clienteId, p.getId());
         return Map.of("forma", DINHEIRO);
     }
 

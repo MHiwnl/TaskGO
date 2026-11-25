@@ -99,7 +99,26 @@ public class VerificacaoController {
         return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG).cacheControl(CacheControl.noStore()).header("X-Content-Type-Options", "nosniff").body(b);
     }
 
-    public record Decisao(String motivo, String correcao) {}
+    /* nascimento: data lida no documento (aaaa-mm-dd), obrigatória para aprovar. */
+    public record Decisao(String motivo, String correcao, String nascimento) {}
+
+    static final java.time.ZoneId FUSO = java.time.ZoneId.of("America/Recife");
+
+    /* 18 anos completos no dia do aniversário (Código Civil, art. 5º); quem nasceu em 29/02 completa em 01/03
+       nos anos sem 29/02 (art. 132, §3º: "no imediato, se faltar exata correspondência"). */
+    static boolean maiorDeIdade(java.time.LocalDate nascimento, java.time.LocalDate hoje) {
+        java.time.LocalDate dezoito = nascimento.plusYears(18);
+        if (dezoito.getDayOfMonth() != nascimento.getDayOfMonth()) dezoito = dezoito.plusDays(1);
+        return !dezoito.isAfter(hoje);
+    }
+
+    static java.time.LocalDate dataNascimento(String texto, java.time.LocalDate hoje) {
+        java.time.LocalDate d;
+        try { d = java.time.LocalDate.parse(texto == null ? "" : texto.trim()); }
+        catch (java.time.format.DateTimeParseException e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a data de nascimento do documento."); }
+        if (d.isAfter(hoje) || d.getYear() < 1900) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Data de nascimento inválida.");
+        return d;
+    }
 
     @PostMapping("/api/admin/verificacoes/{id}/{decisao}")
     @Transactional
@@ -108,23 +127,31 @@ public class VerificacaoController {
         if (!decisao.equals("aprovar") && !decisao.equals("recusar")) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Decisão inválida.");
         Verificacao v = verificacoes.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!Verificacao.PENDENTE.equals(v.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta verificação já foi decidida.");
-        boolean aprovada = decisao.equals("aprovar");
+        boolean pediuAprovar = decisao.equals("aprovar");
+        final java.time.LocalDate nascimento = pediuAprovar ? dataNascimento(body == null ? null : body.nascimento(), java.time.LocalDate.now(FUSO)) : null;
+        final boolean menor = nascimento != null && !maiorDeIdade(nascimento, java.time.LocalDate.now(FUSO));
+        final boolean aprovada = pediuAprovar && !menor;
         String motivo = body == null || body.motivo() == null ? null : body.motivo().trim();
+        String correcao = body == null || body.correcao() == null ? null : body.correcao().trim();
+        if (menor) { motivo = "Menor de 18 anos"; correcao = "Não há correção: a TaskGO é só para maiores de 18 anos."; }
         if (!aprovada && (motivo == null || motivo.length() < 5)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Diga o motivo da recusa (a pessoa vai ver).");
         if (motivo != null && motivo.length() > 300) motivo = motivo.substring(0, 300);
-        String correcao = body == null || body.correcao() == null ? null : body.correcao().trim();
         if (!aprovada && (correcao == null || correcao.length() < 5)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Diga como a pessoa corrige (ela vai ver).");
         if (correcao != null && correcao.length() > 500) correcao = correcao.substring(0, 500);
         long agora = System.currentTimeMillis();
         v.decidir(aprovada, aprovada ? null : motivo, aprovada ? null : correcao, a.id(), agora);
         verificacoes.save(v);
         usuarios.findById(v.getUsuarioId()).ifPresent(u -> {
-            if (aprovada) { u.getExtra().put(CHAVE, true); u.getExtra().put("verificadoEm", agora); usuarios.save(u); }
+            if (nascimento != null) u.setBirth(nascimento.toString());
+            if (aprovada) { u.getExtra().put(CHAVE, true); u.getExtra().put("verificadoEm", agora); }
+            usuarios.save(u);
             notificacoes.criar(u.getId(), null, "conta", aprovada ? "Identidade verificada" : "Verificação recusada",
                     aprovada ? "Sua conta está liberada para usar a TaskGO." : "Motivo: " + v.getMotivo() + ". Como corrigir: " + v.getCorrecao(), "verificacao-decisao:" + v.getId());
         });
         moderacao.registrar(v.getUsuarioId(), "verificacao", aprovada ? "Identidade verificada" : "Verificação recusada: " + v.getMotivo(), a.id(), null);
-        return Map.of("status", v.getStatus());
+        /* Conta já excluída com verificação pendente: só registra a recusa (banir lançaria 404 e desfaria tudo). */
+        if (menor && usuarios.existsById(v.getUsuarioId())) moderacao.banir(v.getUsuarioId(), true, a.id());
+        return Map.of("status", v.getStatus(), "menorDeIdade", menor);
     }
 
     private TaskgoPrincipal principal(Authentication a) {

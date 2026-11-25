@@ -34,7 +34,7 @@ function historicoConta(s){
       '<p>'+esc(h.texto)+'</p><small>'+dataHora(h.quando)+'</small></li>').join('')+'</ul></section>';
 }
 function dashSituacaoConta(){
-  const s=situacaoConta(),emAnalise=(s.recursos||[]).some(r=>r.status==='em_analise');
+  const s=situacaoConta(),emAnalise=(s.recursos||[]).some(r=>r.status==='em_analise'),avisos=(s.historico||[]).filter(h=>h.tipo==='aviso');
   const passos=[['1º aviso','A mensagem não é enviada e a conta recebe um aviso.'],['2º aviso','A conta fica suspensa por 24 horas.'],['3º aviso','A conta é banida.']];
   return '<a href="#/app/inicio" class="pill" style="margin-bottom:18px">'+ic('arrowLeft')+' Voltar</a>'+
   dashHead('Situação da conta','A conversa da TaskGO não aceita números, valores nem contatos.')+
@@ -45,7 +45,10 @@ function dashSituacaoConta(){
   '<section class="card"><h2 class="sub" style="font-size:1.05rem">Recurso</h2>'+
     (!s.avisos?'<p class="muted" style="margin-top:6px;font-size:.9rem">Sem avisos, não há o que contestar.</p>':
      emAnalise?'<p class="muted" style="margin-top:6px;font-size:.9rem">Seu recurso está em análise. A resposta chega nas notificações.</p>':
-     '<form onsubmit="enviarRecurso(event)" style="margin-top:10px"><div class="field"><label for="textoRecurso">O que aconteceu?</label>'+
+     '<form onsubmit="enviarRecurso(event)" style="margin-top:10px">'+
+     (avisos.some(h=>h.pedidoId)?'<div class="field"><label for="avisoRecurso">Qual aviso você contesta?</label><select class="input" id="avisoRecurso">'+
+       avisos.map(h=>'<option value="'+esc(h.pedidoId||'')+'">'+esc(h.texto)+' · '+dataHora(h.quando)+'</option>').join('')+'</select></div>':'')+
+     '<div class="field"><label for="textoRecurso">O que aconteceu?</label>'+
      '<textarea class="textarea" id="textoRecurso" minlength="10" maxlength="2000" required placeholder="Ex.: eu escrevi o número do apartamento, não um telefone."></textarea>'+
      '<div class="hint">Um administrador lê e decide. Aprovado, o aviso sai da conta junto com a punição dele.</div></div>'+
      '<button class="btn btn-primary" id="btnRecurso">Enviar recurso</button></form>')+
@@ -55,12 +58,12 @@ function dashSituacaoConta(){
 }
 async function enviarRecurso(e){
   e.preventDefault();
-  const texto=($('#textoRecurso')||{}).value.trim(),botao=$('#btnRecurso');
+  const texto=($('#textoRecurso')||{}).value.trim(),botao=$('#btnRecurso'),pedidoId=($('#avisoRecurso')||{}).value||'';
   if(texto.length<10)return toast('Explique o que aconteceu com pelo menos 10 caracteres.','err');
   if(botao){botao.disabled=true;botao.textContent='Enviando...';}
   try{
     if(DEMO_MODE){const d=S.demoModeracao;d.recursos=[{id:'r_'+uid(),texto,status:'em_analise',criadoEm:Date.now()}].concat(d.recursos||[]);Store.save();}
-    else{await apiJSON('/api/moderacao/recursos','POST',{texto},'O recurso não foi enviado.');await carregarSituacaoConta();}
+    else{await apiJSON('/api/moderacao/recursos','POST',{texto,pedidoId},'O recurso não foi enviado.');await carregarSituacaoConta();}
     toast('Recurso enviado. A resposta chega nas notificações.','ok');render();
   }catch(error){toast(erroLegivel(error,'O recurso não foi enviado.'),'err');if(botao){botao.disabled=false;botao.textContent='Enviar recurso';}}
 }
@@ -95,6 +98,9 @@ function dashAdmin(){
   (r==null?'<p class="muted">Carregando...</p>':pendentes.length?pendentes.map(x=>
     '<article class="adm-recurso"><div class="adm-quem"><b>'+esc(x.usuario?.nome||'Conta')+'</b><small>'+esc(x.usuario?.email||'')+' · '+esc(x.usuario?.tipo||'')+' · '+(x.usuario?.avisos||0)+' aviso(s)'+(x.usuario?.banido?' · banida':x.usuario?.suspenso?' · suspensa':'')+'</small></div>'+
     '<p>'+esc(x.texto)+'</p><small class="muted">'+dataHora(x.criadoEm)+'</small>'+
+    /* O botão vem do recurso, não da lista de avisos (que mostra só os 10 mais recentes). */
+    (x.pedidoId?' <button type="button" class="log-quem" onclick="verConversaPedido(\''+esc(x.pedidoId)+'\')">ver conversa do pedido contestado</button>':'')+
+    ((x.avisos||[]).length?'<ul class="lista-recursos">'+x.avisos.map(a=>'<li><span class="tag tag-warn">Aviso</span><p>'+esc(a.texto)+'</p><small>'+dataHora(a.quando)+'</small></li>').join('')+'</ul>':'')+
     '<div class="field" style="margin:12px 0 10px"><label for="resp-'+esc(x.id)+'">Resposta para a pessoa (opcional)</label><input class="input" id="resp-'+esc(x.id)+'" maxlength="500"></div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="decidirRecurso(\''+esc(x.id)+'\',\'negar\')">Negar</button><button class="btn btn-primary btn-sm" onclick="decidirRecurso(\''+esc(x.id)+'\',\'aprovar\')">'+ic('check')+' Aprovar e retirar um aviso</button></div></article>').join(''):
     '<p class="muted">Nenhum recurso esperando decisão.</p>')+'</section>'+
@@ -119,6 +125,17 @@ async function banirConta(id,banir){
   if(banir&&!await confirmar({titulo:'Banir esta conta?',texto:'Ela perde acesso a pedidos, propostas e conversas.',botao:'Banir',perigo:true}))return;
   try{await apiJSON('/api/admin/usuarios/'+id+'/'+(banir?'banir':'desbanir'),'POST',undefined,'A ação não foi salva.');toast(banir?'Conta banida.':'Conta desbanida.','ok');carregarAdmin();}
   catch(error){toast(erroLegivel(error,'A ação não foi salva.'),'err');}
+}
+
+/* Conversa só para leitura, e só com caso aberto (denúncia ou recurso em análise): o servidor recusa o resto e registra a abertura. */
+async function verConversaPedido(pedidoId){
+  if(DEMO_MODE)return toast('A conversa de um pedido só aparece na versão conectada.','err');
+  try{
+    const [msgs,ped]=await Promise.all([apiJSON('/api/admin/pedidos/'+encodeURIComponent(pedidoId)+'/mensagens','GET',undefined,'Não foi possível abrir a conversa.'),apiJSON('/api/admin/pedidos/'+encodeURIComponent(pedidoId),'GET',undefined,'Não foi possível abrir o pedido.')]);
+    const quem=id=>ped.cliente&&ped.cliente.id===id?'Cliente':ped.profissional&&ped.profissional.id===id?'Profissional':'Outra pessoa';
+    openModal('<div class="modal-head"><div><h3>Conversa do pedido</h3><p>Só leitura. Fica registrado que a equipe abriu esta conversa.</p></div><button class="icon-btn" aria-label="Fechar" onclick="closeModal()">'+ic('x')+'</button></div>'+
+      (msgs.length?'<ul class="lista-recursos">'+msgs.map(m=>'<li><span class="tag tag-muted">'+esc(quem(m.autorId))+'</span>'+(m.automatica?' <small class="muted">automática</small>':'')+'<p>'+(m.fotoId?'<small class="muted">[foto enviada]</small> ':'')+esc(m.texto||'')+'</p><small>'+dataHora(m.criadaEm)+'</small></li>').join('')+'</ul>':'<p class="muted">Nenhuma mensagem neste pedido.</p>'));
+  }catch(error){toast(erroLegivel(error,'Não foi possível abrir a conversa.'),'err');}
 }
 
 /* ================= Eventos ao vivo (SSE) ================= */

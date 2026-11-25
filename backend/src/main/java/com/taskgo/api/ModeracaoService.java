@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -44,6 +45,13 @@ public class ModeracaoService {
         if (notificacoes == null || usuarioId == null) return;
         try { notificacoes.criar(usuarioId, null, "conta", titulo, texto, "conta:" + java.util.UUID.randomUUID()); } catch (RuntimeException ignorar) { }
     }
+    /* Denúncia e recurso em análise: só eles abrem a conversa de um pedido para a equipe. Opcionais nos testes. */
+    private DenunciaRepository denuncias;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setDenuncias(DenunciaRepository denuncias) { this.denuncias = denuncias; }
+    private RecursoRepository recursos;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setRecursos(RecursoRepository recursos) { this.recursos = recursos; }
     public void registrar(Long usuarioId, String tipo, String texto, Long autorId, String pedidoId) {
         if (historico != null && usuarioId != null) historico.save(new HistoricoConta(usuarioId, tipo, texto, autorId, pedidoId, System.currentTimeMillis()));
     }
@@ -109,7 +117,7 @@ public class ModeracaoService {
         u.getExtra().remove(SUSPENSO_ATE);
         if (avisos < 3) u.getExtra().remove(BANIDO);
         usuarios.save(u);
-        registrar(usuarioId, "recurso", "Recurso aprovado: um aviso retirado (agora " + avisos + " de 3)", autorId, null);
+        registrar(usuarioId, "recurso", "Recurso aprovado na revisão por pessoa da equipe: um aviso retirado (agora " + avisos + " de 3)", autorId, null);
         avisarConta(usuarioId, "Um aviso foi retirado", "Agora você tem " + avisos + " de 3 avisos.");
         return situacao(u);
     }
@@ -124,6 +132,26 @@ public class ModeracaoService {
         usuarios.save(u);
         avisarConta(usuarioId, banir ? "Conta banida pela administração" : "Conta liberada", banir ? "Se achar que foi um engano, peça revisão em Configurações." : "Você já pode usar a TaskGO normalmente.");
         return situacao(u);
+    }
+
+    /* Motivo para a equipe abrir a conversa do pedido, ou null. Só denúncia ou recurso em análise abre. */
+    public String motivoAcessoConversa(String pedidoId, Long clienteId, Long proId) {
+        if (pedidoId == null) return null;
+        if (denuncias != null && denuncias.existsByPedidoIdAndStatus(pedidoId, Denuncia.EM_ANALISE)) return "denúncia em análise";
+        if (recursos == null) return null;
+        /* O recurso diz de qual pedido é o aviso contestado; outro pedido da mesma pessoa não abre. */
+        for (Long id : java.util.Arrays.asList(clienteId, proId))
+            if (id != null && recursos.existsByUsuarioIdAndStatusAndPedidoId(id, Recurso.EM_ANALISE, pedidoId)) return "recurso em análise";
+        return null;
+    }
+    /* Abre a conversa para a equipe de moderação (sem marcar nada como lido) e deixa o registro na conta de cada participante. */
+    public void exigirAcessoConversa(Authentication auth, String pedidoId, Long clienteId, Long proId) {
+        TaskgoPrincipal quem = PapelEquipe.exigir(auth, this, PapelEquipe.Area.MODERACAO);
+        String motivo = motivoAcessoConversa(pedidoId, clienteId, proId);
+        if (motivo == null) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Só dá para abrir a conversa de um pedido com denúncia ou recurso em análise.");
+        String quemTexto = quem.nome() + " (" + PapelEquipe.papelDe(quem, this) + ")";
+        for (Long id : java.util.Arrays.asList(clienteId, proId))
+            if (id != null) registrar(id, "acesso", quemTexto + " abriu a conversa do pedido — motivo: " + motivo, quem.id(), pedidoId);
     }
 
     /* Barra quem está suspenso ou banido de pedidos, propostas e conversa. */

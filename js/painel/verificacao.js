@@ -99,7 +99,18 @@ function adminVerificacoes(){
     '<div class="verif-admin-cab"><div><b>'+esc(v.nome)+'</b><small class="muted">'+esc(v.email||'')+' · '+(v.tipo==='profissional'?'Profissional':'Cliente')+(v.cpf?' · CPF '+esc(v.cpf):'')+(v.nascimento?' · nasc. '+esc(v.nascimento):'')+'</small></div>'+
     '<small class="muted">Enviada '+dataHora(v.enviadaEm)+'</small></div>'+
     '<div class="verif-fotos">'+miniatura(img(v.id,'frente'),'Documento, frente')+(v.temVerso?miniatura(img(v.id,'verso'),'Documento, verso'):'')+miniatura(img(v.id,'selfie'),'Selfie')+'</div>'+
-    '<div class="pag-acoes"><button class="btn btn-ghost" onclick="recusarVerificacao(\''+esc(v.id)+'\')">Recusar</button><button class="btn btn-primary" onclick="decidirVerificacao(\''+esc(v.id)+'\',\'aprovar\')">'+ic('check')+'Aprovar</button></div></section>').join('');
+    '<div class="pag-acoes"><button class="btn btn-ghost" onclick="recusarVerificacao(\''+esc(v.id)+'\')">Recusar</button><button class="btn btn-primary" onclick="aprovarVerificacao(\''+esc(v.id)+'\')">'+ic('check')+'Aprovar</button></div></section>').join('');
+}
+/* A data vem do documento, nunca do perfil (que a própria pessoa preenche): o campo abre vazio. */
+function aprovarVerificacao(id){
+  openModal('<div class="modal-head"><div><h3>Aprovar verificação</h3><p>Digite a data de nascimento que está no documento.</p></div><button class="icon-btn" aria-label="Fechar" onclick="closeModal()">'+ic('x')+'</button></div>'+
+    '<div class="field"><label for="vNasc">Data de nascimento</label><input class="input" id="vNasc" type="date" required max="'+new Date().toISOString().slice(0,10)+'"></div>'+
+    '<div class="pag-form-acoes"><button class="btn btn-ghost" onclick="closeModal()">Voltar</button><button class="btn btn-primary" onclick="confirmarAprovacaoVerificacao(\''+esc(id)+'\')">'+ic('check')+'Aprovar</button></div>');
+}
+function confirmarAprovacaoVerificacao(id){
+  const n=$('#vNasc').value;
+  if(!n)return toast('Digite a data de nascimento do documento.','err');
+  decidirVerificacao(id,'aprovar',null,null,n);
 }
 /* Motivos prontos, cada um com a correção que a pessoa vê. "Outro" deixa escrever os dois. */
 const MOTIVOS_RECUSA=[
@@ -127,7 +138,8 @@ function confirmarRecusaVerificacao(id){
   if(correcao.length<5)return toast('Diga como a pessoa corrige.','err');
   decidirVerificacao(id,'recusar',motivo,correcao);
 }
-async function decidirVerificacao(id,decisao,motivo,correcao){
-  try{await apiJSON('/api/admin/verificacoes/'+encodeURIComponent(id)+'/'+decisao,'POST',{motivo:motivo||null,correcao:correcao||null},'Não foi possível decidir.');closeModal();toast(decisao==='aprovar'?'Verificação aprovada':'Verificação recusada','ok');verifAdmin=null;render();}
+async function decidirVerificacao(id,decisao,motivo,correcao,nascimento){
+  try{const r=await apiJSON('/api/admin/verificacoes/'+encodeURIComponent(id)+'/'+decisao,'POST',{motivo:motivo||null,correcao:correcao||null,nascimento:nascimento||null},'Não foi possível decidir.');closeModal();
+    toast(r&&r.menorDeIdade?'Menor de 18 anos: verificação recusada e conta banida':decisao==='aprovar'?'Verificação aprovada':'Verificação recusada',r&&r.menorDeIdade?'err':'ok');verifAdmin=null;render();}
   catch(e){toast(erroLegivel(e,'Não foi possível decidir.'),'err');}
 }

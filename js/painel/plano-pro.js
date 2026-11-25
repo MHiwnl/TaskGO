@@ -136,6 +136,7 @@ function blocoAssinatura(d){
         (d.forma==='pix'&&d.podePagar&&!pixAberto?'<button class="btn btn-primary" onclick="pagarMesPlano()"'+(PLANO.enviando?' disabled':'')+'>'+ic('pix')+'Pagar o próximo mês</button>':'')+
         (PLANO.trocando?'':'<button class="btn btn-ghost" onclick="PLANO.trocando=true;PLANO.metodo=null;render()">'+ic('card')+'Trocar forma de pagamento</button>')+
         '<button class="btn btn-danger" onclick="cancelarPlano()"'+(PLANO.enviando?' disabled':'')+'>Cancelar renovação</button>')+
+    (d.desistirAte?'<button class="btn btn-ghost" onclick="desistirPlano()"'+(PLANO.enviando?' disabled':'')+'>Desistir e receber o valor de volta (até '+dataCurta(d.desistirAte)+')</button>':'')+
     '</div>';
 }
 function blocoTrocarForma(d){
@@ -176,6 +177,16 @@ async function cancelarPlano(){
   PLANO.enviando=true;render();
   try{const r=await apiJSON('/api/plano/cancelar','POST',undefined,'Não foi possível cancelar.');PLANO.dados=r.situacao;toast('Renovação cancelada. O plano vale até '+dataCurta(d.pagoAte)+'.','ok');}
   catch(e){toast(erroLegivel(e,'Não foi possível cancelar.'),'err');}
+  PLANO.enviando=false;render();
+}
+
+async function desistirPlano(){
+  const d=PLANO.dados;if(!d||!d.desistirAte)return;
+  const ok=await confirmar({titulo:'Desistir do Plano Pro?',texto:'Os benefícios acabam na hora e a renovação é cancelada. Você recebe de volta todo o valor pago no plano.',botao:'Desistir',perigo:true});
+  if(!ok)return;
+  PLANO.enviando=true;render();
+  try{const r=await apiJSON('/api/plano/desistir','POST',undefined,'Não foi possível desistir.');PLANO.dados=r.situacao;toast(r.aviso,'ok');}
+  catch(e){toast(erroLegivel(e,'Não foi possível desistir.'),'err');}
   PLANO.enviando=false;render();
 }
 

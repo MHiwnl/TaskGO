@@ -1,0 +1,519 @@
+package com.taskgo.api;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronizationUtils;
+
+/* Devolução no Asaas e no saldo: reserva antes, confirma depois, conciliação quando a resposta se perdeu. */
+class PagamentoEstornoTest {
+    private final CobrancaRepository cobrancas = mock(CobrancaRepository.class);
+    private final PedidoContratadoRepository pedidos = mock(PedidoContratadoRepository.class);
+    private final TransacaoFinanceiraRepository transacoes = mock(TransacaoFinanceiraRepository.class);
+    private final CarteiraRepository carteiras = mock(CarteiraRepository.class);
+    private final UsuarioRepository usuarios = mock(UsuarioRepository.class);
+    private final AsaasCliente asaas = mock(AsaasCliente.class);
+    private final NotificacaoService notificacoes = mock(NotificacaoService.class);
+    private final ProvedorPix pix = mock(ProvedorPix.class);
+    private final ObjectMapper json = new ObjectMapper();
+    private final PagamentoService svc = new PagamentoService("asaas", new BigDecimal("0.15"), cobrancas, mock(CartaoRepository.class),
+            pedidos, usuarios, carteiras, transacoes, pix, mock(EventosService.class), mock(PublicacaoPedidoService.class));
+
+    PagamentoEstornoTest() {
+        svc.setAsaas(asaas);
+        svc.setNotificacoes(notificacoes);
+    }
+
+    private static Cobranca asaasPaga(String id, String valor) {
+        Cobranca c = new Cobranca(id, "p1", 7L, "cartao", "principal", new BigDecimal(valor), "asaas", 0);
+        c.externa("asaas-" + id, null);
+        c.pagar(1);
+        return c;
+    }
+
+    private static Cobranca simuladaPaga(String id, String valor) {
+        Cobranca c = new Cobranca(id, "p1", 7L, "cartao", "principal", new BigDecimal(valor), "cartao-simulado", 0);
+        c.pagar(1);
+        return c;
+    }
+
+    private static Pedido pedido(String id, String status, String paid) {
+        Pedido p = new Pedido();
+        ReflectionTestUtils.setField(p, "id", id);
+        p.setStatus(status);
+        p.setPaid(paid);
+        p.setClientId("7");
+        return p;
+    }
+
+    /* Como ficaria a cobrança no banco depois da reserva (a reserva é feita pelo SQL, que o mock não executa). */
+    private static void reservada(Cobranca c, long desde) {
+        ReflectionTestUtils.setField(c, "valorEstornando", c.getValor());
+        ReflectionTestUtils.setField(c, "estornandoDesde", desde);
+    }
+
+    private JsonNode devolucoes(String descricao, String status, String valor) throws Exception {
+        return json.readTree("{\"data\":[{\"description\":\"" + descricao + "\",\"status\":\"" + status + "\",\"value\":" + valor + "}],\"hasMore\":false}");
+    }
+
+    private JsonNode semDevolucoes() throws Exception { return json.readTree("{\"data\":[],\"hasMore\":false}"); }
+
+    /* Motivo mandado ao Asaas: "Devolução TaskGO <id>:<desde>". Devolve o "desde" para a conciliação achar a mesma marca. */
+    private long desdeDoPedidoAoAsaas(ArgumentCaptor<String> motivo) {
+        verify(asaas).estornar(eq("asaas-c1"), any(), motivo.capture());
+        return Long.parseLong(motivo.getValue().substring(motivo.getValue().lastIndexOf(':') + 1));
+    }
+
+    private void conciliacaoVeEssaCobranca(Cobranca c) {
+        when(cobrancas.findByValorEstornandoIsNotNullAndEstornandoDesdeLessThan(anyLong())).thenReturn(List.of(c));
+        when(cobrancas.findById("c1")).thenReturn(Optional.of(c));
+    }
+
+    @Test void asaasAceitouEDepoisFalhaAGravacaoNaoDevolveDeNovo() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1, 0);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        doThrow(new IllegalStateException("falha ao gravar")).doReturn(null).when(transacoes).save(any());
+
+        assertThrows(IllegalStateException.class, () -> svc.devolverCobranca(c, new BigDecimal("100.00")));
+
+        ArgumentCaptor<String> motivo = ArgumentCaptor.forClass(String.class);
+        long desde = desdeDoPedidoAoAsaas(motivo);
+        reservada(c, desde);
+        /* Segunda devolução com a reserva ainda aberta (ex.: a pendência tentando de novo): não pode pedir ao Asaas. */
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("100.00")));
+        verify(asaas, times(1)).estornar(any(), any(), any());
+        conciliacaoVeEssaCobranca(c);
+        when(asaas.listarEstornos("asaas-c1")).thenReturn(devolucoes(motivo.getValue(), "DONE", "100.00"));
+
+        svc.repetirDevolucoes();
+
+        verify(asaas, times(1)).estornar(any(), any(), any());
+        verify(cobrancas, times(2)).concluirEstorno(eq("c1"), eq(new BigDecimal("100.00")), anyLong(), eq(Cobranca.ESTORNADA));
+    }
+
+    @Test void respostaPerdidaComDevolucaoAceitaNaoPedeDeNovo() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        doThrow(new AsaasCliente.Erro(503, "O Asaas não respondeu.")).when(asaas).estornar(any(), any(), any());
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("100.00")));
+
+        ArgumentCaptor<String> motivo = ArgumentCaptor.forClass(String.class);
+        reservada(c, desdeDoPedidoAoAsaas(motivo));
+        conciliacaoVeEssaCobranca(c);
+        when(asaas.listarEstornos("asaas-c1")).thenReturn(devolucoes(motivo.getValue(), "DONE", "100.00"));
+
+        svc.repetirDevolucoes();
+
+        verify(asaas, times(1)).estornar(any(), any(), any());
+        verify(cobrancas, never()).liberarEstorno(anyString(), anyLong());
+        verify(cobrancas).concluirEstorno(eq("c1"), eq(new BigDecimal("100.00")), anyLong(), eq(Cobranca.ESTORNADA));
+    }
+
+    @Test void devolucaoCanceladaNoAsaasSoltaAReservaEASoProximaRodadaPede() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.liberarEstorno(eq("c1"), anyLong())).thenReturn(1);
+        doThrow(new AsaasCliente.Erro(503, "O Asaas não respondeu.")).when(asaas).estornar(any(), any(), any());
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("100.00")));
+
+        ArgumentCaptor<String> motivo = ArgumentCaptor.forClass(String.class);
+        long desde = desdeDoPedidoAoAsaas(motivo);
+        reservada(c, desde);
+        conciliacaoVeEssaCobranca(c);
+        when(asaas.listarEstornos("asaas-c1")).thenReturn(devolucoes(motivo.getValue(), "CANCELLED", "100.00"));
+        svc.repetirDevolucoes();
+        verify(cobrancas).liberarEstorno("c1", desde);
+
+        org.mockito.Mockito.reset(asaas);
+        svc.devolverCobranca(c, new BigDecimal("100.00"));
+        verify(asaas, times(1)).estornar(eq("asaas-c1"), any(), anyString());
+    }
+
+    /* Regressão: a conciliação procurava só a marca na descrição. Se o Asaas devolvesse o texto diferente,
+       "não achei" soltava a reserva e a rodada seguinte devolvia de novo. Agora confere o total devolvido lá. */
+    @Test void devolucaoFeitaSemANossaMarcaNaoSoltaAReservaNemDevolveDeNovo() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        doThrow(new AsaasCliente.Erro(503, "O Asaas não respondeu.")).when(asaas).estornar(any(), any(), any());
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("100.00")));
+
+        ArgumentCaptor<String> motivo = ArgumentCaptor.forClass(String.class);
+        long desde = desdeDoPedidoAoAsaas(motivo);
+        reservada(c, desde);
+        conciliacaoVeEssaCobranca(c);
+        when(asaas.listarEstornos("asaas-c1")).thenReturn(devolucoes("Estorno", "DONE", "100.00"));
+
+        svc.repetirDevolucoes();
+
+        verify(cobrancas, never()).liberarEstorno(anyString(), anyLong());
+        verify(cobrancas, never()).concluirEstorno(anyString(), any(), anyLong(), anyString());
+        verify(asaas, times(1)).estornar(any(), any(), any());
+    }
+
+    @Test void divergenciaDeValorMantemAReservaEAlertaSemPedirDeNovo() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        doThrow(new AsaasCliente.Erro(503, "O Asaas não respondeu.")).when(asaas).estornar(any(), any(), any());
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("100.00")));
+
+        ArgumentCaptor<String> motivo = ArgumentCaptor.forClass(String.class);
+        long desde = desdeDoPedidoAoAsaas(motivo);
+        reservada(c, desde);
+        conciliacaoVeEssaCobranca(c);
+        Usuario financeiro = mock(Usuario.class);
+        when(financeiro.getId()).thenReturn(9L);
+        when(usuarios.findByTipoIgnoreCaseOrderByNomeAsc("financeiro")).thenReturn(List.of(financeiro));
+        when(asaas.listarEstornos("asaas-c1")).thenReturn(devolucoes(motivo.getValue(), "DONE", "90.00"));
+
+        svc.repetirDevolucoes();
+        svc.repetirDevolucoes();
+
+        verify(asaas, times(1)).estornar(any(), any(), any());
+        verify(cobrancas, never()).liberarEstorno(anyString(), anyLong());
+        verify(cobrancas, never()).concluirEstorno(anyString(), any(), anyLong(), anyString());
+        String chave = "estorno-conferir:c1:" + desde + ":9";
+        verify(notificacoes, times(2)).criar(eq(9L), any(), anyString(), anyString(), anyString(), eq(chave));
+    }
+
+    @Test void recusaCertaDoAsaasSoltaAReservaEAProximaTentativaPede() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.liberarEstorno(eq("c1"), anyLong())).thenReturn(1);
+        when(asaas.estornar(any(), any(), any())).thenThrow(new AsaasCliente.Erro(400, "Valor inválido")).thenReturn(null);
+
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("100.00")));
+        verify(cobrancas).liberarEstorno(eq("c1"), anyLong());
+
+        svc.devolverCobranca(c, new BigDecimal("100.00"));
+        verify(asaas, times(2)).estornar(any(), any(), any());
+        verify(cobrancas, times(1)).concluirEstorno(eq("c1"), any(), anyLong(), anyString());
+    }
+
+    @Test void pedidoComDuasDevolucoesUmaFalhaAOutraFicaEstornada() {
+        Pedido pA = pedido("pA", "cancelado", "estornando");
+        Pedido pB = pedido("pB", "cancelado", "estornando");
+        Cobranca cA = simuladaPaga("cA", "100.00");
+        Cobranca cB = simuladaPaga("cB", "50.00");
+        when(pedidos.findByPaid("estornando")).thenReturn(List.of(pA, pB));
+        when(pedidos.findById("pA")).thenReturn(Optional.of(pA));
+        when(pedidos.findById("pB")).thenReturn(Optional.of(pB));
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("pA")).thenReturn(List.of(cA));
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("pB")).thenReturn(List.of(cB));
+        when(cobrancas.reservarEstorno(eq("cA"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.reservarEstorno(eq("cB"), any(), anyLong(), anyString())).thenThrow(new RuntimeException("banco caiu"));
+        when(cobrancas.concluirEstorno(eq("cA"), any(), anyLong(), anyString())).thenReturn(1);
+
+        svc.repetirDevolucoes();
+
+        assertEquals("estornado", pA.getPaid());
+        assertEquals("estornando", pB.getPaid());
+        verify(transacoes, times(1)).save(any());
+    }
+
+    @Test void pedidoEstornandoComCobrancasJaEstornadasFechaOPedido() {
+        Pedido p = pedido("p1", "cancelado", "estornando");
+        Cobranca c = simuladaPaga("c1", "100.00");
+        c.estornar(new BigDecimal("100.00"), 2);
+        when(pedidos.findByPaid("estornando")).thenReturn(List.of(p));
+        when(pedidos.findById("p1")).thenReturn(Optional.of(p));
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("p1")).thenReturn(List.of(c));
+
+        svc.repetirDevolucoes();
+
+        assertEquals("estornado", p.getPaid());
+        verify(pedidos).save(p);
+    }
+
+    @Test void carteiraCreditaUmaVezMesmoComDuasDevolucoes() {
+        Cobranca c = new Cobranca("c1", "p1", 7L, "carteira", "principal", new BigDecimal("100.00"), "carteira", 0);
+        c.pagar(1);
+        Carteira carteira = new Carteira(7L);
+        when(carteiras.findByUsuarioIdForUpdate(7L)).thenReturn(Optional.of(carteira));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1, 0);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+
+        svc.devolverCobranca(c, new BigDecimal("100.00"));
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("100.00")));
+
+        assertEquals(0, new BigDecimal("100").compareTo(carteira.getSaldoDisponivel()));
+    }
+
+    /* Regressão: a chave da devolução tinha ido para a referência, e o extrato do cliente (carteira-direta.js) passava a
+       mostrar "estorno:..." no lugar do pedido. A chave fica no id; a referência continua o pedido. */
+    @Test void registroDaDevolucaoMostraOPedidoEGuardaAChaveNoId() {
+        Cobranca c = new Cobranca("c1", "p1", 7L, "carteira", "principal", new BigDecimal("100.00"), "carteira", 0);
+        c.pagar(1);
+        when(carteiras.findByUsuarioIdForUpdate(7L)).thenReturn(Optional.of(new Carteira(7L)));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+
+        svc.devolverCobranca(c, new BigDecimal("100.00"));
+
+        ArgumentCaptor<TransacaoFinanceira> t = ArgumentCaptor.forClass(TransacaoFinanceira.class);
+        verify(transacoes, org.mockito.Mockito.atLeastOnce()).save(t.capture());
+        TransacaoFinanceira estorno = t.getAllValues().stream().filter(x -> "ESTORNO".equals(x.getTipo())).findFirst().orElseThrow();
+        assertEquals("p1", estorno.getReferencia());
+        org.junit.jupiter.api.Assertions.assertTrue(estorno.getId().startsWith("estorno:c1:"));
+    }
+
+    @Test void pixQueChegaEmPedidoCanceladoNaoEstornaNaHoraSoNaRodada() {
+        Cobranca c = new Cobranca("c1", "p1", 7L, "pix", "principal", new BigDecimal("100.00"), "pix", 0);
+        c.pix("txid1", "copia", "qr", Long.MAX_VALUE);
+        Pedido p = pedido("p1", "cancelado", null);
+        when(cobrancas.findByIdAndClienteId("c1", 7L)).thenReturn(Optional.of(c));
+        when(pix.status("txid1")).thenReturn("PAGA");
+        when(cobrancas.marcarPaga(eq("c1"), anyString(), anyString(), anyLong())).thenReturn(1);
+        when(pedidos.findById("p1")).thenReturn(Optional.of(p));
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("p1")).thenReturn(List.of(c));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+
+        svc.consultar("c1", 7L);
+        assertEquals("estornando", p.getPaid());
+        verify(cobrancas, never()).reservarEstorno(anyString(), any(), anyLong(), anyString());
+
+        when(pedidos.findByPaid("estornando")).thenReturn(List.of(p));
+        svc.repetirDevolucoes();
+        verify(cobrancas, times(1)).reservarEstorno(eq("c1"), any(), anyLong(), anyString());
+        assertEquals("estornado", p.getPaid());
+    }
+
+    /* Simula a transação de quem chamou (ObraService, DinheiroService...): só a sincronização do Spring, sem banco. */
+    private static void abrirTransacao() {
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+    }
+    /* Commit simulado: roda os afterCommit e fecha a transação. */
+    private static void commitSimulado() {
+        try { TransactionSynchronizationUtils.invokeAfterCommit(TransactionSynchronizationManager.getSynchronizations()); }
+        finally { fecharTransacao(); }
+    }
+    private static void fecharTransacao() {
+        TransactionSynchronizationManager.clear();
+        TransactionSynchronizationManager.setActualTransactionActive(false);
+    }
+    /* Reserva como ficou no banco (o SQL não roda no mock): valor e hora da reserva. */
+    private static void reservadaPor(Cobranca c, String parte, long desde) {
+        ReflectionTestUtils.setField(c, "valorEstornando", new BigDecimal(parte));
+        ReflectionTestUtils.setField(c, "estornandoDesde", desde);
+    }
+
+    /* Depois da conciliação confirmar: a reserva sai e a soma entra na cobrança (o que o SQL faria). */
+    private static void concluidaNoBanco(Cobranca c, String parte) {
+        ReflectionTestUtils.setField(c, "valorEstornando", null);
+        ReflectionTestUtils.setField(c, "estornandoDesde", null);
+        c.estornar(new BigDecimal(parte), 1L);
+    }
+
+    /* Devolução ambígua dentro de uma transação (obra): o Asaas recebe o pedido depois do commit, e a resposta se perde.
+       Devolve a referência da pendência. */
+    private String ambiguaNaObra(Cobranca c, String parte) {
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        doThrow(new AsaasCliente.Erro(503, "O Asaas não respondeu.")).when(asaas).estornar(any(), any(), any());
+        abrirTransacao();
+        try {
+            PagamentoService.EstornoAdiado adiado = assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal(parte)));
+            verify(asaas, never()).estornar(any(), any(), any());
+            String ref = adiado.referencia(c);
+            commitSimulado();
+            return ref;
+        } finally { fecharTransacao(); }
+    }
+
+    /* Regressão (obra): devolução parcial de 30 de 100 com resposta perdida. A pendência espera a reserva, a conciliação confirma
+       e a pendência fica resolvida sem novo POST. Antes: a pendência repetia a devolução e o cliente recebia 2 vezes. */
+    @Test void devolucaoParcialAmbiguaNaObraNaoRepeteAposConciliacao() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        String ref = ambiguaNaObra(c, "30.00");
+        long desde = Long.parseLong(ref.substring(ref.lastIndexOf(':') + 1));
+        verify(asaas, times(1)).estornar(eq("asaas-c1"), eq(new BigDecimal("30.00")), anyString());
+
+        reservadaPor(c, "30.00", desde);
+        conciliacaoVeEssaCobranca(c);
+        /* Reserva aberta: a pendência espera a conciliação, sem POST. */
+        assertEquals(ref, svc.retomarDevolucao(ref, new BigDecimal("30.00")));
+        when(asaas.listarEstornos("asaas-c1")).thenReturn(devolucoes("Devolução TaskGO c1:" + desde, "DONE", "30.00"));
+        svc.repetirDevolucoes();
+        concluidaNoBanco(c, "30.00");
+        when(transacoes.existsById(ref)).thenReturn(true);
+
+        assertNull(svc.retomarDevolucao(ref, new BigDecimal("30.00")));
+        verify(asaas, times(1)).estornar(any(), any(), any());
+    }
+
+    /* Regressão (1b): devolução total ambígua, já concluída. A pendência não pode ficar presa para sempre. */
+    @Test void devolucaoTotalAmbiguaConcluidaFechaAPendencia() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        String ref = ambiguaNaObra(c, "100.00");
+        long desde = Long.parseLong(ref.substring(ref.lastIndexOf(':') + 1));
+        reservadaPor(c, "100.00", desde);
+        conciliacaoVeEssaCobranca(c);
+        when(asaas.listarEstornos("asaas-c1")).thenReturn(devolucoes("Devolução TaskGO c1:" + desde, "DONE", "100.00"));
+        svc.repetirDevolucoes();
+        concluidaNoBanco(c, "100.00");
+
+        assertNull(svc.retomarDevolucao(ref, new BigDecimal("100.00")));
+        verify(asaas, times(1)).estornar(any(), any(), any());
+    }
+
+    /* Regressão (3): o Asaas só recebe o pedido depois do commit de quem chamou, nunca com a transação aberta. */
+    @Test void devolucaoDentroDeTransacaoSoChamaOAsaasDepoisDoCommit() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        abrirTransacao();
+        try {
+            assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("30.00")));
+            verify(asaas, never()).estornar(any(), any(), any());
+            commitSimulado();
+        } finally { fecharTransacao(); }
+
+        verify(asaas, times(1)).estornar(eq("asaas-c1"), eq(new BigDecimal("30.00")), anyString());
+        verify(cobrancas).concluirEstorno(eq("c1"), eq(new BigDecimal("30.00")), anyLong(), eq(Cobranca.ESTORNADA));
+    }
+
+    /* Regressão (3): fora de transação, o POST ao Asaas acontece com a transação do Spring já encerrada. */
+    @Test void chamadaAoAsaasSemTransacaoAberta() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        AtomicBoolean ativa = new AtomicBoolean(true);
+        when(asaas.estornar(any(), any(), any())).thenAnswer(inv -> { ativa.set(TransactionSynchronizationManager.isActualTransactionActive()); return null; });
+
+        svc.devolverCobranca(c, new BigDecimal("100.00"));
+
+        assertFalse(ativa.get());
+    }
+
+    /* Regressão (2): pedido com uma cobrança do Asaas e outra na carteira. A carteira falha na primeira rodada:
+       o pedido segue "estornando", o Asaas não é chamado de novo e a carteira é devolvida na rodada seguinte. */
+    @Test void carteiraQueFalhaNaoFazRepetirOAsaasENaoFechaOPedido() throws Exception {
+        Pedido p = pedido("p1", "cancelado", "estornando");
+        Cobranca a = asaasPaga("c1", "100.00");
+        Cobranca b = new Cobranca("c2", "p1", 7L, "carteira", "principal", new BigDecimal("50.00"), "carteira", 0);
+        b.pagar(1);
+        Carteira carteira = new Carteira(7L);
+        when(pedidos.findById("p1")).thenReturn(Optional.of(p));
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("p1")).thenReturn(List.of(a, b));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.reservarEstorno(eq("c2"), any(), anyLong(), anyString())).thenThrow(new RuntimeException("banco caiu")).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c2"), any(), anyLong(), anyString())).thenReturn(1);
+        when(carteiras.findByUsuarioIdForUpdate(7L)).thenReturn(Optional.of(carteira));
+
+        svc.processarEstorno("p1");
+        assertEquals("estornando", p.getPaid());
+        a.estornar(new BigDecimal("100.00"), 2L);
+
+        svc.processarEstorno("p1");
+
+        verify(asaas, times(1)).estornar(any(), any(), any());
+        assertEquals("estornado", p.getPaid());
+        assertEquals(0, new BigDecimal("50").compareTo(carteira.getSaldoDisponivel()));
+    }
+    /* Regressão (revisor): o cliente cancela (o cancelamento já foi gravado) e a devolução falha no meio. Antes a marca
+       "estornando" só era gravada no meio do processamento; com o erro antes dela, o pedido ficava "retido" e o job nunca
+       devolvia. Agora a marca é gravada primeiro, e o erro não sobe para o cliente. */
+    @Test void cancelamentoForaDeTransacaoMarcaEstornandoAntesDeDevolver() {
+        Pedido p = pedido("p1", "cancelado", "retido");
+        Cobranca c = new Cobranca("c1", "p1", 7L, "carteira", "principal", new BigDecimal("50.00"), "carteira", 0);
+        c.pagar(1);
+        when(pedidos.findById("p1")).thenReturn(Optional.of(p));
+        /* A 2ª leitura das cobranças falha: no código antigo isso acontecia antes de gravar a marca. */
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("p1")).thenReturn(List.of(c)).thenThrow(new RuntimeException("banco caiu")).thenReturn(List.of(c));
+
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> svc.estornar(p));
+
+        assertEquals("estornando", p.getPaid());
+    }
+    /* Regressão (revisor): se até a marca "estornando" falhasse, o pedido ficava "cancelado" + "retido" e o job (que só
+       olhava "estornando") nunca devolvia. A rede do job pega esse pedido e devolve. */
+    @Test void redeDoJobPegaPedidoCanceladoComPagamentoRetido() {
+        Pedido p = pedido("p1", "cancelado", "retido");
+        Cobranca c = new Cobranca("c1", "p1", 7L, "carteira", "principal", new BigDecimal("50.00"), "carteira", 0);
+        c.pagar(1);
+        Carteira carteira = new Carteira(7L);
+        when(pedidos.findById("p1")).thenReturn(Optional.of(p));
+        when(pedidos.findByStatusAndPaid("cancelado", "retido")).thenReturn(List.of(p));
+        when(pedidos.findByPaid("estornando")).thenAnswer(inv -> "estornando".equals(p.getPaid()) ? List.of(p) : List.of());
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("p1")).thenReturn(List.of(c));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenAnswer(inv -> { c.estornar(new BigDecimal("50.00"), 2L); return 1; });
+        when(carteiras.findByUsuarioIdForUpdate(7L)).thenReturn(Optional.of(carteira));
+
+        svc.repetirDevolucoes();
+
+        assertEquals(0, new BigDecimal("50").compareTo(carteira.getSaldoDisponivel()));
+    }
+
+    /* A rede não pode mexer em obra/recorrente: etapas e semanas têm devolução própria. */
+    @Test void redeDoJobNaoTocaPedidoDeObra() {
+        Pedido p = pedido("p2", "cancelado", "retido");
+        Cobranca etapa = new Cobranca("c9", "p2", 7L, "carteira", "etapa", new BigDecimal("300.00"), "carteira", 0);
+        etapa.pagar(1);
+        when(pedidos.findById("p2")).thenReturn(Optional.of(p));
+        when(pedidos.findByStatusAndPaid("cancelado", "retido")).thenReturn(List.of(p));
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("p2")).thenReturn(List.of(etapa));
+
+        svc.repetirDevolucoes();
+
+        assertEquals("retido", p.getPaid());
+        verify(cobrancas, never()).reservarEstorno(anyString(), any(), anyLong(), anyString());
+    }
+
+    /* Regressão (revisor): dentro de transação, a devolução rodava no afterCommit na thread de quem chamou, segurando a
+       conexão durante o POST ao Asaas. Agora a marca vai na transação de quem chama e o afterCommit só entrega ao executor. */
+    @Test void dentroDeTransacaoMarcaEEntregaAoExecutorSemChamarOAsaasNaThreadDeQuemChamou() throws Exception {
+        Pedido p = pedido("p1", "cancelado", "retido");
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(pedidos.findById("p1")).thenReturn(Optional.of(p));
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("p1")).thenReturn(List.of(c));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        List<Runnable> entregues = new java.util.ArrayList<>();
+        svc.setExecutor(entregues::add);
+        var tsm = org.springframework.transaction.support.TransactionSynchronizationManager.class;
+        org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            svc.estornar(p);
+            assertEquals("estornando", p.getPaid(), "a marca vai na transação de quem chamou");
+            verify(asaas, never()).estornar(any(), any(), any());
+            for (var s : org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()) s.afterCommit();
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+            org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
+        verify(asaas, never()).estornar(any(), any(), any());
+        assertEquals(1, entregues.size(), "o afterCommit só entrega ao executor");
+        entregues.get(0).run();
+        verify(asaas, times(1)).estornar(eq("asaas-c1"), any(), anyString());
+    }
+}

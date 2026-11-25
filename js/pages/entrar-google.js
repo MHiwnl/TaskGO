@@ -62,6 +62,7 @@ function pedirTipoGoogle(d){
     '</div>'+
     '<div id="gCategoria"'+(pro?'':' hidden')+'>'+seletorServico({id:'gServico',rotulo:'Categoria principal',atual:SERVICES[0].id})+'</div>'+
     '<div class="field"><label for="gTelefone">Telefone / WhatsApp</label><input class="input" id="gTelefone" type="tel" autocomplete="tel" required placeholder="(81) 90000-0000" oninput="this.value=maskPhone(this.value)"></div>'+
+    '<label class="muted lp-auth-check lp-auth-terms"><input type="checkbox" id="gMaior" required> Tenho 18 anos ou mais.</label>'+
     '<label class="muted lp-auth-check lp-auth-terms"><input type="checkbox" required> Li e aceito os <a href="#/legal/termos" class="lp-auth-link">Termos de Uso</a> e a <a href="#/legal/privacidade" class="lp-auth-link">Política de Privacidade</a>.</label>'+
     '<button class="btn btn-grad btn-block btn-lg" style="margin-top:14px">Criar conta</button></form>');
 }
@@ -69,5 +70,5 @@ function concluirCadastroGoogle(e){
   e.preventDefault();
   const tipo=(document.querySelector('input[name="gTipo"]:checked')||{}).value||'cliente';
   if(tipo==='profissional'&&!$('#gServico').value)return toast('Escolha a sua categoria principal.','err');
-  entrarComGoogle(googleCredencial,{tipo,telefone:$('#gTelefone').value,service:tipo==='profissional'?$('#gServico').value:null});
+  entrarComGoogle(googleCredencial,{tipo,telefone:$('#gTelefone').value,service:tipo==='profissional'?$('#gServico').value:null,maiorDeIdade:$('#gMaior').checked});
 }

@@ -8,6 +8,7 @@ public interface DenunciaRepository extends JpaRepository<Denuncia, String> {
     List<Denuncia> findByDenuncianteIdOrderByCriadaEmDesc(Long denuncianteId);
     boolean existsByDenuncianteIdAndPedidoIdAndStatus(Long denuncianteId, String pedidoId, String status);
     boolean existsByDenuncianteIdAndPedidoId(Long denuncianteId, String pedidoId);
+    boolean existsByPedidoIdAndStatus(String pedidoId, String status);
     long countByDenunciadoId(Long denunciadoId);
     long countByStatus(String status);
     List<Denuncia> findByStatusOrderByCriadaEmAsc(String status, org.springframework.data.domain.Pageable pagina);

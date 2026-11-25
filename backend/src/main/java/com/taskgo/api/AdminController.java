@@ -90,6 +90,17 @@ public class AdminController {
                 "denuncias", denuncias == null ? 0 : denuncias.countByPedidoId(p.getId()));
     }
 
+    /* Conversa de um pedido: só com denúncia ou recurso em análise (Marco Civil art. 8º). Não marca nada como lido. */
+    @GetMapping("/pedidos/{id}/mensagens")
+    /* Não pode ser readOnly: o registro de "acesso" grava no histórico e, em transação só de leitura, o Hibernate não grava. */
+    @Transactional
+    public List<MensagemController.MensagemDto> conversaDoPedido(@PathVariable String id, Authentication auth) {
+        Pedido p = pedidos.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado."));
+        moderacao.exigirAcessoConversa(auth, id, idDe(p.getClientEmail()), idDe(p.getProEmail()));
+        return mensagens.findByPedidoIdOrderByCriadaEmAsc(id).stream().map(MensagemController.MensagemDto::from).toList();
+    }
+    private Long idDe(String email) { return email == null ? null : usuarios.findByEmailIgnoreCase(email).map(Usuario::getId).orElse(null); }
+
     /* ---------- utilidades ---------- */
     static boolean urgente(Pedido p) { return Boolean.TRUE.equals(p.getExtra().get("urgente")); }
     static String status(Pedido p) { return p.getStatus() == null ? "" : p.getStatus().toLowerCase(Locale.ROOT); }

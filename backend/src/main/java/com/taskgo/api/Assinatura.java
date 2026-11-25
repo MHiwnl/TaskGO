@@ -27,6 +27,9 @@ public class Assinatura {
     @Column(name = "cancelada_em") private Long canceladaEm;
     @Column(name = "ultima_tentativa") private Long ultimaTentativa;
     @Column(name = "aviso_enviado") private Long avisoEnviado;
+    /* Início da contratação atual (1º pagamento de quem assinou ou voltou depois de ficar sem plano). Renovação não muda. */
+    @Column(name = "contratada_em") private Long contratadaEm;
+    @Column(name = "desistida_em") private Long desistidaEm;
 
     protected Assinatura() {}
     public Assinatura(String id, Long usuarioId, String forma, String cartaoId, BigDecimal valor, long criadaEm) {
@@ -45,6 +48,8 @@ public class Assinatura {
     public Long getCanceladaEm() { return canceladaEm; }
     public Long getUltimaTentativa() { return ultimaTentativa; }
     public Long getAvisoEnviado() { return avisoEnviado; }
+    public Long getContratadaEm() { return contratadaEm; }
+    public Long getDesistidaEm() { return desistidaEm; }
 
     /** Benefícios ligados agora. */
     public boolean vale(long agora) { return pagoAte != null && pagoAte > agora; }
@@ -53,6 +58,9 @@ public class Assinatura {
     public void pagoAte(long ate) { this.pagoAte = ate; this.status = ATIVA; this.canceladaEm = null; this.ultimaTentativa = null; this.avisoEnviado = null; }
     public void ativar() { this.status = ATIVA; this.canceladaEm = null; }
     public void cancelar(long agora) { this.status = CANCELADA; this.canceladaEm = agora; }
+    public void contratou(long quando) { this.contratadaEm = quando; }
+    /* Desistência dentro de 7 dias: acaba na hora, sem benefício. */
+    public void desistir(long agora) { this.status = CANCELADA; this.canceladaEm = agora; this.desistidaEm = agora; this.pagoAte = agora; }
     public void tentou(long agora) { this.ultimaTentativa = agora; }
     public void avisou(long agora) { this.avisoEnviado = agora; }
 }

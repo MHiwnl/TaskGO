@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -89,12 +90,18 @@ public class PlanoService {
         r.put("pagoAte", a == null ? null : a.getPagoAte());
         r.put("podePagar", a == null || !a.vale(agora) || a.getPagoAte() - agora <= DIAS_PAGAR_ANTES * DIA);
         r.put("cobranca", a == null ? null : cobrancaAberta(a).map(pagamentos::dto).orElse(null));
+        Long prazo = a == null || !desistivel(a) ? null : prazoDesistencia(a.getContratadaEm());
+        /* Último instante aceito (23:59:59 do 7º dia): a tela mostra este dia, não o seguinte. */
+        r.put("desistirAte", prazo != null && agora < prazo ? prazo - 1 : null);
+        r.put("desistidaEm", a == null ? null : a.getDesistidaEm());
         return r;
     }
     private Optional<Cobranca> cobrancaAberta(Assinatura a) {
         long agora = System.currentTimeMillis();
         return cobrancas.findByPedidoIdOrderByCriadaEmAsc(REF + a.getId()).stream()
                 .filter(c -> Cobranca.PENDENTE.equals(c.getStatus()) && (c.getExpiraEm() == null || c.getExpiraEm() > agora))
+                /* Pix que o provedor não deixou cancelar na desistência: não oferece para pagar. */
+                .filter(c -> a.getDesistidaEm() == null || c.getCriadaEm() > a.getDesistidaEm())
                 .reduce((x, y) -> y);
     }
 
@@ -154,6 +161,48 @@ public class PlanoService {
         return Map.of("situacao", situacao(u));
     }
 
+    /** Desiste da contratação nova em até 7 dias, com devolução integral (CDC art. 49). */
+    public Map<String, Object> desistir(Long usuarioId) { return desistir(usuarioId, System.currentTimeMillis()); }
+    Map<String, Object> desistir(Long usuarioId, long agora) {
+        Usuario u = profissional(usuarioId);
+        Assinatura a = assinaturas.findByUsuarioId(usuarioId).orElseThrow(() -> erro(HttpStatus.NOT_FOUND, "Você não tem Plano Pro."));
+        if (a.getContratadaEm() != null && !desistivel(a)) throw erro(HttpStatus.CONFLICT, "Você já desistiu desta contratação do Plano Pro.");
+        if (!desistivel(a)) throw erro(HttpStatus.BAD_REQUEST, "Não há Plano Pro contratado para desistir.");
+        long prazo = prazoDesistencia(a.getContratadaEm());
+        if (agora >= prazo) throw erro(HttpStatus.BAD_REQUEST, "O prazo de 7 dias para desistir terminou em " + data(prazo - 1) + ".");
+        a.desistir(agora);
+        try { assinaturas.save(a); }
+        catch (OptimisticLockingFailureException e) { throw erro(HttpStatus.CONFLICT, "Seu plano mudou agora. Atualize a tela e tente de novo."); }
+        cobrancas.findByPedidoIdOrderByCriadaEmAsc(REF + a.getId()).stream()
+                .filter(c -> Cobranca.PENDENTE.equals(c.getStatus())).forEach(c -> pagamentos.cancelarAberta(c, "Plano Pro desistido."));
+        boolean adiada = devolverPagas(a);
+        auditar(usuarioId, "Desistiu do Plano Pro e pediu a devolução");
+        String aviso = adiada ? "Devolução em andamento: o banco ainda não confirmou. Vamos tentar de novo." : "Você desistiu do Plano Pro e o valor pago foi devolvido.";
+        avisar(usuarioId, "Desistência do Plano Pro", aviso, "plano-desistencia:" + a.getId() + ":" + agora);
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("situacao", situacao(u));
+        r.put("aviso", aviso);
+        return r;
+    }
+    /* Devolve o que foi pago nesta contratação. Devolve true se o provedor adiou alguma (o cuidar tenta de novo). */
+    private boolean devolverPagas(Assinatura a) {
+        boolean adiada = false;
+        for (Cobranca c : cobrancas.findByPedidoIdOrderByCriadaEmAsc(REF + a.getId())) {
+            if (c.getPagaEm() == null || c.getPagaEm() < a.getContratadaEm() || c.liquido().signum() <= 0) continue;
+            try { pagamentos.devolverCobranca(c, c.liquido()); }
+            catch (PagamentoService.EstornoAdiado e) { adiada = true; }
+            /* A desistência já está gravada: falha inesperada vira "em andamento" e o cuidar tenta de novo. */
+            catch (RuntimeException e) { adiada = true; log.error("Plano Pro {}: falha ao devolver a cobrança {}", a.getId(), c.getId(), e); }
+        }
+        return adiada;
+    }
+    /* Só a contratação atual conta: uma desistência anterior não impede desistir de uma nova. */
+    static boolean desistivel(Assinatura a) { return a.getContratadaEm() != null && (a.getDesistidaEm() == null || a.getDesistidaEm() < a.getContratadaEm()); }
+    /* 7 dias a partir do dia da contratação (o dia do início não conta, art. 132 do Código Civil). */
+    static long prazoDesistencia(long contratadaEm) {
+        return Instant.ofEpochMilli(contratadaEm).atZone(FUSO).toLocalDate().atStartOfDay(FUSO).toInstant().toEpochMilli() + 8 * DIA;
+    }
+
     /** Troca como o plano renova (cartão salvo ou Pix). */
     public Map<String, Object> trocarForma(Long usuarioId, String forma, String cartaoId) {
         Usuario u = profissional(usuarioId);
@@ -171,7 +220,20 @@ public class PlanoService {
         Assinatura a = assinaturas.findById(c.getPedidoId().substring(REF.length())).orElse(null);
         if (a == null) return;
         long agora = System.currentTimeMillis();
+        long pagoEm = c.getPagaEm() != null ? c.getPagaEm() : agora;
+        /* Pagou depois de desistir (Pix que não foi cancelado a tempo): devolve e não estende o plano. */
+        if (a.getDesistidaEm() != null && c.getCriadaEm() <= a.getDesistidaEm()) {
+            boolean adiada = false;
+            try { pagamentos.devolverCobranca(c, c.liquido()); }
+            catch (RuntimeException e) { adiada = true; log.warn("Plano Pro {}: devolução tardia falhou, tenta de novo no cuidar", a.getId(), e); }
+            avisar(a.getUsuarioId(), "Pagamento do Plano Pro devolvido", adiada
+                    ? "Chegou um pagamento depois que você desistiu do Plano Pro. A devolução está em andamento: o banco ainda não confirmou."
+                    : "Chegou um pagamento depois que você desistiu do Plano Pro. O valor foi devolvido.", "plano-devolucao-tardia:" + c.getId());
+            return;
+        }
         boolean renovacao = a.vale(agora);
+        /* Contratação nova (1º pagamento, ou voltar depois de ficar sem plano) começa a janela de desistência. */
+        if (a.getPagoAte() == null || (!renovacao && !Assinatura.ATIVA.equals(a.getStatus()))) a.contratou(pagoEm);
         long ate = proximoMes(renovacao ? a.getPagoAte() : agora);
         /* Cartão: renova no cartão que pagou (o da página segura fica salvo depois do 1º pagamento). */
         if (Assinatura.CARTAO.equals(a.getForma())) {
@@ -202,6 +264,9 @@ public class PlanoService {
     void cuidar(Assinatura a, long agora) {
         Long ate = a.getPagoAte();
         if (ate == null) return;
+        /* shortcut: espera 10 min para não disputar com o pedido HTTP; com volume, trocar por marcação atômica na cobrança */
+        if (a.getDesistidaEm() != null && a.getContratadaEm() != null && a.getDesistidaEm() >= a.getContratadaEm() && agora - a.getDesistidaEm() > 10 * 60_000L)
+            devolverPagas(a);
         if (Assinatura.ATIVA.equals(a.getStatus())) {
             Decisao d = decidir(a.getForma(), a.getCartaoId() != null, ate, a.getUltimaTentativa(), a.getAvisoEnviado(), agora);
             if (d == Decisao.COBRAR_CARTAO && pagamentos.ativo()) {

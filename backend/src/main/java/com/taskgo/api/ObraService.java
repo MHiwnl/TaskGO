@@ -438,7 +438,7 @@ public class ObraService {
         if (valor.signum() <= 0) return;
         try { pagamentos.devolverCobranca(c, valor); }
         catch (PagamentoService.EstornoAdiado adiado) {
-            transacoes.save(new TransacaoFinanceira(UUID.randomUUID().toString(), c.getClienteId(), "DEVOLUCAO_PENDENTE", valor, "PENDENTE", c.getId(), System.currentTimeMillis()));
+            transacoes.save(new TransacaoFinanceira(UUID.randomUUID().toString(), c.getClienteId(), "DEVOLUCAO_PENDENTE", valor, "PENDENTE", adiado.referencia(c), System.currentTimeMillis()));
             avisar(c.getClienteId(), c.getPedidoId(), "Devolução em andamento", reais(valor) + " voltam para você assim que o banco liberar.", "devolucao-pendente:" + c.getId() + ":" + valor);
         }
     }
@@ -954,10 +954,12 @@ public class ObraService {
     public void prazos() {
         long agora = System.currentTimeMillis();
         for (String id : transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE").stream().map(TransacaoFinanceira::getId).toList())
-            porItem(id, () -> transacoes.findById(id).filter(t -> "PENDENTE".equals(t.getStatus())).ifPresent(t -> pagamentos.cobranca(t.getReferencia()).ifPresent(c -> {
-                try { pagamentos.devolverCobranca(c, t.getValor()); t.situacao("CONCLUIDA"); transacoes.save(t); }
-                catch (PagamentoService.EstornoAdiado ainda) { /* tenta de novo no próximo minuto */ }
-            })));
+            porItem(id, () -> transacoes.findById(id).filter(t -> "PENDENTE".equals(t.getStatus())).ifPresent(t -> {
+                /* Resolvida (feita, ou a reserva foi liberada e não há o que devolver) ou ainda em andamento com a referência nova. */
+                String nova = pagamentos.retomarDevolucao(t.getReferencia(), t.getValor());
+                if (nova == null) t.situacao("CONCLUIDA"); else t.referencia(nova);
+                transacoes.save(t);
+            }));
         for (String id : etapas.findByStatus(EtapaObra.ENTREGUE).stream().map(EtapaObra::getId).toList())
             porItem(id, () -> etapas.findById(id).filter(e -> EtapaObra.ENTREGUE.equals(e.getStatus()) && e.getLiberarApos() != null && e.getLiberarApos() <= agora)
                 .ifPresent(e -> pedidos.findById(e.getPedidoId()).ifPresent(p -> { if (!"cancelado".equals(p.getStatus())) aprovar(e, p); })));

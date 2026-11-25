@@ -58,7 +58,9 @@ Configure-as no painel de segredos/variáveis da plataforma do backend. A aplica
 | `DB_PASSWORD` | sim | Segredo do provedor; nunca registrar |
 | `TASKGO_CORS_ALLOWED_ORIGINS` | sim | `https://taskgo.exemplo.com` (origens separadas por vírgula) |
 | `PORT` | depende | Porta atribuída pelo provedor; padrão 8080 |
-| `DB_POOL_MAX_SIZE` / `DB_POOL_MIN_IDLE` | não | 10 / 2 por padrão; ajuste ao limite do PostgreSQL |
+| `DB_POOL_MAX_SIZE` / `DB_POOL_MIN_IDLE` | não | 10 / 2 por padrão; ajuste ao limite do PostgreSQL. Regra: `DB_POOL_MAX_SIZE` × nº de instâncias da API < `max_connections` do banco (100 no Postgres padrão), com folga para psql/backup |
+| `DB_POOL_IDLE_TIMEOUT_MS` / `DB_POOL_MAX_LIFETIME_MS` / `DB_POOL_KEEPALIVE_MS` | não | 300000 / 1500000 / 240000. Em banco serverless (Neon, Supabase etc.) use o endpoint *pooler* e `DB_POOL_MIN_IDLE=0` para o banco poder hibernar |
+| `DB_POOL_CONNECTION_TIMEOUT_MS` / `DB_POOL_LEAK_DETECTION_MS` / `DB_IDLE_IN_TX_TIMEOUT_MS` | não | 10000 / 60000 / 60000 |
 | `SESSION_COOKIE_SAME_SITE` | não | `none` por padrão em produção; requer HTTPS |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | para recuperação por e-mail | Segredos SMTP; fora disso o fluxo de e-mail não é enviado |
 | `PASSWORD_RESET_FRONTEND_URL` | para recuperação por e-mail | `https://taskgo.exemplo.com/#/recuperar` |

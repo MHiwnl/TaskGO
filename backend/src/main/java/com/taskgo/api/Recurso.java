@@ -13,6 +13,8 @@ public class Recurso {
 
     @Id private String id;
     @Column(name = "usuario_id", nullable = false) private Long usuarioId;
+    /* Pedido do aviso contestado: a conversa só abre para esse pedido. Nulo nos recursos antigos e nos avisos sem pedido. */
+    @Column(name = "pedido_id") private String pedidoId;
     @Column(columnDefinition = "text", nullable = false) private String texto;
     @Column(nullable = false) private String status;
     @Column(name = "criado_em", nullable = false) private long criadoEm;
@@ -21,9 +23,10 @@ public class Recurso {
     @Column(columnDefinition = "text") private String resposta;
 
     protected Recurso() {}
-    public Recurso(String id, Long usuarioId, String texto, long criadoEm) { this.id = id; this.usuarioId = usuarioId; this.texto = texto; this.status = EM_ANALISE; this.criadoEm = criadoEm; }
+    public Recurso(String id, Long usuarioId, String pedidoId, String texto, long criadoEm) { this.id = id; this.usuarioId = usuarioId; this.pedidoId = pedidoId; this.texto = texto; this.status = EM_ANALISE; this.criadoEm = criadoEm; }
     public String getId() { return id; }
     public Long getUsuarioId() { return usuarioId; }
+    public String getPedidoId() { return pedidoId; }
     public String getTexto() { return texto; }
     public String getStatus() { return status; }
     public long getCriadoEm() { return criadoEm; }

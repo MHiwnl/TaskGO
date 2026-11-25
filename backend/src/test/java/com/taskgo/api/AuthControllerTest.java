@@ -33,7 +33,7 @@ class AuthControllerTest {
     @AfterEach void limparContextoDeSeguranca(){org.springframework.security.core.context.SecurityContextHolder.clearContext();}
 
     @Test void cadastroArmazenaSomenteHashEAbreSessaoSemExporHash() {
-        Usuario novo=new Usuario(); novo.setNome("Ana"); novo.setEmail(" ANA@TASKGO.COM "); novo.setTipo("cliente"); novo.setSenha("Tarefa#Forte2026");
+        Usuario novo=new Usuario(); novo.setNome("Ana"); novo.setEmail(" ANA@TASKGO.COM "); novo.setTipo("cliente"); novo.setSenha("Tarefa#Forte2026"); novo.addExtra("maiorDeIdade", true);
         novo.setService("marido");
         when(usuarios.existsByEmailIgnoreCase("ana@taskgo.com")).thenReturn(false);
         when(usuarios.save(novo)).thenAnswer(inv->{Usuario u=inv.getArgument(0);u.setId(9L);return u;});
@@ -47,7 +47,7 @@ class AuthControllerTest {
 
     @Test void cadastroIgnoraExtraDoCliente_naoDeixaAutoVerificar() {
         // @JsonAnySetter joga qualquer campo do corpo no extra; o cadastro não pode aceitar verificado/cnpj do cliente.
-        Usuario novo=new Usuario(); novo.setNome("Atacante"); novo.setEmail("atk@taskgo.com"); novo.setTipo("profissional"); novo.setService("eletrica"); novo.setSenha("Tarefa#Forte2026");
+        Usuario novo=new Usuario(); novo.setNome("Atacante"); novo.setEmail("atk@taskgo.com"); novo.setTipo("profissional"); novo.setService("eletrica"); novo.setSenha("Tarefa#Forte2026"); novo.addExtra("maiorDeIdade", true);
         novo.addExtra("verificado", true); novo.addExtra("cnpj", "11222333000181"); novo.addExtra("saldo", 99999);
         when(usuarios.existsByEmailIgnoreCase("atk@taskgo.com")).thenReturn(false);
         when(usuarios.save(novo)).thenAnswer(inv->{Usuario u=inv.getArgument(0);u.setId(10L);return u;});
@@ -71,7 +71,7 @@ class AuthControllerTest {
 
     @Test void emailDeAdministradorViraContaDeAdministrador() {
         controller.setModeracao(new ModeracaoService(usuarios,"adm@taskgo.com"));
-        Usuario novo=new Usuario(); novo.setNome("Adm"); novo.setEmail("ADM@taskgo.com"); novo.setTipo("profissional"); novo.setService("eletrica"); novo.setSenha("Tarefa#Forte2026");
+        Usuario novo=new Usuario(); novo.setNome("Adm"); novo.setEmail("ADM@taskgo.com"); novo.setTipo("profissional"); novo.setService("eletrica"); novo.setSenha("Tarefa#Forte2026"); novo.addExtra("maiorDeIdade", true);
         when(usuarios.save(novo)).thenAnswer(inv->{Usuario u=inv.getArgument(0);u.setId(5L);return u;});
         controller.registrar(novo,new MockHttpServletRequest());
         assertEquals("administrador",novo.getTipo()); assertNull(novo.getProId()); assertNull(novo.getService());

@@ -137,6 +137,9 @@ public class AuthController {
         else { usuario.setProId(null); usuario.setService(null); }
         if (exigeCpf(tipo)) usuario.setCpf(cpfParaSalvar(usuario.getCpf(), null));
         if (fixo != null) virarPapel(usuario, fixo);
+        /* Só maiores de 18 (Código Civil, art. 5º). A declaração chega no extra; a data real é conferida na verificação. */
+        if (fixo == null && !Boolean.TRUE.equals(usuario.getExtra().get(MAIOR_DE_IDADE)))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Confirme que você tem 18 anos ou mais.");
         /* O cliente não define nenhum campo "extra" no cadastro (verificado, cnpj, chavePix, saldo... são do servidor
            ou têm rota própria). Como o Usuario usa @JsonAnySetter, qualquer chave do corpo cairia no extra: descarta. */
         usuario.getExtra().clear();
@@ -201,7 +204,8 @@ public class AuthController {
     public Map<String, Object> googleConfig() { return Map.of("clientId", google == null || !google.ativo() ? "" : google.clientId()); }
 
     /* modo: "entrar" (só conta que já existe) ou "criar" (só conta nova); vazio aceita os dois. */
-    public record GoogleRequest(String credencial, String tipo, String telefone, String service, String modo) {}
+    public record GoogleRequest(String credencial, String tipo, String telefone, String service, String modo, Boolean maiorDeIdade) {}
+    static final String MAIOR_DE_IDADE = "maiorDeIdade";
 
     /* Token do botão do Google. Conta existente com o mesmo e-mail: entra (e liga a conta Google).
        Sem conta: responde CADASTRO_GOOGLE e o site pede o tipo de conta (e a categoria, se profissional). */
@@ -231,14 +235,17 @@ public class AuthController {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de conta inválido.");
             if (fixo == null && tipoPedido.equals("profissional") && vazio(body.service()))
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escolha a sua categoria de serviço.");
+            if (fixo == null && !Boolean.TRUE.equals(body.maiorDeIdade()))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Confirme que você tem 18 anos ou mais.");
             usuario = new Usuario();
             usuario.setEmail(conta.email());
             usuario.setNome(conta.nome().isBlank() ? conta.email().substring(0, conta.email().indexOf('@')) : conta.nome());
             usuario.setTipo(fixo != null ? fixo : tipoPedido);
             if (!vazio(body.telefone())) usuario.setTelefone(body.telefone().trim());
             usuario.setCriadoEm(System.currentTimeMillis());
-            /* Sem senha conhecida: quem quiser uma usa "Esqueci a senha". */
-            usuario.setSenha(passwordEncoder.encode(java.util.UUID.randomUUID() + "-" + java.util.UUID.randomUUID()));
+            /* Sem senha conhecida: quem quiser uma usa "Esqueci a senha". 43 caracteres: o BCrypt recusa mais de 72 bytes. */
+            byte[] aleatorio = new byte[32]; new java.security.SecureRandom().nextBytes(aleatorio);
+            usuario.setSenha(passwordEncoder.encode(java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(aleatorio)));
             if ("profissional".equals(usuario.getTipo())) {
                 if (!CatalogoServicos.existe(body.service())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escolha a sua categoria no catálogo de serviços.");
                 usuario.setProId("pro_" + java.util.UUID.randomUUID()); usuario.setService(body.service().trim());
