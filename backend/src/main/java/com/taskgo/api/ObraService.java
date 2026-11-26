@@ -437,10 +437,7 @@ public class ObraService {
     private void devolver(Cobranca c, BigDecimal valor) {
         if (valor.signum() <= 0) return;
         try { pagamentos.devolverCobranca(c, valor); }
-        catch (PagamentoService.EstornoAdiado adiado) {
-            transacoes.save(new TransacaoFinanceira(UUID.randomUUID().toString(), c.getClienteId(), "DEVOLUCAO_PENDENTE", valor, "PENDENTE", adiado.referencia(c), System.currentTimeMillis()));
-            avisar(c.getClienteId(), c.getPedidoId(), "Devolução em andamento", reais(valor) + " voltam para você assim que o banco liberar.", "devolucao-pendente:" + c.getId() + ":" + valor);
-        }
+        catch (PagamentoService.EstornoAdiado adiado) { pagamentos.pendencia(c, valor, adiado, false); }
     }
 
     /* ======================= pagamento das etapas ======================= */

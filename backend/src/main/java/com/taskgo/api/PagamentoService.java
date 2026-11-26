@@ -726,7 +726,7 @@ public class PagamentoService {
         List<Cobranca> lista = emNovaTransacao(() -> doPedido(pedidoId));
         BigDecimal pago = lista.stream().map(Cobranca::liquido).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (pago.signum() > 0) emNovaTransacao(() -> { marcarEstornando(pedidoId); return null; });
-        boolean pendente = false;
+        boolean pendente = false, conferencia = false;
         BigDecimal falta = pago;
         for (int i = lista.size() - 1; i >= 0 && falta.signum() > 0; i--) {
             Cobranca c = lista.get(i);
@@ -735,13 +735,14 @@ public class PagamentoService {
             BigDecimal parte = livre.min(falta);
             falta = falta.subtract(parte);
             try { estornarParte(c, parte); }
-            catch (RuntimeException e) { pendente = true; log.warn("Devolução de {} da cobrança {} ficou para depois: {}", reais(parte), c.getId(), e.getMessage()); }
+            catch (RuntimeException e) { pendente = true; conferencia |= e instanceof EstornoAdiado a && a.conferencia; log.warn("Devolução de {} da cobrança {} ficou para depois: {}", reais(parte), c.getId(), e.getMessage()); }
         }
         if (pendente) {
+            final boolean naConferencia = conferencia;
             emNovaTransacao(() -> {
                 pedidos.findById(pedidoId).ifPresent(p -> {
                     BigDecimal restante = doPedido(pedidoId).stream().map(Cobranca::liquido).reduce(BigDecimal.ZERO, BigDecimal::add);
-                    avisar(clienteId(p), p.getId(), "Devolução em andamento", reais(restante) + " serão devolvidos assim que o banco liberar.", "estornando:" + p.getId());
+                    avisar(clienteId(p), p.getId(), "Devolução em andamento", naConferencia ? textoDevolucaoEmAndamento(restante, true) : reais(restante) + " serão devolvidos assim que o banco liberar.", "estornando:" + p.getId());
                 });
                 return null;
             });
@@ -757,7 +758,7 @@ public class PagamentoService {
     /* Uma parte de uma cobrança de pedido cancelado. Sempre fora de transação de quem chamou (ver processarEstorno). */
     private void estornarParte(Cobranca c, BigDecimal parte) {
         long agora = System.currentTimeMillis();
-        semComoDevolver(c);
+        semComoDevolver(c, parte);
         if (!ehAsaas(c)) {
             emNovaTransacao(() -> { if (!devolverAqui(c, parte, agora, agora)) throw new EstornoAdiado("Esta devolução já está em andamento."); return null; });
             return;
@@ -773,7 +774,7 @@ public class PagamentoService {
         p.setPaid(paraDinheiro ? null : "estornado");
         pedidos.save(p);
         Long cliente = clienteId(p);
-        if (cliente != null && devolvido.signum() > 0) avisar(cliente, p.getId(), "Devolução enviada", "Enviamos a devolução de " + reais(devolvido) + " (" + lista.stream().filter(c -> c.getValorEstornado().signum() > 0).map(c -> "cartao".equals(c.getMetodo()) ? java.util.Objects.toString(c.getCartaoDescricao(), "cartão") : "Pix").distinct().reduce((a, b) -> a + " e " + b).orElse("") + "). No cartão, pode levar até 10 dias úteis para aparecer na fatura.", "estorno:" + p.getId());
+        if (cliente != null && devolvido.signum() > 0) avisar(cliente, p.getId(), "Devolução enviada", "Enviamos a devolução de " + reais(devolvido) + " (" + lista.stream().filter(c -> c.getValorEstornado().signum() > 0).map(c -> "cartao".equals(c.getMetodo()) ? java.util.Objects.toString(c.getCartaoDescricao(), "cartão") : "Pix").distinct().reduce((a, b) -> a + " e " + b).orElse("") + "). No cartão, o prazo para aparecer na fatura depende do banco do cartão.", "estorno:" + p.getId());
     }
 
     private void devolver(List<Cobranca> lista, BigDecimal quanto, long agora) {
@@ -789,16 +790,20 @@ public class PagamentoService {
         }
     }
     /* Devolução que o provedor ainda não aceitou: vira pendência (ObraService.prazos repete a cada minuto). */
-    private void pendencia(Cobranca c, BigDecimal parte, EstornoAdiado adiado) {
+    private void pendencia(Cobranca c, BigDecimal parte, EstornoAdiado adiado) { pendencia(c, parte, adiado, false); }
+    /** Pendência de devolução, com o aviso ao cliente. Obra e Recorrente usam a mesma. repetivel: cada chamada avisa de novo
+        (o recorrente devolve semanas do mesmo valor). */
+    public void pendencia(Cobranca c, BigDecimal parte, EstornoAdiado adiado, boolean repetivel) {
         transacoes.save(new TransacaoFinanceira(UUID.randomUUID().toString(), c.getClienteId(), "DEVOLUCAO_PENDENTE", parte, "PENDENTE", adiado.referencia(c), System.currentTimeMillis()));
-        avisar(c.getClienteId(), c.getPedidoId(), "Devolução em andamento", reais(parte) + " voltam para você assim que o banco liberar.", "devolucao-pendente:" + c.getId() + ":" + parte);
+        avisar(c.getClienteId(), c.getPedidoId(), "Devolução em andamento", textoDevolucaoEmAndamento(parte, adiado.conferencia),
+                "devolucao-pendente:" + c.getId() + ":" + parte + (repetivel ? ":" + System.nanoTime() : ""));
     }
 
     /* Devolve parte de uma cobrança. A parte é reservada antes (valor_estornando): outro processo não devolve de novo,
        e a reserva só some quando a devolução é confirmada ou recusada. */
     private void estornarCobranca(Cobranca c, BigDecimal parte, long agora) {
         if (ehAsaas(c)) { estornarNoAsaas(c, parte, agora); return; }
-        semComoDevolver(c);
+        semComoDevolver(c, parte);
         if (!emTransacaoOuNova(() -> devolverAqui(c, parte, agora, agora))) throw new EstornoAdiado("Esta devolução já está em andamento.", referenciaReservada(c.getId()));
         if (em != null && em.contains(c)) em.refresh(c);
     }
@@ -856,10 +861,74 @@ public class PagamentoService {
     private boolean ehAsaas(Cobranca c) { return "asaas".equals(c.getProvedor()) && asaas != null && c.getTxid() != null; }
     /* Cobrança do Asaas sem identificador, ou com o Asaas desligado: o dinheiro está no Asaas e daqui não sai.
        Nunca conclui como devolvida (o cliente ficaria sem o dinheiro e o registro diria que voltou): avisa a equipe e adia. */
-    private void semComoDevolver(Cobranca c) {
+    private void semComoDevolver(Cobranca c, BigDecimal parte) {
         if (!"asaas".equals(c.getProvedor()) || ehAsaas(c)) return;
-        divergencia(c, 0L, c.getTxid() == null ? "cobrança do Asaas sem identificador da transação" : "o Asaas está desligado neste servidor");
-        throw new EstornoAdiado("Esta devolução precisa ser conferida pela equipe no Asaas.");
+        /* Uma conferência por cobrança, com a parte pedida (a semana retida de um recorrente não volta junto). O Financeiro lista e,
+           depois de devolver pelo painel do Asaas, marca (devolvidaNaConferencia). A pendência repete a mesma parte a cada minuto:
+           só o primeiro pedido grava e avisa a equipe.
+           O valor gravado é só o mínimo: na hora de marcar, valorDaConferencia soma as pendências da cobrança (cada uma é uma parte devida). */
+        TransacaoFinanceira aberta = conferenciaAberta(c.getId());
+        if (aberta == null) {
+            long agora = System.currentTimeMillis();
+            transacoes.save(new TransacaoFinanceira(PREFIXO_CONFERIR + c.getId() + ":" + agora, c.getClienteId(), DEVOLUCAO_CONFERIR, parte, "VERIFICAR", c.getId(), agora));
+            divergencia(c, agora, c.getTxid() == null ? "cobrança do Asaas sem identificador da transação" : "o Asaas está desligado neste servidor");
+        } else if (parte.compareTo(aberta.getValor()) > 0) {
+            transacoes.save(new TransacaoFinanceira(aberta.getId(), aberta.getUsuarioId(), DEVOLUCAO_CONFERIR, parte, "VERIFICAR", c.getId(), aberta.getCriadaEm()));
+        }
+        throw new EstornoAdiado("Esta devolução precisa ser conferida pela equipe no Asaas.", null, true);
+    }
+    static final String DEVOLUCAO_CONFERIR = "DEVOLUCAO_CONFERIR";
+    /* A cobrança voltou a ter identificador e o Asaas ligado: a devolução sai pelo caminho normal, não pela equipe. */
+    static final String CONFERENCIA_AUTOMATICA = "AUTOMATICA";
+    /** Conferência que ainda depende da equipe. Falso se a cobrança voltou a ter como devolver sozinha (a lista mostra, sem o botão). */
+    public boolean conferenciaManual(String cobrancaId) { return cobrancas.findById(cobrancaId).map(c -> !ehAsaas(c)).orElse(true); }
+    /** Quanto a equipe devolve: a soma das pendências da cobrança (o recorrente pede uma por vez cancelada) ou o valor da conferência
+        (pedido cancelado inteiro, sem pendência), o maior dos dois, até o que ainda está pago na cobrança. */
+    public BigDecimal valorDaConferencia(TransacaoFinanceira t, Cobranca c) {
+        BigDecimal pendente = transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE").stream()
+                .filter(p -> c.getId().equals(p.getReferencia())).map(TransacaoFinanceira::getValor).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return pendente.max(t.getValor()).min(c.liquido()).max(BigDecimal.ZERO);
+    }
+    /** Valor que a lista do Financeiro mostra para a conferência (o mesmo que será registrado ao marcar). */
+    public BigDecimal valorDaConferencia(TransacaoFinanceira t) {
+        return cobrancas.findById(t.getReferencia()).map(c -> valorDaConferencia(t, c)).orElse(t.getValor());
+    }
+    private TransacaoFinanceira conferenciaAberta(String cobrancaId) {
+        return transacoes.findByTipoAndStatus(DEVOLUCAO_CONFERIR, "VERIFICAR").stream().filter(t -> cobrancaId.equals(t.getReferencia())).findFirst().orElse(null);
+    }
+    static final String PREFIXO_CONFERIR = "conferir:";
+    /* Texto ao cliente enquanto a devolução não sai. Na conferência, depende de alguém da equipe: não promete o banco. */
+    static String textoDevolucaoEmAndamento(BigDecimal valor, boolean conferencia) {
+        return conferencia ? "A equipe da TaskGO está conferindo a devolução de " + reais(valor) + " e avisa aqui quando ela sair."
+                : reais(valor) + " voltam para você assim que o banco liberar.";
+    }
+
+    /** Conferência resolvida: a equipe já devolveu pelo painel do Asaas. Registra a devolução, fecha o pedido e avisa o cliente.
+        Devolve o valor registrado, ou null se a cobrança voltou a ter como devolver sozinha (aí a conferência fecha e nada é registrado). */
+    @Transactional
+    public BigDecimal devolvidaNaConferencia(String conferenciaId, Long autorId) {
+        TransacaoFinanceira t = transacoes.findById(conferenciaId).filter(x -> DEVOLUCAO_CONFERIR.equals(x.getTipo()) && "VERIFICAR".equals(x.getStatus()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Devolução em conferência não encontrada."));
+        Cobranca c = cobrancas.findById(t.getReferencia()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cobrança da devolução não encontrada."));
+        if (ehAsaas(c)) { t.situacao(CONFERENCIA_AUTOMATICA); transacoes.save(t); return null; }
+        BigDecimal parte = valorDaConferencia(t, c);
+        long agora = System.currentTimeMillis();
+        if (parte.signum() > 0) {
+            if (cobrancas.reservarEstorno(c.getId(), parte, agora, Cobranca.PAGA) == 0) throw new ResponseStatusException(HttpStatus.CONFLICT, "Esta devolução já está em andamento.");
+            concluirEstorno(c, parte, agora, agora);
+            if (em != null && em.contains(c)) em.refresh(c);
+        }
+        /* Fecha esta e as irmãs abertas da mesma cobrança (duas linhas abertas por corrida): a equipe não devolve duas vezes. */
+        for (TransacaoFinanceira x : transacoes.findByTipoAndStatus(DEVOLUCAO_CONFERIR, "VERIFICAR"))
+            if (c.getId().equals(x.getReferencia())) { x.situacao("DONE"); transacoes.save(x); }
+        t.situacao("DONE"); transacoes.save(t);
+        for (TransacaoFinanceira pend : transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE"))
+            if (c.getId().equals(pend.getReferencia())) { pend.situacao("CONCLUIDA"); transacoes.save(pend); }
+        auditar(c.getClienteId(), "Devolução de " + reais(parte) + " conferida e feita pela equipe no Asaas", autorId, c.getPedidoId());
+        pedidos.findById(c.getPedidoId()).filter(p -> "estornando".equals(p.getPaid()))
+                .filter(p -> doPedido(p.getId()).stream().allMatch(x -> x.liquido().signum() <= 0))
+                .ifPresent(p -> finalizarEstorno(p, doPedido(p.getId())));
+        return parte;
     }
     static String refEstorno(String cobrancaId, long desde) { return PREFIXO_REF + cobrancaId + ":" + desde; }
     static String cobrancaDaRef(String referencia) { return referencia.startsWith(PREFIXO_REF) ? referencia.substring(PREFIXO_REF.length(), referencia.lastIndexOf(':')) : referencia; }
@@ -877,6 +946,7 @@ public class PagamentoService {
         /* A chave da devolução vai no id, para retomarDevolucao achar (não há restrição no banco: quem impede gravar duas vezes é o UPDATE condicional de concluirEstorno); a referência continua o pedido,
            que é o que o extrato do cliente mostra. */
         transacoes.save(new TransacaoFinanceira(refEstorno(c.getId(), desde), c.getClienteId(), "ESTORNO", parte, "CONCLUIDA", c.getPedidoId(), agora));
+        if (ehAsaas(c)) { TransacaoFinanceira aberta = conferenciaAberta(c.getId()); if (aberta != null) { aberta.situacao(CONFERENCIA_AUTOMATICA); transacoes.save(aberta); } }
         auditar(c.getClienteId(), "Recebeu de volta " + reais(parte), null, c.getPedidoId());
     }
 
@@ -920,15 +990,21 @@ public class PagamentoService {
     /* Não resolve sozinho: a reserva fica e a equipe confere no Asaas. A chave do aviso impede repetir a cada rodada. */
     private void divergencia(Cobranca c, long desde, String motivo) {
         log.error("Devolução da cobrança {} precisa de conferência: {}", c.getId(), motivo);
-        java.util.stream.Stream.of("financeiro", "suporte").flatMap(t -> usuarios.findByTipoIgnoreCaseOrderByNomeAsc(t).stream())
-                .forEach(a -> avisar(a.getId(), c.getPedidoId(), "Devolução para conferir", "Uma devolução ficou sem confirmação do Asaas. Confira no Asaas antes de devolver de novo.", "estorno-conferir:" + c.getId() + ":" + desde + ":" + a.getId()));
+        List<Usuario> equipe = java.util.stream.Stream.of("financeiro", "suporte").flatMap(t -> usuarios.findByTipoIgnoreCaseOrderByNomeAsc(t).stream()).toList();
+        if (equipe.isEmpty() && moderacao != null)
+            equipe = moderacao.emailsAdministradores().stream().map(e -> usuarios.findByEmailIgnoreCase(e).orElse(null)).filter(java.util.Objects::nonNull).toList();
+        if (equipe.isEmpty()) log.error("Devolução da cobrança {} para conferir e ninguém da equipe para avisar: confira TASKGO_ADMIN_EMAILS", c.getId());
+        equipe.forEach(a -> avisar(a.getId(), c.getPedidoId(), "Devolução para conferir", "Uma devolução ficou sem confirmação do Asaas. Confira no Asaas antes de devolver de novo.", "estorno-conferir:" + c.getId() + ":" + desde + ":" + a.getId()));
     }
 
     /* Provedor recusou ou ainda não confirmou a devolução; quem chama registra "em andamento". A referência é a reserva que ficou. */
     static final class EstornoAdiado extends ResponseStatusException {
         private final String referencia;
+        /* Só a equipe resolve (conferência no painel do Asaas): o texto ao cliente não promete o banco. */
+        final boolean conferencia;
         EstornoAdiado(String motivo) { this(motivo, null); }
-        EstornoAdiado(String motivo, String referencia) { super(HttpStatus.BAD_GATEWAY, motivo); this.referencia = referencia; }
+        EstornoAdiado(String motivo, String referencia) { this(motivo, referencia, false); }
+        EstornoAdiado(String motivo, String referencia, boolean conferencia) { super(HttpStatus.BAD_GATEWAY, motivo); this.referencia = referencia; this.conferencia = conferencia; }
         /* Sem reserva conhecida, a pendência fica com a cobrança (como antes). */
         String referencia(Cobranca c) { return referencia == null ? c.getId() : referencia; }
     }

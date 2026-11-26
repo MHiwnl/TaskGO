@@ -19,6 +19,7 @@ function painelFinanceiro(){
   const dados=(d.porDia||[]).map(x=>({dia:x.dia,recebido:Math.round(Number(x.valor)*100)/100}));
   return (d.teste?'<p class="aviso-linha" role="note">Conta Asaas de teste: os valores não são dinheiro de verdade.</p>':'')+
     ((d.resgatesVerificar||[]).length?'<div class="aviso-linha" role="alert"><p>Resgates sem resposta do Asaas. Confira no painel do Asaas e marque o que aconteceu:</p>'+d.resgatesVerificar.map(x=>'<p>'+esc(x.profissional)+' · '+money(x.valor)+' · '+dataHora(x.em)+' <button type="button" class="btn btn-ghost btn-sm" data-resgate="'+esc(x.id)+'" data-saiu="1" onclick="resolverResgate(this)">Saiu</button> <button type="button" class="btn btn-ghost btn-sm" data-resgate="'+esc(x.id)+'" data-saiu="0" onclick="resolverResgate(this)">Não saiu, devolver</button></p>').join('')+'</div>':'')+
+    ((d.devolucoesConferir||[]).length?'<div class="aviso-linha" role="alert"><p>Devoluções que só a equipe resolve (cobrança do Asaas sem identificador). Devolva pelo painel do Asaas e marque aqui:</p>'+d.devolucoesConferir.map(x=>'<p>'+esc(x.cliente)+' · '+money(x.valor)+' · '+dataHora(x.em)+(x.pedidoId?' · pedido '+esc(x.pedidoId):'')+(x.automatica?' · <small>O Asaas voltou a aceitar esta cobrança e a devolução é automática. Se ela não sair, confira no Asaas; não devolva por fora.</small>':' <button type="button" class="btn btn-ghost btn-sm" data-devolucao="'+esc(x.id)+'" data-cliente="'+esc(x.cliente)+'" data-valor="'+esc(x.valor)+'" onclick="devolucaoFeita(this)">Devolvi no Asaas</button>')+'</p>').join('')+'</div>':'')+
     '<div class="fin-numeros">'+
       numero('Recebido hoje',money(d.hoje))+numero('Recebido neste mês',money(d.mes),money(d.planosMes)+' do Plano Pro')+numero('Assinantes Pro',String(d.assinantesPro||0),'com o mês pago')+
       numero('Livre para transferir',saldo!=null?money(saldo):'—',saldo!=null?money(d.saldoAsaas)+' no Asaas, o resto é dos usuários':(d.saldoErro||'Asaas desligado'))+
@@ -62,6 +63,14 @@ async function resolverResgate(b){
   if(!confirm(saiu?'Confirmar que a transferência saiu no Asaas?':'Confirmar que a transferência NÃO saiu? O valor volta para o saldo do profissional.'))return;
   b.disabled=true;
   try{await apiJSON('/api/admin/financeiro/resgates/'+encodeURIComponent(b.dataset.resgate)+'/resolver','POST',{saiu},'Não foi possível salvar.');toast(saiu?'Resgate concluído.':'Valor devolvido ao profissional.','ok');}
+  catch(e){toast(erroLegivel(e,'Não foi possível salvar.'),'err');}
+  finally{FIN.dados=null;carregarFinanceiro(true);render();}
+}
+/* Devolução em conferência: a equipe já devolveu pelo painel do Asaas; o sistema registra, fecha o pedido e avisa o cliente. */
+async function devolucaoFeita(b){
+  if(!confirm('Confirmar que você já devolveu '+money(b.dataset.valor)+' a '+b.dataset.cliente+' pelo painel do Asaas? O cliente recebe o aviso de devolução.'))return;
+  b.disabled=true;
+  try{const r=await apiJSON('/api/admin/financeiro/devolucoes/'+encodeURIComponent(b.dataset.devolucao)+'/devolvida','POST',{},'Não foi possível salvar.');toast(r.aviso||'Devolução de '+money(r.valor)+' registrada.',r.aviso?'err':'ok');}
   catch(e){toast(erroLegivel(e,'Não foi possível salvar.'),'err');}
   finally{FIN.dados=null;carregarFinanceiro(true);render();}
 }

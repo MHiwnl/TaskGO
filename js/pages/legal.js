@@ -2,7 +2,7 @@
 /* O prazo escrito na política vem do servidor, então o texto acompanha a configuração. */
 function preencherPrazos(){
   if(DEMO_MODE)return;
-  fetch(API_BASE_URL+'/api/privacidade/prazos').then(r=>r.ok?r.json():null).then(p=>{const el=document.querySelector('[data-prazo]');if(!p||!el)return;
+  apiJSON('/api/privacidade/prazos').then(p=>{const el=document.querySelector('[data-prazo]');if(!p||!el)return;
     el.textContent='Conversas de pedidos concluídos ou cancelados: '+p.conversasDias+' dias depois do fim. Notificações já lidas: '+p.notificacoesDias+' dias. Histórico da conta e registros do log: '+p.historicoDias+' dias.';}).catch(()=>{});
 }
 function pageLegal(){

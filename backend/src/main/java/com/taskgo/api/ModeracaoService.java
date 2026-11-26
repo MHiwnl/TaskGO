@@ -74,6 +74,8 @@ public class ModeracaoService {
         return null;
     }
 
+    /** E-mails de TASKGO_ADMIN_EMAILS, para avisos que precisam chegar a alguém quando não há equipe cadastrada. */
+    public java.util.List<String> emailsAdministradores() { return java.util.List.copyOf(administradores); }
     public boolean administrador(String email) { return email != null && !email.isBlank() && administradores.contains(email.trim().toLowerCase(Locale.ROOT)); }
 
     public Situacao situacao(Usuario u) {

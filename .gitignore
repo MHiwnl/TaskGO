@@ -41,6 +41,7 @@ video/onetake/*.wav
 video/onetake/stills-*.png
 video/onetake/quadros-reais.png
 video/onetake/*.render.json
+video/onetake/_frames/
 # Código de terceiros com licença própria: motion.js (PolyForm Noncommercial, skill onetake) e a fonte
 # embutida (OFL) são gerados na pasta pelos comandos do README, não redistribuídos aqui.
 video/onetake/motion.js

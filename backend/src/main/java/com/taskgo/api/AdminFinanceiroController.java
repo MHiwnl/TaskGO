@@ -107,6 +107,18 @@ public class AdminFinanceiroController {
         if (saques != null) for (SolicitacaoSaque s : saques.findByStatus("VERIFICAR"))
             verificar.add(Map.of("id", s.getId(), "valor", s.getValor(), "em", s.getCriadaEm(), "profissional", usuarios.findById(s.getUsuarioId()).map(Usuario::getNome).orElse("Conta excluída")));
         r.put("resgatesVerificar", verificar);
+        /* Devoluções que só a equipe resolve (cobrança do Asaas sem identificador): devolver no painel do Asaas e marcar aqui. */
+        List<Map<String, Object>> devolver = new ArrayList<>();
+        for (TransacaoFinanceira t : transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            /* Cobrança que voltou a ter como devolver sozinha: aparece, sem o botão, para a equipe ver se a devolução automática não sai. */
+            m.put("automatica", !pagamentos.conferenciaManual(t.getReferencia()));
+            m.put("id", t.getId()); m.put("valor", pagamentos.valorDaConferencia(t)); m.put("em", t.getCriadaEm());
+            m.put("cliente", t.getUsuarioId() == null ? "Conta excluída" : usuarios.findById(t.getUsuarioId()).map(Usuario::getNome).orElse("Conta excluída"));
+            m.put("pedidoId", cobrancas.findById(t.getReferencia()).map(Cobranca::getPedidoId).orElse(null));
+            devolver.add(m);
+        }
+        r.put("devolucoesConferir", devolver);
         return r;
     }
 
@@ -133,6 +145,16 @@ public class AdminFinanceiroController {
         t.situacao(body.saiu() ? "DONE" : "FALHOU"); transacoes.save(t);
         moderacao.registrar(a.id(), "pagamento", "Marcou a transferência de " + PagamentoService.reais(t.getValor()) + " como " + (body.saiu() ? "enviada" : "não enviada"), a.id(), null);
         return Map.of("status", t.getStatus());
+    }
+    /** Devolução em conferência: a equipe já devolveu pelo painel do Asaas e marca aqui. */
+    @PostMapping("/api/admin/financeiro/devolucoes/{id}/devolvida")
+    public Map<String, Object> devolucaoFeita(@org.springframework.web.bind.annotation.PathVariable String id, Authentication auth) {
+        TaskgoPrincipal a = PapelEquipe.exigir(auth, moderacao, PapelEquipe.Area.FINANCEIRO);
+        BigDecimal valor = pagamentos.devolvidaNaConferencia(id, a.id());
+        if (valor == null) return Map.of("status", PagamentoService.CONFERENCIA_AUTOMATICA, "aviso", "O Asaas voltou a aceitar esta cobrança e a devolução sai sozinha. Não devolva pelo painel do Asaas.");
+        if (valor.signum() <= 0) return Map.of("status", "DONE", "valor", valor, "aviso", "Nada a registrar: esta cobrança já estava devolvida. Confira no Asaas se não houve devolução em dobro.");
+        moderacao.registrar(a.id(), "pagamento", "Marcou como feita no Asaas a devolução de " + PagamentoService.reais(valor), a.id(), null);
+        return Map.of("status", "DONE", "valor", valor);
     }
     private ResgateService resgates;
     @org.springframework.beans.factory.annotation.Autowired(required = false) void setResgates(ResgateService r) { this.resgates = r; }

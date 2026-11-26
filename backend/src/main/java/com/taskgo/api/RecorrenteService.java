@@ -266,7 +266,7 @@ public class RecorrenteService {
 
     @Transactional
     public Map<String, Object> agir(String visitaId, TaskgoPrincipal quem, String acao) {
-        VisitaRecorrente v = visitas.findById(visitaId).orElseThrow(() -> erro(HttpStatus.NOT_FOUND, "Vez não encontrada."));
+        VisitaRecorrente v = visitas.findByIdForUpdate(visitaId).orElseThrow(() -> erro(HttpStatus.NOT_FOUND, "Vez não encontrada."));
         Pedido p = recorrente(v.getPedidoId());
         boolean cliente = ehCliente(p, quem), pro = ehAtendente(p, quem);
         if (!cliente && !pro) throw erro(HttpStatus.NOT_FOUND, "Vez não encontrada.");
@@ -325,7 +325,7 @@ public class RecorrenteService {
     /** Suporte decide uma vez contestada: paga o profissional ou devolve ao cliente. */
     @Transactional
     public Map<String, Object> decidir(String visitaId, boolean aoProfissional, Long equipe) {
-        VisitaRecorrente v = visitas.findById(visitaId).orElseThrow(() -> erro(HttpStatus.NOT_FOUND, "Vez não encontrada."));
+        VisitaRecorrente v = visitas.findByIdForUpdate(visitaId).orElseThrow(() -> erro(HttpStatus.NOT_FOUND, "Vez não encontrada."));
         if (!VisitaRecorrente.CONTESTADA.equals(v.getStatus())) throw erro(HttpStatus.CONFLICT, "Esta vez não está contestada.");
         Pedido p = pedidos.findById(v.getPedidoId()).orElseThrow();
         String dia = DM.format(LocalDate.parse(v.getData()));
@@ -363,10 +363,7 @@ public class RecorrenteService {
     private void devolver(Cobranca c, BigDecimal valor) {
         if (valor.signum() <= 0) return;
         try { pagamentos.devolverCobranca(c, valor); }
-        catch (PagamentoService.EstornoAdiado adiado) {
-            transacoes.save(new TransacaoFinanceira(UUID.randomUUID().toString(), c.getClienteId(), "DEVOLUCAO_PENDENTE", valor, "PENDENTE", adiado.referencia(c), System.currentTimeMillis()));
-            avisar(c.getClienteId(), c.getPedidoId(), "Devolução em andamento", reais(valor) + " voltam para você assim que o banco liberar.", "devolucao-pendente:" + c.getId() + ":" + valor + ":" + System.nanoTime());
-        }
+        catch (PagamentoService.EstornoAdiado adiado) { pagamentos.pendencia(c, valor, adiado, true); }
     }
 
     /* Todas as vezes fechadas: o pedido termina (concluído se alguma foi feita). */

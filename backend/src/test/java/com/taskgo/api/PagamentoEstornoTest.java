@@ -435,7 +435,181 @@ class PagamentoEstornoTest {
         verify(cobrancas, never()).concluirEstorno(anyString(), any(), anyLong(), anyString());
         verify(transacoes, never()).save(org.mockito.ArgumentMatchers.argThat(t -> t != null && "ESTORNO".equals(t.getTipo())));
         verify(asaas, never()).estornar(any(), any(), any());
-        verify(notificacoes).criar(eq(9L), any(), anyString(), anyString(), anyString(), eq("estorno-conferir:c1:0:9"));
+        verify(notificacoes).criar(eq(9L), any(), anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.startsWith("estorno-conferir:c1:"));
+    }
+
+    private static Cobranca asaasSemTxid() {
+        Cobranca c = new Cobranca("c1", "p1", 7L, "cartao", "principal", new BigDecimal("100.00"), "asaas", 0);
+        c.pagar(1);
+        return c;
+    }
+
+    /* Regressão (pendências de 26/11): sem txid, o pedido cancelado não promete "assim que o banco liberar" (depende da equipe)
+       e a cobrança entra uma vez na lista de conferência do Financeiro. */
+    @Test void pedidoCanceladoSemTxidAvisaQueAEquipeConfereERegistraAConferencia() {
+        Cobranca c = asaasSemTxid();
+        Pedido p = pedido("p1", "cancelado", "estornando");
+        when(pedidos.findById("p1")).thenReturn(Optional.of(p));
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("p1")).thenReturn(List.of(c));
+
+        svc.processarEstorno("p1");
+
+        verify(transacoes).save(org.mockito.ArgumentMatchers.argThat(t -> t != null && PagamentoService.DEVOLUCAO_CONFERIR.equals(t.getTipo()) && t.getId().startsWith("conferir:c1:") && "VERIFICAR".equals(t.getStatus())));
+        verify(notificacoes).criar(eq(7L), eq("p1"), anyString(), eq("Devolução em andamento"), org.mockito.ArgumentMatchers.contains("equipe da TaskGO está conferindo"), anyString());
+        verify(notificacoes, never()).criar(eq(7L), any(), anyString(), anyString(), org.mockito.ArgumentMatchers.contains("banco liberar"), anyString());
+        assertEquals("estornando", p.getPaid());
+    }
+
+    /* Regressão (pendências de 26/11): a equipe devolveu pelo painel do Asaas e marca; a devolução é registrada uma vez,
+       a conferência fecha e o pedido termina como estornado, com aviso ao cliente. */
+    @Test void equipeMarcaDevolvidaNoAsaasFechaConferenciaEPedido() {
+        Cobranca c = asaasSemTxid();
+        Pedido p = pedido("p1", "cancelado", "estornando");
+        TransacaoFinanceira conferencia = new TransacaoFinanceira("conferir:c1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c1", 1L);
+        when(transacoes.findById("conferir:c1")).thenReturn(Optional.of(conferencia));
+        when(cobrancas.findById("c1")).thenReturn(Optional.of(c));
+        when(pedidos.findById("p1")).thenReturn(Optional.of(p));
+        when(cobrancas.findByPedidoIdOrderByCriadaEmAsc("p1")).thenReturn(List.of(c));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenAnswer(inv -> { c.estornar(inv.getArgument(1), 1L); return 1; });
+        TransacaoFinanceira daCobranca = new TransacaoFinanceira("pend1", 7L, "DEVOLUCAO_PENDENTE", new BigDecimal("100.00"), "PENDENTE", "c1", 1L);
+        TransacaoFinanceira deOutra = new TransacaoFinanceira("pend2", 8L, "DEVOLUCAO_PENDENTE", new BigDecimal("40.00"), "PENDENTE", "c9", 1L);
+        when(transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE")).thenReturn(List.of(daCobranca, deOutra));
+
+        assertEquals(new BigDecimal("100.00"), svc.devolvidaNaConferencia("conferir:c1", 1L));
+
+        assertEquals("DONE", conferencia.getStatus());
+        assertEquals("CONCLUIDA", daCobranca.getStatus(), "a pendência da cobrança fecha: não repete sobre o que sobrou");
+        assertEquals("PENDENTE", deOutra.getStatus());
+        assertEquals("estornado", p.getPaid());
+        verify(transacoes).save(org.mockito.ArgumentMatchers.argThat(t -> t != null && "ESTORNO".equals(t.getTipo())));
+        verify(asaas, never()).estornar(any(), any(), any());
+        verify(notificacoes).criar(eq(7L), eq("p1"), anyString(), eq("Devolução enviada"), anyString(), anyString());
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () -> svc.devolvidaNaConferencia("conferir:c1", 1L), "não marca duas vezes");
+    }
+
+    /* Regressão (revisão de 26/11): a conferência guarda a parte pedida, não o líquido inteiro. Recorrente devolve 200 − 50 da semana
+       retida: a equipe devolve 150, e não 200 (o cliente levaria os 50 do profissional). */
+    @Test void conferenciaGuardaAParteEAEquipeDevolveSoEla() {
+        Cobranca c = new Cobranca("c1", "p1", 7L, "cartao", "principal", new BigDecimal("200.00"), "asaas", 0);
+        c.pagar(1);
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("150.00")));
+        ArgumentCaptor<TransacaoFinanceira> salva = ArgumentCaptor.forClass(TransacaoFinanceira.class);
+        verify(transacoes).save(salva.capture());
+        assertEquals(new BigDecimal("150.00"), salva.getValue().getValor());
+
+        when(transacoes.findById("conferir:c1")).thenReturn(Optional.of(salva.getValue()));
+        when(cobrancas.findById("c1")).thenReturn(Optional.of(c));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        assertEquals(new BigDecimal("150.00"), svc.devolvidaNaConferencia("conferir:c1", 1L));
+        verify(cobrancas).reservarEstorno(eq("c1"), eq(new BigDecimal("150.00")), anyLong(), anyString());
+    }
+
+    /* Regressão (revisão de 26/11): a cobrança voltou a ter identificador com o Asaas ligado. A devolução sai sozinha; marcar a
+       conferência só a fecha, sem registrar outra devolução (senão a equipe devolveria de novo pelo painel). */
+    @Test void conferenciaDeCobrancaQueVoltouAoAsaasFechaSemDevolverDeNovo() {
+        Cobranca c = asaasPaga("c1", "100.00");
+        TransacaoFinanceira conferencia = new TransacaoFinanceira("conferir:c1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c1", 1L);
+        when(transacoes.findById("conferir:c1")).thenReturn(Optional.of(conferencia));
+        when(cobrancas.findById("c1")).thenReturn(Optional.of(c));
+
+        assertFalse(svc.conferenciaManual("c1"));
+        assertNull(svc.devolvidaNaConferencia("conferir:c1", 1L));
+        assertEquals(PagamentoService.CONFERENCIA_AUTOMATICA, conferencia.getStatus());
+        verify(cobrancas, never()).reservarEstorno(anyString(), any(), anyLong(), anyString());
+        verify(cobrancas, never()).concluirEstorno(anyString(), any(), anyLong(), anyString());
+    }
+
+    /* Regressão (revisão de 26/11): Obra e Recorrente usam a mesma pendência; na conferência o texto não promete o banco. */
+    @Test void pendenciaDeObraERecorrenteUsaOTextoDaConferencia() {
+        Cobranca c = asaasSemTxid();
+        svc.pendencia(c, new BigDecimal("30.00"), new PagamentoService.EstornoAdiado("x", null, true), true);
+        svc.pendencia(c, new BigDecimal("20.00"), new PagamentoService.EstornoAdiado("y"), false);
+        verify(notificacoes).criar(eq(7L), eq("p1"), anyString(), eq("Devolução em andamento"), org.mockito.ArgumentMatchers.contains("equipe da TaskGO está conferindo"), org.mockito.ArgumentMatchers.startsWith("devolucao-pendente:c1:30.00:"));
+        verify(notificacoes).criar(eq(7L), eq("p1"), anyString(), eq("Devolução em andamento"), org.mockito.ArgumentMatchers.contains("assim que o banco liberar"), eq("devolucao-pendente:c1:20.00"));
+    }
+
+    /* Regressão (segunda revisão de 26/11): com uma conferência ainda aberta, repetir o pedido não abre outra nem avisa de novo;
+       uma parte maior atualiza a aberta. Depois de fechada, um pedido novo abre outra conferência (antes, o id fixo travava). */
+    @Test void umaConferenciaAbertaPorCobrancaEDepoisDeFechadaAbreOutra() {
+        Cobranca c = asaasSemTxid();
+        TransacaoFinanceira aberta = new TransacaoFinanceira("conferir:c1:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("50.00"), "VERIFICAR", "c1", 1L);
+        when(transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")).thenReturn(List.of(aberta));
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("50.00")));
+        verify(transacoes, never()).save(any());
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("80.00")));
+        verify(transacoes).save(org.mockito.ArgumentMatchers.argThat(t -> "conferir:c1:1".equals(t.getId()) && new BigDecimal("80.00").equals(t.getValor())));
+        verify(notificacoes, never()).criar(any(), any(), anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.startsWith("estorno-conferir:"));
+
+        when(transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")).thenReturn(List.of());
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("30.00")));
+        verify(transacoes).save(org.mockito.ArgumentMatchers.argThat(t -> t.getId().startsWith("conferir:c1:") && !"conferir:c1:1".equals(t.getId()) && new BigDecimal("30.00").equals(t.getValor())));
+    }
+
+    /* Regressão (terceira revisão de 26/11): recorrente com duas vezes de R$ 50 canceladas na mesma cobrança sem txid. A conferência
+       guardava 50 e marcar fechava as duas pendências: o cliente recebia só metade. Agora a equipe devolve a soma, R$ 100. */
+    @Test void duasPendenciasNaMesmaCobrancaSomamNaConferencia() {
+        Cobranca c = new Cobranca("c1", "p1", 7L, "cartao", "principal", new BigDecimal("200.00"), "asaas", 0);
+        c.pagar(1);
+        TransacaoFinanceira conferencia = new TransacaoFinanceira("conferir:c1:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("50.00"), "VERIFICAR", "c1", 1L);
+        when(transacoes.findById("conferir:c1:1")).thenReturn(Optional.of(conferencia));
+        when(cobrancas.findById("c1")).thenReturn(Optional.of(c));
+        when(transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE")).thenReturn(List.of(
+                new TransacaoFinanceira("v1", 7L, "DEVOLUCAO_PENDENTE", new BigDecimal("50.00"), "PENDENTE", "c1", 1L),
+                new TransacaoFinanceira("v2", 7L, "DEVOLUCAO_PENDENTE", new BigDecimal("50.00"), "PENDENTE", "c1", 2L)));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+
+        assertEquals(new BigDecimal("100.00"), svc.valorDaConferencia(conferencia));
+        assertEquals(new BigDecimal("100.00"), svc.devolvidaNaConferencia("conferir:c1:1", 1L));
+        verify(cobrancas).reservarEstorno(eq("c1"), eq(new BigDecimal("100.00")), anyLong(), anyString());
+    }
+
+    /* Regressão (terceira revisão de 26/11): duas linhas abertas da mesma cobrança (corrida). Marcar uma fecha a outra, para a equipe
+       não devolver duas vezes pelo painel do Asaas. */
+    @Test void marcarUmaConferenciaFechaAsIrmasDaMesmaCobranca() {
+        Cobranca c = asaasSemTxid();
+        TransacaoFinanceira a = new TransacaoFinanceira("conferir:c1:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c1", 1L);
+        TransacaoFinanceira b = new TransacaoFinanceira("conferir:c1:2", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c1", 2L);
+        TransacaoFinanceira outra = new TransacaoFinanceira("conferir:c9:1", 8L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("40.00"), "VERIFICAR", "c9", 1L);
+        when(transacoes.findById("conferir:c1:1")).thenReturn(Optional.of(a));
+        when(cobrancas.findById("c1")).thenReturn(Optional.of(c));
+        when(transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")).thenReturn(List.of(a, b, outra));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+
+        svc.devolvidaNaConferencia("conferir:c1:1", 1L);
+
+        assertEquals("DONE", a.getStatus());
+        assertEquals("DONE", b.getStatus());
+        assertEquals("VERIFICAR", outra.getStatus());
+    }
+
+    /* Regressão (segunda revisão de 26/11): devolução automática concluída fecha a conferência aberta da cobrança. */
+    @Test void devolucaoAutomaticaConcluidaFechaAConferenciaAberta() {
+        Cobranca c = asaasPaga("c1", "100.00");
+        TransacaoFinanceira aberta = new TransacaoFinanceira("conferir:c1:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c1", 1L);
+        when(transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")).thenReturn(List.of(aberta));
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+
+        svc.devolverCobranca(c, new BigDecimal("100.00"));
+
+        assertEquals(PagamentoService.CONFERENCIA_AUTOMATICA, aberta.getStatus());
+    }
+
+    /* Regressão (pendências de 26/11): sem ninguém de financeiro ou suporte cadastrado, o aviso da conferência vai para o administrador. */
+    @Test void semEquipeOAvisoDaConferenciaVaiParaOAdministrador() {
+        Cobranca c = asaasSemTxid();
+        Usuario adm = mock(Usuario.class);
+        when(adm.getId()).thenReturn(5L);
+        when(usuarios.findByEmailIgnoreCase("adm@taskgo.com")).thenReturn(Optional.of(adm));
+        svc.setModeracao(new ModeracaoService(usuarios, "adm@taskgo.com"));
+
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("30.00")));
+
+        verify(notificacoes).criar(eq(5L), any(), anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.argThat(k -> k.startsWith("estorno-conferir:c1:") && k.endsWith(":5")));
     }
 
     /* Regressão (3): fora de transação, o POST ao Asaas acontece com a transação do Spring já encerrada. */

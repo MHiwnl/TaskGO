@@ -104,7 +104,7 @@ function adminVerificacoes(){
 /* A data vem do documento, nunca do perfil (que a própria pessoa preenche): o campo abre vazio. */
 function aprovarVerificacao(id){
   openModal('<div class="modal-head"><div><h3>Aprovar verificação</h3><p>Digite a data de nascimento que está no documento.</p></div><button class="icon-btn" aria-label="Fechar" onclick="closeModal()">'+ic('x')+'</button></div>'+
-    '<div class="field"><label for="vNasc">Data de nascimento</label><input class="input" id="vNasc" type="date" required max="'+new Date().toISOString().slice(0,10)+'"></div>'+
+    '<div class="field"><label for="vNasc">Data de nascimento</label><input class="input" id="vNasc" type="date" required max="'+dataLocalISO(new Date())+'"></div>'+
     '<div class="pag-form-acoes"><button class="btn btn-ghost" onclick="closeModal()">Voltar</button><button class="btn btn-primary" onclick="confirmarAprovacaoVerificacao(\''+esc(id)+'\')">'+ic('check')+'Aprovar</button></div>');
 }
 function confirmarAprovacaoVerificacao(id){
@@ -143,3 +143,6 @@ async function decidirVerificacao(id,decisao,motivo,correcao,nascimento){
     toast(r&&r.menorDeIdade?'Menor de 18 anos: verificação recusada e conta banida':decisao==='aprovar'?'Verificação aprovada':'Verificação recusada',r&&r.menorDeIdade?'err':'ok');verifAdmin=null;render();}
   catch(e){toast(erroLegivel(e,'Não foi possível decidir.'),'err');}
 }
+
+/* aaaa-mm-dd no fuso do aparelho. toISOString() é UTC: em Recife, depois das 21h, já daria o dia seguinte. */
+function dataLocalISO(d){return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);}

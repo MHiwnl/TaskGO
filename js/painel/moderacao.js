@@ -47,7 +47,7 @@ function dashSituacaoConta(){
      emAnalise?'<p class="muted" style="margin-top:6px;font-size:.9rem">Seu recurso está em análise. A resposta chega nas notificações.</p>':
      '<form onsubmit="enviarRecurso(event)" style="margin-top:10px">'+
      (avisos.some(h=>h.pedidoId)?'<div class="field"><label for="avisoRecurso">Qual aviso você contesta?</label><select class="input" id="avisoRecurso">'+
-       avisos.map(h=>'<option value="'+esc(h.pedidoId||'')+'">'+esc(h.texto)+' · '+dataHora(h.quando)+'</option>').join('')+'</select></div>':'')+
+       opcoesAvisoRecurso(avisos)+'</select></div>':'')+
      '<div class="field"><label for="textoRecurso">O que aconteceu?</label>'+
      '<textarea class="textarea" id="textoRecurso" minlength="10" maxlength="2000" required placeholder="Ex.: eu escrevi o número do apartamento, não um telefone."></textarea>'+
      '<div class="hint">Um administrador lê e decide. Aprovado, o aviso sai da conta junto com a punição dele.</div></div>'+
@@ -174,3 +174,9 @@ function ligarEventos(){
   fonteEventos.onerror=()=>{if(fonteEventos&&fonteEventos.readyState===EventSource.CLOSED){fonteEventos=null;setTimeout(ligarEventos,15000);}};
 }
 function desligarEventos(){if(fonteEventos){fonteEventos.close();fonteEventos=null;}}
+
+/* Opções do recurso: só avisos ligados a um pedido levam o pedido (é a conversa dele que a equipe abre); o resto vai como "não é sobre um pedido". */
+function opcoesAvisoRecurso(avisos){
+  return avisos.filter(h=>h.pedidoId).map(h=>'<option value="'+esc(h.pedidoId)+'">'+esc(h.texto)+' · '+dataHora(h.quando)+'</option>').join('')+
+    '<option value="">Não é sobre um pedido</option>';
+}
