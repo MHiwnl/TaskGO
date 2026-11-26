@@ -399,6 +399,45 @@ class PagamentoEstornoTest {
         verify(cobrancas).concluirEstorno(eq("c1"), eq(new BigDecimal("30.00")), anyLong(), eq(Cobranca.ESTORNADA));
     }
 
+    /* Regressão (revisão de 25/11): com o executor do Spring, o POST ao Asaas sai em outra thread depois do commit.
+       Antes, saía dentro do afterCommit, e a requisição de quem chamou esperava o Asaas segurando a conexão do banco. */
+    @Test void devolucaoDepoisDoCommitVaiParaOExecutorSemEsperarOAsaas() throws Exception {
+        Cobranca c = asaasPaga("c1", "100.00");
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        List<Runnable> fila = new java.util.ArrayList<>();
+        svc.setExecutor(fila::add);
+        abrirTransacao();
+        try {
+            assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("30.00")));
+            commitSimulado();
+        } finally { fecharTransacao(); }
+
+        verify(asaas, never()).estornar(any(), any(), any());
+        assertEquals(1, fila.size());
+        fila.get(0).run();
+        verify(asaas, times(1)).estornar(eq("asaas-c1"), eq(new BigDecimal("30.00")), anyString());
+    }
+
+    /* Regressão (revisão de 25/11): cobrança do Asaas sem identificador não pode virar "devolvida" sem o dinheiro sair.
+       Antes, caía no caminho local: gravava ESTORNADA e o registro de estorno, e nada era pedido ao Asaas. */
+    @Test void cobrancaDoAsaasSemTxidNaoEConcluidaAquiEAvisaAEquipe() {
+        Cobranca c = new Cobranca("c1", "p1", 7L, "cartao", "principal", new BigDecimal("100.00"), "asaas", 0);
+        c.pagar(1);
+        when(cobrancas.reservarEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        when(cobrancas.concluirEstorno(eq("c1"), any(), anyLong(), anyString())).thenReturn(1);
+        Usuario financeiro = mock(Usuario.class);
+        when(financeiro.getId()).thenReturn(9L);
+        when(usuarios.findByTipoIgnoreCaseOrderByNomeAsc("financeiro")).thenReturn(List.of(financeiro));
+
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("30.00")));
+
+        verify(cobrancas, never()).concluirEstorno(anyString(), any(), anyLong(), anyString());
+        verify(transacoes, never()).save(org.mockito.ArgumentMatchers.argThat(t -> t != null && "ESTORNO".equals(t.getTipo())));
+        verify(asaas, never()).estornar(any(), any(), any());
+        verify(notificacoes).criar(eq(9L), any(), anyString(), anyString(), anyString(), eq("estorno-conferir:c1:0:9"));
+    }
+
     /* Regressão (3): fora de transação, o POST ao Asaas acontece com a transação do Spring já encerrada. */
     @Test void chamadaAoAsaasSemTransacaoAberta() throws Exception {
         Cobranca c = asaasPaga("c1", "100.00");

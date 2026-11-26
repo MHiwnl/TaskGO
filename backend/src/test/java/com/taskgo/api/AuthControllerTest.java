@@ -69,6 +69,34 @@ class AuthControllerTest {
         assertFalse(atual.getExtra().containsKey("cnpj"));
     }
 
+    /* Regressão (revisão de 25/11): conta verificada trocava a data de nascimento pelo perfil e contornava a trava de 18 anos. */
+    @Test void perfilVerificadoNaoTrocaADataDeNascimento() {
+        Usuario atual=new Usuario(); atual.setId(12L); atual.setEmail("v@taskgo.com"); atual.setTipo("cliente"); atual.setNome("Vera");
+        atual.setBirth("2009-05-10"); atual.addExtra("verificado", true);
+        when(usuarios.findById(12L)).thenReturn(java.util.Optional.of(atual));
+        when(usuarios.save(atual)).thenReturn(atual);
+        var auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+            new TaskgoPrincipal(12L,"v@taskgo.com","Vera","cliente",null),null,java.util.List.of());
+        Usuario outra=new Usuario(); outra.setNome("Vera"); outra.setBirth("2000-01-01"); outra.setTelefone("81999990000");
+        controller.atualizarPerfil(outra,auth);
+        assertEquals("2009-05-10",atual.getBirth(),"a data do documento não muda pelo perfil");
+        assertEquals("81999990000",atual.getTelefone(),"o resto do perfil salva mesmo com a data antiga vinda da tela");
+        Usuario vazia=new Usuario(); vazia.setNome("Vera"); vazia.setBirth("");
+        controller.atualizarPerfil(vazia,auth);
+        assertEquals("2009-05-10",atual.getBirth());
+    }
+
+    @Test void perfilNaoVerificadoAindaAcertaADataDeNascimento() {
+        Usuario atual=new Usuario(); atual.setId(13L); atual.setEmail("n@taskgo.com"); atual.setTipo("cliente"); atual.setNome("Nina");
+        when(usuarios.findById(13L)).thenReturn(java.util.Optional.of(atual));
+        when(usuarios.save(atual)).thenReturn(atual);
+        var auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+            new TaskgoPrincipal(13L,"n@taskgo.com","Nina","cliente",null),null,java.util.List.of());
+        Usuario dados=new Usuario(); dados.setNome("Nina"); dados.setBirth("1990-03-02");
+        controller.atualizarPerfil(dados,auth);
+        assertEquals("1990-03-02",atual.getBirth());
+    }
+
     @Test void emailDeAdministradorViraContaDeAdministrador() {
         controller.setModeracao(new ModeracaoService(usuarios,"adm@taskgo.com"));
         Usuario novo=new Usuario(); novo.setNome("Adm"); novo.setEmail("ADM@taskgo.com"); novo.setTipo("profissional"); novo.setService("eletrica"); novo.setSenha("Tarefa#Forte2026"); novo.addExtra("maiorDeIdade", true);

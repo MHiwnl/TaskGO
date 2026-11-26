@@ -33,7 +33,9 @@ function dashPerfil(){
   '<div class="field"><label>Telefone / WhatsApp</label><input class="input" name="phone" value="'+esc(u.phone)+'" oninput="this.value=maskPhone(this.value)" required></div>'+
   '<div class="field"><label>Cidade</label><input class="input" name="city" value="'+esc(u.city)+'"></div>'+
   (ehEquipe(u)||isPro?'':
-   '<div class="field"><label>Data de nascimento</label><input class="input" type="date" name="birth" value="'+esc(u.birth||'')+'"></div>')+
+   (u.verified&&u.birth?
+    '<div class="field"><label for="cfgNasc">Data de nascimento</label><input class="input" type="date" id="cfgNasc" name="birth" value="'+esc(u.birth)+'" readonly aria-describedby="cfgNascDica"><div class="hint" id="cfgNascDica">Conferida no seu documento. Para corrigir, fale com o suporte.</div></div>':
+    '<div class="field"><label>Data de nascimento</label><input class="input" type="date" name="birth" value="'+esc(u.birth||'')+'"></div>'))+
   '</div>'+
   (isPro?'<div class="field"><label>Sobre você (aparece no seu perfil público)</label><textarea class="textarea" name="bio">'+esc(u.bio)+'</textarea></div>':'')+
   '<button class="btn btn-grad">'+ic('check')+' Salvar alterações</button></form>'+

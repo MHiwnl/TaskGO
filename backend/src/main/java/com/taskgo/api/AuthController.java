@@ -317,7 +317,9 @@ public class AuthController {
         atual.setTelefone(dados.getTelefone());
         atual.setCidade(dados.getCidade()); atual.setEndereco(dados.getEndereco()); atual.setBio(dados.getBio());
         if ("cliente".equalsIgnoreCase(atual.getTipo())) atual.setService(null);
-        if (dados.getBirth() != null) atual.setBirth(dados.getBirth());
+        /* Depois da verificação, a data é a do documento (conferida pela equipe) e não muda pelo perfil, senão a trava de 18 anos
+           se contorna. Ignora sem erro: a tela aberta antes da aprovação ainda manda a data antiga, e o resto do perfil tem de salvar. */
+        if (dados.getBirth() != null && !VerificacaoController.verificado(atual)) atual.setBirth(dados.getBirth());
         if ("profissional".equalsIgnoreCase(atual.getTipo()) && dados.getService() != null && !dados.getService().isBlank()) {
             if (!CatalogoServicos.existe(dados.getService())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escolha a sua categoria no catálogo de serviços.");
             atual.setService(dados.getService().trim());

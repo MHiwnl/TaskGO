@@ -757,6 +757,7 @@ public class PagamentoService {
     /* Uma parte de uma cobrança de pedido cancelado. Sempre fora de transação de quem chamou (ver processarEstorno). */
     private void estornarParte(Cobranca c, BigDecimal parte) {
         long agora = System.currentTimeMillis();
+        semComoDevolver(c);
         if (!ehAsaas(c)) {
             emNovaTransacao(() -> { if (!devolverAqui(c, parte, agora, agora)) throw new EstornoAdiado("Esta devolução já está em andamento."); return null; });
             return;
@@ -797,6 +798,7 @@ public class PagamentoService {
        e a reserva só some quando a devolução é confirmada ou recusada. */
     private void estornarCobranca(Cobranca c, BigDecimal parte, long agora) {
         if (ehAsaas(c)) { estornarNoAsaas(c, parte, agora); return; }
+        semComoDevolver(c);
         if (!emTransacaoOuNova(() -> devolverAqui(c, parte, agora, agora))) throw new EstornoAdiado("Esta devolução já está em andamento.", referenciaReservada(c.getId()));
         if (em != null && em.contains(c)) em.refresh(c);
     }
@@ -821,7 +823,12 @@ public class PagamentoService {
         if (emTransacaoOuNova(() -> cobrancas.reservarEstorno(c.getId(), parte, desde, Cobranca.PAGA)) == 0) throw new EstornoAdiado("Esta devolução já está em andamento.", referenciaReservada(c.getId()));
         if (dentro) {
             org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
-                @Override public void afterCommit() { enviarDepoisDoCommit(c, desde, parte, agora); }
+                @Override public void afterCommit() {
+                    /* Sem executor (testes), envia aqui mesmo; com ele, a requisição de quem chamou não espera o Asaas. */
+                    if (executor == null) { enviarDepoisDoCommit(c, desde, parte, agora); return; }
+                    try { executor.execute(() -> enviarDepoisDoCommit(c, desde, parte, agora)); }
+                    catch (RuntimeException e) { log.warn("Devolução da cobrança {} ficou para a conciliação: {}", c.getId(), e.getMessage()); }
+                }
             });
             if (em != null && em.contains(c)) em.refresh(c);
             throw new EstornoAdiado("Devolução enviada depois da confirmação.", refEstorno(c.getId(), desde));
@@ -847,6 +854,13 @@ public class PagamentoService {
     }
 
     private boolean ehAsaas(Cobranca c) { return "asaas".equals(c.getProvedor()) && asaas != null && c.getTxid() != null; }
+    /* Cobrança do Asaas sem identificador, ou com o Asaas desligado: o dinheiro está no Asaas e daqui não sai.
+       Nunca conclui como devolvida (o cliente ficaria sem o dinheiro e o registro diria que voltou): avisa a equipe e adia. */
+    private void semComoDevolver(Cobranca c) {
+        if (!"asaas".equals(c.getProvedor()) || ehAsaas(c)) return;
+        divergencia(c, 0L, c.getTxid() == null ? "cobrança do Asaas sem identificador da transação" : "o Asaas está desligado neste servidor");
+        throw new EstornoAdiado("Esta devolução precisa ser conferida pela equipe no Asaas.");
+    }
     static String refEstorno(String cobrancaId, long desde) { return PREFIXO_REF + cobrancaId + ":" + desde; }
     static String cobrancaDaRef(String referencia) { return referencia.startsWith(PREFIXO_REF) ? referencia.substring(PREFIXO_REF.length(), referencia.lastIndexOf(':')) : referencia; }
     /* Reserva que já está aberta na cobrança (outro processo devolve): a pendência passa a esperar por ela. Null se não há. */
