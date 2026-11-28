@@ -872,8 +872,16 @@ public class PagamentoService {
             long agora = System.currentTimeMillis();
             transacoes.save(new TransacaoFinanceira(PREFIXO_CONFERIR + c.getId() + ":" + agora, c.getClienteId(), DEVOLUCAO_CONFERIR, parte, "VERIFICAR", c.getId(), agora));
             divergencia(c, agora, c.getTxid() == null ? "cobrança do Asaas sem identificador da transação" : "o Asaas está desligado neste servidor");
-        } else if (parte.compareTo(aberta.getValor()) > 0) {
-            transacoes.save(new TransacaoFinanceira(aberta.getId(), aberta.getUsuarioId(), DEVOLUCAO_CONFERIR, parte, "VERIFICAR", c.getId(), aberta.getCriadaEm()));
+        } else {
+            /* O valor da conferência guarda o último total avisado: se o devido cresceu (outra semana cancelada, parte maior),
+               grava o novo total e avisa a equipe uma vez, para quem já ia devolver não devolver menos. */
+            BigDecimal total = valorDaConferencia(aberta, c).max(parte.min(c.liquido()));
+            if (total.compareTo(aberta.getValor()) > 0) {
+                transacoes.save(new TransacaoFinanceira(aberta.getId(), aberta.getUsuarioId(), DEVOLUCAO_CONFERIR, total, "VERIFICAR", c.getId(), aberta.getCriadaEm()));
+                avisarEquipe(c, "conferir-valor:" + aberta.getId() + ":" + total, "Devolução para conferir mudou",
+                        "A devolução em conferência subiu " + reais(total.subtract(aberta.getValor())) + ": o total agora é " + reais(total)
+                                + " (antes " + reais(aberta.getValor()) + "). Se já devolveu os " + reais(aberta.getValor()) + " no Asaas, devolva só a diferença.");
+            }
         }
         throw new EstornoAdiado("Esta devolução precisa ser conferida pela equipe no Asaas.", null, true);
     }
@@ -881,13 +889,20 @@ public class PagamentoService {
     /* A cobrança voltou a ter identificador e o Asaas ligado: a devolução sai pelo caminho normal, não pela equipe. */
     static final String CONFERENCIA_AUTOMATICA = "AUTOMATICA";
     /** Conferência que ainda depende da equipe. Falso se a cobrança voltou a ter como devolver sozinha (a lista mostra, sem o botão). */
-    public boolean conferenciaManual(String cobrancaId) { return cobrancas.findById(cobrancaId).map(c -> !ehAsaas(c)).orElse(true); }
+    public boolean conferenciaManual(String cobrancaId) { return cobrancas.findById(cobrancaId).map(this::conferenciaManual).orElse(true); }
+    public boolean conferenciaManual(Cobranca c) { return !ehAsaas(c); }
     /** Quanto a equipe devolve: a soma das pendências da cobrança (o recorrente pede uma por vez cancelada) ou o valor da conferência
         (pedido cancelado inteiro, sem pendência), o maior dos dois, até o que ainda está pago na cobrança. */
-    public BigDecimal valorDaConferencia(TransacaoFinanceira t, Cobranca c) {
-        BigDecimal pendente = transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE").stream()
-                .filter(p -> c.getId().equals(p.getReferencia())).map(TransacaoFinanceira::getValor).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return pendente.max(t.getValor()).min(c.liquido()).max(BigDecimal.ZERO);
+    public BigDecimal valorDaConferencia(TransacaoFinanceira t, Cobranca c) { return valorDaConferencia(t, c, pendentesPorCobranca()); }
+    /** Mesmo valor, com as pendências já carregadas (a lista do Financeiro lê uma vez para todas as linhas). */
+    public static BigDecimal valorDaConferencia(TransacaoFinanceira t, Cobranca c, Map<String, BigDecimal> pendentes) {
+        return pendentes.getOrDefault(c.getId(), BigDecimal.ZERO).max(t.getValor()).min(c.liquido()).max(BigDecimal.ZERO);
+    }
+    /** Soma das devoluções pendentes, por referência (a cobrança, nas conferências). */
+    public Map<String, BigDecimal> pendentesPorCobranca() {
+        return transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE").stream().filter(x -> x.getReferencia() != null)
+                .collect(java.util.stream.Collectors.groupingBy(TransacaoFinanceira::getReferencia,
+                        java.util.stream.Collectors.reducing(BigDecimal.ZERO, TransacaoFinanceira::getValor, BigDecimal::add)));
     }
     /** Valor que a lista do Financeiro mostra para a conferência (o mesmo que será registrado ao marcar). */
     public BigDecimal valorDaConferencia(TransacaoFinanceira t) {
@@ -990,11 +1005,34 @@ public class PagamentoService {
     /* Não resolve sozinho: a reserva fica e a equipe confere no Asaas. A chave do aviso impede repetir a cada rodada. */
     private void divergencia(Cobranca c, long desde, String motivo) {
         log.error("Devolução da cobrança {} precisa de conferência: {}", c.getId(), motivo);
+        avisarEquipe(c, "estorno-conferir:" + c.getId() + ":" + desde, "Devolução para conferir", "Uma devolução ficou sem confirmação do Asaas. Confira no Asaas antes de devolver de novo.");
+    }
+    /* Financeiro e suporte; sem ninguém, os administradores. A chave (mais o id de cada um) impede repetir o aviso. */
+    private void avisarEquipe(Cobranca c, String chave, String titulo, String texto) {
         List<Usuario> equipe = java.util.stream.Stream.of("financeiro", "suporte").flatMap(t -> usuarios.findByTipoIgnoreCaseOrderByNomeAsc(t).stream()).toList();
         if (equipe.isEmpty() && moderacao != null)
             equipe = moderacao.emailsAdministradores().stream().map(e -> usuarios.findByEmailIgnoreCase(e).orElse(null)).filter(java.util.Objects::nonNull).toList();
         if (equipe.isEmpty()) log.error("Devolução da cobrança {} para conferir e ninguém da equipe para avisar: confira TASKGO_ADMIN_EMAILS", c.getId());
-        equipe.forEach(a -> avisar(a.getId(), c.getPedidoId(), "Devolução para conferir", "Uma devolução ficou sem confirmação do Asaas. Confira no Asaas antes de devolver de novo.", "estorno-conferir:" + c.getId() + ":" + desde + ":" + a.getId()));
+        equipe.forEach(a -> avisar(a.getId(), c.getPedidoId(), titulo, texto, chave + ":" + a.getId()));
+    }
+
+    /* Conferência aberta cuja cobrança voltou a ter como devolver pelo Asaas e, 30 minutos depois de vista assim, segue sem reserva
+       em andamento: a devolução automática não saiu. Avisa a equipe uma vez por conferência. O relógio começa quando esta rotina vê
+       a cobrança automática pela primeira vez (não na criação da conferência): a pendência tem tempo de devolver sozinha antes.
+       shortcut: a primeira vez fica em memória; reiniciar a API só atrasa o aviso em 30 minutos. Gravar no banco se incomodar. */
+    private final Map<String, Long> automaticaDesde = new java.util.concurrent.ConcurrentHashMap<>();
+    void conferirAutomaticasParadas(long agora) {
+        java.util.Set<String> abertas = new java.util.HashSet<>();
+        for (TransacaoFinanceira t : transacoes.findByTipoAndStatus(DEVOLUCAO_CONFERIR, "VERIFICAR")) {
+            if (t.getReferencia() == null) continue;   // conferência antiga sem cobrança: findById(null) lançaria e pararia a rodada
+            Cobranca c = cobrancas.findById(t.getReferencia()).filter(x -> ehAsaas(x) && x.getValorEstornando() == null && x.liquido().signum() > 0).orElse(null);
+            if (c == null) continue;
+            abertas.add(t.getId());
+            if (automaticaDesde.computeIfAbsent(t.getId(), k -> agora) > agora - 30 * 60_000L) continue;
+            avisarEquipe(c, "conferir-automatica:" + t.getId(), "Devolução automática parada",
+                    "A devolução de " + reais(valorDaConferencia(t, c)) + " devia sair sozinha pelo Asaas e não saiu. Confira no Asaas antes de devolver pelo painel.");
+        }
+        automaticaDesde.keySet().retainAll(abertas);
     }
 
     /* Provedor recusou ou ainda não confirmou a devolução; quem chama registra "em andamento". A referência é a reserva que ficou. */
@@ -1026,6 +1064,8 @@ public class PagamentoService {
             try { processarEstorno(id); }
             catch (RuntimeException e) { log.warn("Devolução do pedido {} falhou: {}", id, e.getMessage()); }
         }
+        try { conferirAutomaticasParadas(System.currentTimeMillis()); }
+        catch (RuntimeException e) { log.warn("Conferência de devoluções automáticas falhou: {}", e.getMessage()); }
     }
 
     /* Pendência de devolução (DEVOLUCAO_PENDENTE, ObraService.prazos): devolve null se já está resolvida; senão, a referência

@@ -109,13 +109,21 @@ public class AdminFinanceiroController {
         r.put("resgatesVerificar", verificar);
         /* Devoluções que só a equipe resolve (cobrança do Asaas sem identificador): devolver no painel do Asaas e marcar aqui. */
         List<Map<String, Object>> devolver = new ArrayList<>();
-        for (TransacaoFinanceira t : transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")) {
+        List<TransacaoFinanceira> abertas = transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR");
+        /* Cobranças, pendências e clientes lidos uma vez para a lista inteira. */
+        Map<String, Cobranca> cobs = new java.util.HashMap<>();
+        cobrancas.findAllById(abertas.stream().map(TransacaoFinanceira::getReferencia).distinct().toList()).forEach(c -> cobs.put(c.getId(), c));
+        Map<Long, String> nomes = new java.util.HashMap<>();
+        usuarios.findAllById(abertas.stream().map(TransacaoFinanceira::getUsuarioId).filter(java.util.Objects::nonNull).distinct().toList()).forEach(u -> nomes.put(u.getId(), u.getNome()));
+        Map<String, BigDecimal> pendentes = abertas.isEmpty() ? Map.of() : pagamentos.pendentesPorCobranca();
+        for (TransacaoFinanceira t : abertas) {
+            Cobranca c = cobs.get(t.getReferencia());
             Map<String, Object> m = new LinkedHashMap<>();
             /* Cobrança que voltou a ter como devolver sozinha: aparece, sem o botão, para a equipe ver se a devolução automática não sai. */
-            m.put("automatica", !pagamentos.conferenciaManual(t.getReferencia()));
-            m.put("id", t.getId()); m.put("valor", pagamentos.valorDaConferencia(t)); m.put("em", t.getCriadaEm());
-            m.put("cliente", t.getUsuarioId() == null ? "Conta excluída" : usuarios.findById(t.getUsuarioId()).map(Usuario::getNome).orElse("Conta excluída"));
-            m.put("pedidoId", cobrancas.findById(t.getReferencia()).map(Cobranca::getPedidoId).orElse(null));
+            m.put("automatica", c != null && !pagamentos.conferenciaManual(c));
+            m.put("id", t.getId()); m.put("valor", c == null ? t.getValor() : PagamentoService.valorDaConferencia(t, c, pendentes)); m.put("em", t.getCriadaEm());
+            m.put("cliente", t.getUsuarioId() == null ? "Conta excluída" : nomes.getOrDefault(t.getUsuarioId(), "Conta excluída"));
+            m.put("pedidoId", c == null ? null : c.getPedidoId());
             devolver.add(m);
         }
         r.put("devolucoesConferir", devolver);

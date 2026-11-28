@@ -612,6 +612,87 @@ class PagamentoEstornoTest {
         verify(notificacoes).criar(eq(5L), any(), anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.argThat(k -> k.startsWith("estorno-conferir:c1:") && k.endsWith(":5")));
     }
 
+    private Usuario equipeFinanceira() {
+        Usuario f = mock(Usuario.class);
+        when(f.getId()).thenReturn(9L);
+        when(usuarios.findByTipoIgnoreCaseOrderByNomeAsc("financeiro")).thenReturn(List.of(f));
+        return f;
+    }
+
+    /* Regressão (pendências de 26/11): outra semana cancelada na mesma cobrança sem txid aumenta o devido. A conferência passa a
+       guardar o novo total e a equipe é avisada uma vez; repetir o mesmo pedido não avisa de novo. */
+    @Test void aumentoDoValorDaConferenciaAvisaAEquipeUmaVez() {
+        Cobranca c = new Cobranca("c1", "p1", 7L, "cartao", "principal", new BigDecimal("200.00"), "asaas", 0);
+        c.pagar(1);
+        equipeFinanceira();
+        TransacaoFinanceira aberta = new TransacaoFinanceira("conferir:c1:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("50.00"), "VERIFICAR", "c1", 1L);
+        when(transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")).thenReturn(List.of(aberta));
+        when(transacoes.findByTipoAndStatus("DEVOLUCAO_PENDENTE", "PENDENTE")).thenReturn(List.of(
+                new TransacaoFinanceira("v1", 7L, "DEVOLUCAO_PENDENTE", new BigDecimal("50.00"), "PENDENTE", "c1", 1L),
+                new TransacaoFinanceira("v2", 7L, "DEVOLUCAO_PENDENTE", new BigDecimal("50.00"), "PENDENTE", "c1", 2L)));
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("50.00")));
+
+        ArgumentCaptor<TransacaoFinanceira> salva = ArgumentCaptor.forClass(TransacaoFinanceira.class);
+        verify(transacoes).save(salva.capture());
+        assertEquals(new BigDecimal("100.00"), salva.getValue().getValor());
+        verify(notificacoes).criar(eq(9L), eq("p1"), anyString(), eq("Devolução para conferir mudou"), org.mockito.ArgumentMatchers.contains("subiu R$ 50,00: o total agora é R$ 100,00"), eq("conferir-valor:conferir:c1:1:100.00:9"));
+
+        when(transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")).thenReturn(List.of(salva.getValue()));
+        assertThrows(PagamentoService.EstornoAdiado.class, () -> svc.devolverCobranca(c, new BigDecimal("50.00")));
+        verify(notificacoes, times(1)).criar(any(), any(), anyString(), eq("Devolução para conferir mudou"), anyString(), anyString());
+    }
+
+    /* Regressão (pendências de 26/11): a cobrança voltou a ter como devolver pelo Asaas, mas a devolução automática não saiu.
+       Antes ficava só na lista; agora, passados 30 minutos sem reserva em andamento, a equipe é avisada. */
+    @Test void devolucaoAutomaticaParadaAvisaAEquipe() {
+        Cobranca c = asaasPaga("c1", "100.00");
+        equipeFinanceira();
+        long agora = 100_000_000L;
+        TransacaoFinanceira velha = new TransacaoFinanceira("conferir:c1:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c1", agora - 31 * 60_000L);
+        when(transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")).thenReturn(List.of(velha));
+        when(cobrancas.findById("c1")).thenReturn(Optional.of(c));
+
+        /* Revisão de 26/11: a conferência é antiga, mas a cobrança acabou de voltar a ser automática; a pendência ainda vai rodar.
+           Avisar agora levaria a equipe a devolver em dobro. */
+        svc.conferirAutomaticasParadas(agora);
+        verify(notificacoes, never()).criar(any(), any(), anyString(), eq("Devolução automática parada"), anyString(), anyString());
+        svc.conferirAutomaticasParadas(agora + 31 * 60_000L);
+        verify(notificacoes).criar(eq(9L), eq("p1"), anyString(), eq("Devolução automática parada"), org.mockito.ArgumentMatchers.contains("R$ 100,00"), eq("conferir-automatica:conferir:c1:1:9"));
+        agora += 62 * 60_000L;
+
+        /* Vista há pouco, com reserva em andamento (a conciliação cuida) ou ainda manual: não avisa nem depois de 31 min. */
+        TransacaoFinanceira recente = new TransacaoFinanceira("conferir:c2:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c2", agora - 60_000L);
+        Cobranca reservadaAgora = asaasPaga("c3", "100.00");
+        reservada(reservadaAgora, agora - 60_000L);
+        TransacaoFinanceira comReserva = new TransacaoFinanceira("conferir:c3:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c3", agora - 31 * 60_000L);
+        TransacaoFinanceira manual = new TransacaoFinanceira("conferir:c4:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c4", agora - 31 * 60_000L);
+        Cobranca semTxid = new Cobranca("c4", "p1", 7L, "cartao", "principal", new BigDecimal("100.00"), "asaas", 0);
+        semTxid.pagar(1);
+        when(transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")).thenReturn(List.of(recente, comReserva, manual));
+        when(cobrancas.findById("c2")).thenReturn(Optional.of(asaasPaga("c2", "100.00")));
+        when(cobrancas.findById("c3")).thenReturn(Optional.of(reservadaAgora));
+        when(cobrancas.findById("c4")).thenReturn(Optional.of(semTxid));
+        svc.conferirAutomaticasParadas(agora);
+        svc.conferirAutomaticasParadas(agora + 20 * 60_000L);
+        verify(notificacoes, times(1)).criar(any(), any(), anyString(), eq("Devolução automática parada"), anyString(), anyString());
+    }
+
+    /* Regressão (revisão de 27/11): conferência antiga sem referência fazia findById(null) lançar (como no Spring Data)
+       e a rodada parava ali, sem avaliar as outras conferências. */
+    @Test void conferenciaSemReferenciaNaoParaARodada() {
+        Cobranca c = asaasPaga("c1", "100.00");
+        equipeFinanceira();
+        long agora = 100_000_000L;
+        TransacaoFinanceira legado = new TransacaoFinanceira("conferir:legado", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("10.00"), "VERIFICAR", null, agora - 90 * 60_000L);
+        TransacaoFinanceira velha = new TransacaoFinanceira("conferir:c1:1", 7L, PagamentoService.DEVOLUCAO_CONFERIR, new BigDecimal("100.00"), "VERIFICAR", "c1", agora - 31 * 60_000L);
+        when(transacoes.findByTipoAndStatus(PagamentoService.DEVOLUCAO_CONFERIR, "VERIFICAR")).thenReturn(List.of(legado, velha));
+        when(cobrancas.findById(org.mockito.ArgumentMatchers.<String>isNull())).thenThrow(new IllegalArgumentException("The given id must not be null"));
+        when(cobrancas.findById("c1")).thenReturn(Optional.of(c));
+        svc.conferirAutomaticasParadas(agora);
+        svc.conferirAutomaticasParadas(agora + 31 * 60_000L);
+        verify(notificacoes, times(1)).criar(any(), any(), anyString(), eq("Devolução automática parada"), anyString(), anyString());
+    }
+
     /* Regressão (3): fora de transação, o POST ao Asaas acontece com a transação do Spring já encerrada. */
     @Test void chamadaAoAsaasSemTransacaoAberta() throws Exception {
         Cobranca c = asaasPaga("c1", "100.00");
