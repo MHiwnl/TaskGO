@@ -1,0 +1,51 @@
+# Cenas do Pixel Chuveiro (16:9, S01–S17)
+
+Lista de produção: cada cena com cenário, objetos, fundo, luz antes/depois e o que a narração promete.
+Rodada 2: marcador do Carlos no mapa, ponte com arcos, Casa Amarela amarela com placa, chuveiro elétrico com fio queimado e faísca, alavanca do disjuntor, móveis com textura em pixel, vapor saindo do chuveiro.
+
+| Cena | Tempo (s) | Cenário e câmera | Objetos visíveis | Fundo | Luz antes → depois | Narração que promete | Conferido |
+|---|---|---|---|---|---|---|---|
+| S01 gancho | 0–2,86 | Rua, alto_empurra | Casa da Socorro (fachada terracota, portão de ferro, janelas com postigos), vizinhas geminadas ocre, azul e rosa, poste com fios, palmeira, bicicleta vermelha, muro com gato, pedra portuguesa com poças | Cidade com janelas acesas, céu; relâmpago em 1,1 s | Janela da casa acesa → sem mudança | nenhuma | 1,5 s |
+| S02 cartão cap. 1 | 2,86–5,71 | Rua, insert na janela | Porta de ferro e janela da casa apagada | Mesmo fundo | Casa escura | nenhuma (cartão) | 4,5 s |
+| S03 | 5,71–11,7 | Casa em corte, medio_porta | Sala (sofá com almofadas e braços, TV com tela, estante, quadro, planta em vaso), quarto (cama com colcha e travesseiro, guarda-roupa com portas), corredor (console com telefone, quadro de paisagem), banheiro (chuveiro elétrico, toalha), cozinha (balcão com portas, fogão com quatro bocas e panela, geladeira com puxador e ímãs, mesa com cadeiras). Socorro com lanterna; gesticula depois de 8,5 s | Fundo escuro da casa | Só a lanterna da Socorro e a luz do telefone | l01 em 5,9 s: "a luz da casa se apagou" | 8 s |
+| S04 celular | 11,7–14,29 | Sem 3D (cartão) | Cartão do Carlos (eletricista, ★ 4,9, "a caminho") | Escuro | — | l02 em 12,0 s: "pediu um eletricista pelo celular" | cartão no código |
+| S05 cartão cap. 2 | 14,29–16,29 | Sem 3D | Cartão "Capítulo 2 · O caminho" | Escuro | — | nenhuma | — |
+| S06 mapa | 16,29–19,57 | Mapa de cima | Quarteirões com telhados, praças com árvores, rio com ponte, ruas, prédios com telhado, rota tracejada. **Marcador do Carlos**: figura de cima com cabeça, boné, capa azul e caixa de ferramentas, saindo da casa | Terreno do mapa | — | l03 em 16,6 s: "saiu de casa de capa azul, com a caixa de ferramentas" | 17,5 s |
+| S07 mapa | 19,57–21,6 | Mapa, topo para 3/4 | Mesmos objetos; o marcador do Carlos avança pela rota e chega à porta da dona Socorro (17,1; 1,6); a porta acende ao chegar (câmera final em x 10, com a porta no quadro) | Terreno do mapa | — | nenhuma | 20,5 s (rodada 1) |
+| S08 caminho | 21,6–26,9 | Caminho, travelling fixo e alto (câmera a 6 m de altura, 18 m de distância): a ponte inteira, a água embaixo e o Carlos atravessando | Rua molhada com poças, calçadas de pedra, loja de vinho com vitrine, bar fechando com persiana e fresta de luz, toldos com pingos, postes com lâmpada, **ponte** sobre o rio (arcos de pedra de frente, guarda-corpo, postes com reflexo na água), Carlos com capa azul, luz de frente. **Casa Amarela** (x 7,6): casa de bairro amarela, volume fechado com telhado, porta de ferro, janelas de postigo e placa legível "CASA AMARELA" acima da porta | Silhueta da cidade com janelas acesas; céu | Postes de rua e luz de frente sobre o Carlos | l04 em 21,9 s: "atravessou a ponte, passou pela Casa Amarela, e a chuva não deu trégua". Ponte e Casa Amarela ficam no quadro durante todo o S08 | 23,5 s (Casa Amarela com placa); 25,8 s (ponte com arcos e Carlos sobre a laje) |
+| S09 caminho | 26,9–28,57 | Caminho, mergulho baixo | Carlos perto da ponte, pingos do toldo, poças, Casa Amarela ao fundo | Cidade ao fundo | — | nenhuma (o portão foi removido) | 26,5 s (rodada 1) |
+| S10 corredor | 28,57–34,29 | Casa em corte, medio_34_dois | Socorro (gesticula de 8,5 s em diante, no S03) e Carlos no corredor; sala, cozinha e quadro à vista; celular em 31,43 s | Casa escura; lanterna da Socorro | Lanterna | l05 em 28,9 s: "chegou e mostrou o código de quatro dígitos" | 31 s (rodada 1) |
+| S11 close + caixa | 34,29–37,7 | Close do Carlos, caixa de diálogo | Caixa de diálogo "Confere no seu app: 4719" | Casa escura | Lanterna | f01 em 34,6 s: "Confere no seu app: 4719" | 36 s (rodada 1) |
+| S12 quadro | 37,7–40,3 | Casa em corte: 37,7–38,66 s chuveiro de perto (câmera a 3,3 m); 38,66–40,3 s quadro de luz com o Carlos inteiro no quadro (câmera alta) | **Chuveiro elétrico** no banheiro com fio preto queimado e faíscas amarelas (de ~36,8 s até ~39 s); **quadro de luz** com alavanca vermelha que sobe em 0,3 s a partir de 39,66 s (religa = virada − 3,2 s); Carlos com pose do disjuntor; geladeira fora do caminho da câmera | Casa escura | Lanterna | l06 em 37,9 s: "achou o defeito no chuveiro e religou o disjuntor" | 38,2 s (chuveiro com fio preto e faísca, luz própria da faísca); 39,8 s (alavanca subindo; **Carlos no quadro, mas as pernas ficam atrás do balcão da cozinha**) |
+| S13 largo travado | 40,3–42,86 | Casa em corte, largo | Socorro e Carlos no corredor, sala e cozinha à sombra, mobília visível (sofá, TV, geladeira) | Casa escura | Lanterna | nenhuma | 41,5 s (rodada 1) |
+| S14 a luz volta | 42,86–46,0 | Casa em corte, puxada (cômodos acendem em cascata) | Todos os cômodos mobiliados. **Banheiro: chuveiro elétrico com vapor saindo dele** (sprites que sobem e se espalham a partir do chuveiro, só depois da virada) | Casa acesa; luz derrama para fora | Cascata: banheiro 42,86 s, cozinha 43,26 s, sala 43,71 s, quarto e corredor 44,16 s | l07 em 43,2 s: "a luz voltou, e com ela o vapor do banho quente" | 43,2 s, 44,5 s, 45,5 s (rodada 2, rascunho) |
+| S15 pix | 46,0–52,14 | Casa em corte, medio_porta com cartão | Cartão "Pix ao profissional R$ 180,00, Pago", cinco estrelas acendem uma a uma; casa toda acesa | Casa acesa | Tudo aceso | l08 em 47,7 s: "pagou pelo Pix e deu cinco estrelas" | 48 s (rodada 1) |
+| S16 eco | 52,2–55 | Rua, alto_volta | Casa com as duas janelas e a porta acesas; vizinha ocre acende a janela de baixo a partir de 53 s; chuva | Cidade | Janelas da casa e do vizinho acesas | l09 em 52,6 s: "a mesma janela, acesa de novo" | 53 s (rodada 1) |
+| S17 título | 55–60 | Rua, alto_volta, título | Casa acesa, cartão TaskGO (mesma fonte Cinzel dos cartões de capítulo; "GO" em #2b59ff), "Serviços locais em Recife" (Cormorant Garamond itálica, como as legendas) | Cidade | Casa acesa | nenhuma | 58 s (rodada 1) |
+
+## Pendências e riscos
+
+- Móveis: agora têm textura em pixel (tecido, metal, madeira, tela, pintura), mas continuam em blocos de baixa poligonagem. Não são ilustrações detalhadas.
+- S03 a S13 ficam no escuro de propósito (lanterna e luz do telefone); os cômodos só acendem em S14.
+- S08: a ponte e a Casa Amarela só entram no quadro perto de 25–27 s. A travessia completa da ponte não cabe no enquadramento atual da câmera.
+- 9x16 (V01–V10): mesmo conteúdo, mapeado pelos mesmos planos (ver plano.json); não foi conferido o quadro a quadro nesta rodada.
+
+## Coerência física (regra do BRIEF.md)
+
+- Construções: toda casa e loja é volume fechado (caixa com 6 faces), com cimalha, telhado de telha, peitoril e verga nas janelas, batente recuado na porta e soleira. Vista traseira da rua (`dbg=6,8,-26,0,2,-6`) confere: nenhuma face faltando.
+- Casa em corte: paredes externas com 0,3 m de espessura, teto translúcido (20 % de opacidade) para mostrar o telhado por fora sem esconder os cômodos. A frente fica aberta de propósito (é o corte). Vista de cima (`dbg=0,14,4.5,0,0,-0.7`) confere os cômodos.
+- Personagens: apoiados no chão (y = 0); dona Socorro em x -0,2, dentro do corredor (a divisória fica em x -1,2); Carlos em x 1,2. Portas com 1,0 m de largura e 2,3 m de altura.
+- Ponte: laje fechada de 3 m e dois arcos sólidos (extrusão de perfil fechado com vão, um em cada lado da pista); guarda-corpo com postes e reflexo na água. Conferida de outro ângulo com `dbg=-1,5,-12,5,0.5,-2`.
+- Casa Amarela: volume fechado com telhado, porta e janelas. Na vista extra (`dbg`) ela ficou fora do quadro; o volume foi conferido de frente em 9x16 (9 s). **Pendência:** falta uma vista extra da Casa Amarela de lado.
+- Mapa: rota sobre o grafo de ruas (ruas em X e Z = -19,4 + 6 m, com 1,2 m de largura). Sai da porta do Carlos (-10,4; 4,6), anda por (-7,4; 4,6) → (-7,4; -7,4) → (4,6; -7,4), cruza o rio só pela ponte (10,6; -7,4) e termina na porta da dona Socorro (17,1; 1,6), que acende ao chegar. Nenhum quarteirão é cruzado: os prédios ficam no centro de cada bloco (k 0–3, l 0–5), fora das praças e fora da casa do Carlos. Conferido com `dbg=2,60,0.01,2,0,0` (mapa de cima com a rota pontilhada).
+- Limite conhecido: os personagens são sprites que giram para a câmera; vistos de cima ficam finos, como em qualquer billboard. O teste de física é o de pé, não o de cima.
+
+## Correções feitas pelo coordenador (27/11)
+| Cenário | Antes | Agora | Conferido |
+|---|---|---|---|
+| Chão da rua (S01, S02, S16, S17) | pedra lisa em toda parte, sem rua | pedra portuguesa em ondas preto e branco com rejunte e poças; rua de asfalto com remendo, rachadura e faixa amarela tracejada; meio-fio dos dois lados; bueiros com grelha | quadro 2 s (16:9) |
+| Chão do caminho (S08) | calçadas lisas, rio de 3 m que parecia sarjeta | pedra portuguesa nas calçadas, asfalto com meio-fio, faixa e bueiros; rio com 10 m, água 1 m abaixo, cristas claras e muros de cais | 23, 25, 26,5 s (16:9); 8,5 e 11 s (9:16) |
+| Ponte | arco pequeno solto no meio da rua; Carlos parado na calçada | laje grossa sobre o rio, parede de tijolo com três arcos de cada lado (vãos abertos por baixo), guarda-corpo, postes com luz própria e reflexo na água; Carlos atravessa de x −8 a x 13 | 25 s (16:9), 8,5 s (9:16) |
+| Casa Amarela | ocre, no canto, placa ilegível | amarela, depois da ponte, placa grande "CASA AMARELA"; a câmera acompanha o Carlos e a casa entra no quadro nos dois formatos | 26,5 s (16:9), 11 s (9:16) |
+| Chuveiro (S12, 1ª parte) | caixa branca, faísca invisível | cano, corpo com chave, crivo redondo com furos, fio preto com ponta queimada, faíscas e luz da faísca; lanterna do Carlos ilumina | 38,0 e 38,4 s (16:9), 15 s (9:16) |
+| Disjuntor (S12, 2ª parte) | nunca subia (a cena não sabia quando a luz voltava) e não aparecia | quadro com 4 disjuntores e o vermelho do chuveiro; a alavanca sobe em 39,66 s; Carlos ao lado do quadro, sem cobrir o disjuntor | 39,4 (embaixo) e 39,9 s (em cima) |

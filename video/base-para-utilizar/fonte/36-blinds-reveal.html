@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>36 · blinds reveal</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: blinds-reveal (persianas em faixas). Cada faixa guarda a cena inteira deslocada para alinhar
+   com a tela; a faixa abre do centro para as bordas com atraso por faixa. O movimento de flutuação é aplicado
+   a todas as cópias da mesma cena, então a costura entre faixas não aparece. */
+const { p, outExpo, el, cores } = M;
+const N = 8, ALT = 1080 / N;
+let telaA, telaB, telaC, faixasB = [], faixasC = [], bobs = [];
+
+const pedido = `
+<div style="position:absolute;left:160px;top:200px;font-size:30px;letter-spacing:6px;font-weight:700;color:${cores.azul}">NOVO PEDIDO</div>
+<div style="position:absolute;left:160px;top:260px;width:1500px;font-size:120px;font-weight:700;letter-spacing:-4px;line-height:1.05">Preciso de um eletricista</div>
+<div style="position:absolute;left:160px;top:560px;width:1000px;height:320px;border-radius:28px;background:#0e0f14;border:1px solid #23263a;box-sizing:border-box;padding:44px 48px">
+  <div style="font-size:44px;font-weight:600">Troca de chuveiro</div>
+  <div style="font-size:30px;color:${cores.cinza};margin-top:12px">Hoje, 16h · Vila Mariana</div>
+  <div style="position:absolute;left:48px;bottom:44px;height:80px;line-height:80px;padding:0 40px;border-radius:999px;background:${cores.azul};font-size:32px;font-weight:700">Enviar pedido</div>
+</div>`;
+
+const aceito = `
+<div style="position:absolute;left:160px;top:200px;font-size:30px;letter-spacing:6px;font-weight:700;color:${cores.azul}">PEDIDO ACEITO</div>
+<div style="position:absolute;left:160px;top:260px;width:1500px;font-size:120px;font-weight:700;letter-spacing:-4px;color:#000">Carlos aceitou</div>
+<div style="position:absolute;left:160px;top:560px;width:1000px;height:320px;border-radius:28px;background:#fff;border:1px solid #d9dce6;box-shadow:0 30px 60px rgba(0,0,0,.12);box-sizing:border-box;padding:44px 48px;color:#000">
+  <div style="display:flex;gap:28px;align-items:center">
+    <div style="width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,${cores.azul},${cores.azulClaro});display:grid;place-items:center;font-size:52px;font-weight:700;color:#fff">C</div>
+    <div><div style="font-size:44px;font-weight:700">Carlos · Eletricista</div><div style="font-size:30px;color:#555;margin-top:8px">★ 4,9 · 128 serviços</div></div>
+  </div>
+  <div style="position:absolute;right:48px;bottom:44px;height:80px;line-height:80px;padding:0 40px;border-radius:999px;background:${cores.azul};font-size:32px;font-weight:700;color:#fff">Pagar por Pix</div>
+</div>`;
+
+const marcaHtml = `<div style="position:absolute;left:0;top:380px;width:100%;text-align:center;font-size:260px;font-weight:700;letter-spacing:-10px;line-height:1;color:#fff">Task<span style="color:${cores.azul}">GO</span></div>`;
+
+/* N faixas da mesma cena; cada uma mostra só o seu pedaço da tela */
+function faixas(pai, html, fundo) {
+  const lista = [];
+  for (let i = 0; i < N; i++) {
+    const f = el('div', `position:absolute;left:0;top:${i * ALT}px;width:1920px;height:${ALT}px;overflow:hidden;background:${fundo}`, pai);
+    const c = el('div', `position:absolute;left:0;top:${-i * ALT}px;width:1920px;height:1080px`, f, html);
+    lista.push(f); bobs.push(c);
+  }
+  return lista;
+}
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#000';
+    const A = el('div', 'position:absolute;inset:0;background:#08080a;overflow:hidden', palco);
+    bobs.push(el('div', 'position:absolute;left:0;top:0;width:1920px;height:1080px', A, pedido));
+    telaB = el('div', 'position:absolute;inset:0', palco); faixasB = faixas(telaB, aceito, '#f4f5f8');
+    telaC = el('div', 'position:absolute;inset:0', palco); faixasC = faixas(telaC, marcaHtml, '#000');
+  },
+  quadro(t) {
+    /* 0.9–1.8 persianas abrem revelando o perfil · 3.0–3.9 revelam a marca (de baixo para cima) */
+    faixasB.forEach((f, i) => {
+      const k = outExpo(p(t, 0.9 + i * 0.04, 1.35 + i * 0.04));
+      f.style.clipPath = `inset(${((1 - k) * 50).toFixed(3)}% 0 ${((1 - k) * 50).toFixed(3)}% 0)`;
+    });
+    faixasC.forEach((f, i) => {
+      const k = outExpo(p(t, 3.0 + (N - 1 - i) * 0.04, 3.45 + (N - 1 - i) * 0.04));
+      f.style.clipPath = `inset(${((1 - k) * 50).toFixed(3)}% 0 ${((1 - k) * 50).toFixed(3)}% 0)`;
+    });
+    /* flutuação suave da cena inteira (mesmo valor em todas as cópias) */
+    const bob = (Math.sin(t * 1.6) * 6).toFixed(2);
+    bobs.forEach(c => c.style.transform = `translateY(${bob}px)`);
+  }
+};
+</script></body></html>

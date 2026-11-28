@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>27 · typing input</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: typing-input (awesome-ai-motion nº 317). A busca do app recebe "Preciso de eletricista" letra a letra
+   em intervalos fixos e irregulares (sem aleatório). Ao terminar, três sugestões entram em cascata; a primeira
+   acende. Depois a tela sai e entra a marca. */
+const { p, outExpo, mola, el, cores, rnd } = M;
+const TEXTO = 'Preciso de eletricista';
+const GAPS = [...TEXTO].map((_, i) => 0.07 + 0.1 * rnd(i + 101)());
+const TEMPOS = []; GAPS.reduce((acc, g, i) => (TEMPOS[i] = acc + g, acc + g), 0.5);
+const SUGESTOES = ['Eletricista residencial', 'Eletricista para chuveiro', 'Eletricista disponível hoje'];
+let ui, campo, caret, lista = [], sugeridos = [], marca, simbolo, tag, grade;
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    grade = el('div', 'position:absolute;inset:-120px;opacity:.1;background-image:linear-gradient(90deg,#2b59ff 2px,transparent 2px),linear-gradient(#2b59ff 2px,transparent 2px);background-size:120px 120px', palco);
+    ui = el('div', 'position:absolute;left:360px;top:300px;width:1200px;height:520px', palco);
+    const barra = el('div', 'position:absolute;left:0;top:0;width:1200px;height:150px;border-radius:75px;background:#0e0f14;border:3px solid #2b59ff;box-shadow:0 0 60px rgba(43,89,255,.35);display:flex;align-items:center;padding:0 60px', ui);
+    campo = el('div', 'font-size:56px;font-weight:500;white-space:pre;color:#fff', barra);
+    caret = el('div', 'width:4px;height:70px;background:#2b59ff;margin-left:6px', barra);
+    SUGESTOES.forEach((txt, k) => {
+      const linha = el('div', `position:absolute;left:0;top:${200 + k * 120}px;width:1200px;height:100px;border-radius:50px;background:#0e0f14;border:2px solid #23263a;display:flex;align-items:center;padding:0 60px;font-size:40px;font-weight:500;color:#fff`, ui, txt);
+      lista.push(linha);
+    });
+    marca = el('div', 'position:absolute;left:0;width:100%;top:440px;text-align:center;font-size:200px;font-weight:700;letter-spacing:-8px;opacity:0;white-space:nowrap', palco, `Task<span style="color:${cores.azul}">GO</span>`);
+    simbolo = el('img', 'position:absolute;left:960px;top:260px;width:200px;margin-left:-100px;margin-top:-100px;opacity:0', palco);
+    simbolo.src = M.simbolo;
+    tag = el('div', `position:absolute;left:0;width:100%;top:760px;text-align:center;font-size:44px;font-weight:500;color:${cores.cinza};opacity:0`, palco, 'Marketplace de serviços locais');
+  },
+  quadro(t) {
+    grade.style.transform = `translate(${-((t * 60) % 120)}px,${-((t * 30) % 120)}px)`;
+    const n = TEMPOS.filter(x => t >= x).length;
+    campo.textContent = TEXTO.slice(0, n);
+    const fim = TEMPOS[TEMPOS.length - 1];
+    caret.style.opacity = t < 3.7 && Math.floor(t / 0.24) % 2 === 0 ? 1 : 0;
+    /* sugestões entram em cascata com mola depois de digitar */
+    const saiUi = p(t, 3.3, 3.8);
+    ui.style.opacity = 1 - saiUi;
+    ui.style.transform = `scale(${1 - 0.06 * saiUi})`;
+    lista.forEach((el_, k) => {
+      const e = mola(t - fim - 0.15 - k * 0.12, 2.2, 5);
+      el_.style.opacity = t > fim ? Math.min(1, e) : 0;
+      el_.style.transform = `translateY(${(1 - Math.min(1, e)) * 40}px)`;
+      el_.style.background = k === 0 && t >= fim + 1.1 && t < 3.7 ? cores.azul : '#0e0f14';
+    });
+    const entra = outExpo(p(t, 4.0, 4.5));
+    marca.style.opacity = p(t, 4.0, 4.3);
+    marca.style.transform = `scale(${1.2 - 0.2 * entra})`;
+    simbolo.style.opacity = p(t, 3.9, 4.1);
+    simbolo.style.transform = `scale(${mola(t - 3.9, 2.2, 5)})`;
+    /* a busca só some depois de 3.8 s; a marca entra a partir de 4.0 s */
+    tag.style.opacity = p(t, 4.5, 4.9);
+  }
+};
+</script></body></html>

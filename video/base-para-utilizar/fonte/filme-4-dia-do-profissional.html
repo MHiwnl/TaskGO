@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>filme 4 · dia do profissional</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Filme 4 · o lado do profissional, plano contínuo (20 s).
+   A câmera só desliza entre três cenas do mesmo mundo: celular (o pedido chega e é aceito),
+   agenda (o pedido voa até quinta 14h e a agenda enche) e ganhos (valor, barras, avaliação 5★).
+   No fim, as estrelas sobem, viram o símbolo e a marca. */
+const { p, lerp, outExpo, outCubic, outBack, inOutCubic, mola, el, cores } = M;
+const on = (t, a, b) => (t >= a && t < b ? 1 : 0);
+const AX = 2120, PX = 4410, PY = 150, CAM_F = 4200;   /* agenda e painel no mundo; câmera final do painel */
+const SEM = [980, 1240, 1410, 1230];                    /* ganhos por semana (soma R$ 4.860) */
+/* célula da agenda: dia 0 = seg … 6 = dom; hora 9–17 */
+const cel = (dia, hora) => ({ x: AX + 220 + dia * 210 + 5, y: 230 + (hora - 9) * 80 + 2 });
+const STAR = '<polygon points="12,1 15.1,8.3 23,9 17,14.2 18.8,22 12,18 5.2,22 7,14.2 1,9 8.9,8.3" fill="#35d08f"/>';
+/* eventos de som: x em px da tela no instante do evento */
+const EVENTOS = [
+  { t: 1.3, kind: 'land', x: 960 }, { t: 3.9, kind: 'tap', x: 1087 }, { t: 4.8, kind: 'whip', x: 960 },
+  { t: 7.0, kind: 'land', x: 1075 }, { t: 8.6, kind: 'land', x: 655 }, { t: 8.9, kind: 'land', x: 1285 }, { t: 9.2, kind: 'land', x: 445 },
+  { t: 10.2, kind: 'whip', x: 960 }, { t: 11.8, kind: 'type', x: 500, dur: 2.4 }, { t: 12, kind: 'rise', x: 650 },
+  { t: 15, kind: 'word', x: 1430 }, { t: 17.3, kind: 'whip', x: 960 }, { t: 17.6, kind: 'rise', x: 960 },
+  { t: 18.9, kind: 'hit', x: 960 }, { t: 19.3, kind: 'word', x: 960 }
+];
+
+let mundo, fin, flashF, phone, card, lab, tit, prc, btn, btnTxt, chk, chkPath, cur, valor, bars = [], lin, rev, revTxt, revNome, revStars = [];
+let estat = [], finStars = [], simb, finMarca, frase;
+
+window.CLIPE = {
+  dur: 20,
+  eventos: EVENTOS,
+  montar(palco) {
+    mundo = el('div', 'position:absolute;left:0;top:0;width:7000px;height:1080px', palco);
+
+    /* celular: vibra e o banner do pedido cai dentro dele */
+    phone = el('div', 'position:absolute;left:680px;top:40px;width:560px;height:1000px;border-radius:72px;background:#0a0b10;border:3px solid #23263a;overflow:hidden;opacity:0', mundo,
+      `<div style="position:absolute;left:0;width:100%;top:60px;text-align:center;font-size:120px;font-weight:300;letter-spacing:-4px">14:02</div>
+       <div style="position:absolute;left:0;width:100%;top:200px;text-align:center;font-size:30px;color:${cores.cinza}">Quinta-feira</div>`);
+
+    /* pedido: é o mesmo elemento no banner, na mão e na célula da agenda */
+    card = el('div', 'position:absolute;z-index:5;left:740px;top:300px;width:440px;height:150px;border-radius:24px;background:#0e0f14;border:2px solid #2b59ff;opacity:0', mundo);
+    lab = el('div', 'position:absolute;left:28px;top:18px;font-size:22px;color:#9a9aa6;white-space:nowrap', card, 'Novo pedido');
+    tit = el('div', 'position:absolute;left:28px;top:50px;font-size:28px;font-weight:600;white-space:nowrap', card, 'Troca de tomada');
+    prc = el('div', `position:absolute;left:28px;top:104px;font-size:30px;font-weight:600;color:${cores.verde};white-space:nowrap`, card, 'R$ 180');
+    btn = el('div', `position:absolute;right:18px;top:45px;width:150px;height:60px;border-radius:30px;background:${cores.azul};display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600`, card,
+      '<span>Aceitar</span><svg viewBox="0 0 64 64" width="44" height="44" style="position:absolute;left:53px;top:8px;opacity:0"><path d="M18 33 L28 43 L47 22" fill="none" stroke="#000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>');
+    btnTxt = btn.querySelector('span'); chk = btn.querySelector('svg'); chkPath = chk.querySelector('path');
+
+    /* cursor do dedo */
+    cur = el('div', 'position:absolute;z-index:6;left:0;top:0;width:44px;height:52px;opacity:0;transform-origin:0 0', mundo,
+      '<svg viewBox="0 0 44 52" width="44" height="52"><path d="M4 2 L4 40 L14 31 L21 48 L28 45 L21 29 L34 29 Z" fill="#fff" stroke="#000" stroke-width="2"/></svg>');
+
+    /* agenda da semana */
+    el('div', `position:absolute;left:${AX + 60}px;top:60px;width:1700px;height:980px;border-radius:32px;background:#0e0f14;border:1px solid #23263a`, mundo);
+    el('div', `position:absolute;left:${AX + 120}px;top:100px;font-size:40px;font-weight:700`, mundo, 'Agenda da semana');
+    ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].forEach((d, i) => el('div', `position:absolute;left:${AX + 220 + i * 210}px;top:150px;width:200px;font-size:24px;color:${cores.cinza};text-align:center`, mundo, d));
+    for (let h = 9; h <= 17; h++) {
+      el('div', `position:absolute;left:${AX + 110}px;top:${230 + (h - 9) * 80 + 26}px;font-size:22px;color:${cores.cinza}`, mundo, h + 'h');
+      el('div', `position:absolute;left:${AX + 200}px;top:${230 + (h - 9) * 80}px;width:1500px;height:1px;background:#1a1d29`, mundo);
+    }
+    /* pedidos que já estavam na agenda: entram em cascata depois que o primeiro encaixa */
+    const pedidoEst = (c, titulo, preco, t0) => {
+      const e = el('div', `position:absolute;left:${c.x}px;top:${c.y}px;width:200px;height:76px;border-radius:18px;background:#0e0f14;border:1px solid #23263a;opacity:0`, mundo,
+        `<div style="position:absolute;left:18px;top:14px;font-size:20px;font-weight:600;white-space:nowrap">${titulo}</div><div style="position:absolute;left:18px;top:44px;font-size:20px;font-weight:600;color:${cores.verde}">${preco}</div>`);
+      estat.push({ e, t0 });
+    };
+    pedidoEst(cel(1, 10), 'Tomada', 'R$ 90', 8.6);
+    pedidoEst(cel(4, 9), 'Chuveiro', 'R$ 140', 8.9);
+    pedidoEst(cel(0, 16), 'Quadro de luz', 'R$ 320', 9.2);
+
+    /* painel de ganhos */
+    const painel = el('div', `position:absolute;left:${PX}px;top:${PY}px;width:1500px;height:800px;border-radius:32px;background:#0e0f14;border:1px solid #23263a`, mundo);
+    el('div', 'position:absolute;left:60px;top:50px;font-size:30px;color:#9a9aa6', painel, 'Ganhos em novembro');
+    valor = el('div', 'position:absolute;left:60px;top:95px;font-size:150px;font-weight:700;letter-spacing:-4px;white-space:nowrap', painel, 'R$ 0');
+    SEM.forEach((v, i) => {
+      bars.push(el('div', `position:absolute;left:${80 + i * 200}px;top:700px;width:120px;height:0px;border-radius:16px 16px 0 0;background:${cores.azul}`, painel));
+      el('div', `position:absolute;left:${80 + i * 200}px;top:716px;width:120px;text-align:center;font-size:22px;color:#9a9aa6`, painel, `Sem ${i + 1}`);
+    });
+    el('div', 'position:absolute;left:0;top:0;width:1500px;height:800px', painel,
+      `<svg viewBox="0 0 1500 800" width="1500" height="800"><polyline id="lin" points="140,410 340,343 540,300 740,346" fill="none" stroke="${cores.verde}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>`);
+    lin = painel.querySelector('#lin');
+    /* avaliação 5 estrelas */
+    rev = el('div', 'position:absolute;left:1000px;top:330px;width:440px;height:230px;border-radius:24px;background:#08080a;border:1px solid #23263a;opacity:0', painel);
+    revStars = [0, 1, 2, 3, 4].map(i => el('div', `position:absolute;left:${1036 + i * 62}px;top:370px;width:40px;height:40px;opacity:0`, painel, `<svg viewBox="0 0 24 24" width="40" height="40">${STAR}</svg>`));
+    revTxt = el('div', 'position:absolute;left:1036px;top:450px;font-size:36px;font-weight:600;white-space:nowrap;opacity:0', painel, 'Rápido e caprichoso');
+    revNome = el('div', `position:absolute;left:1036px;top:506px;font-size:24px;color:${cores.cinza};white-space:nowrap;opacity:0`, painel, 'Mariana · 2 min atrás');
+
+    /* fim: fundo preto, estrelas que viram o símbolo, marca e frase */
+    fin = el('div', 'position:absolute;inset:0;background:#000;opacity:0', palco);
+    for (let i = 0; i < 5; i++) {
+      const sx = PX + 1056 + i * 62 - CAM_F, sy = PY + 390;
+      finStars.push(el('div', `position:absolute;left:${sx - 20}px;top:${sy - 20}px;width:40px;height:40px;opacity:0`, fin, `<svg viewBox="0 0 24 24" width="40" height="40">${STAR}</svg>`));
+    }
+    simb = el('img', 'position:absolute;left:850px;top:300px;width:220px;opacity:0', fin); simb.src = M.simbolo;
+    finMarca = el('div', `position:absolute;left:0;width:1920px;top:560px;text-align:center;font-size:200px;font-weight:800;letter-spacing:-6px;line-height:200px;color:#fff;opacity:0`, fin, `Task<span style="color:${cores.azul}">GO</span>`);
+    frase = el('div', 'position:absolute;left:0;width:1920px;top:800px;text-align:center;font-size:56px;font-weight:600;color:#fff;opacity:0', fin, 'Mais clientes perto de você.');
+    flashF = el('div', `position:absolute;inset:0;background:${cores.azul};opacity:0`, fin);
+  },
+  quadro(t) {
+    /* câmera: parada no celular, desliza para a agenda (4,8–7,2 s), para o painel (10,2–11,6 s) */
+    const cam = 2000 * inOutCubic(p(t, 4.8, 7.2)) + 2200 * inOutCubic(p(t, 10.2, 11.6));
+    mundo.style.transform = `translateX(${-cam}px)`;
+
+    /* 0–1 celular surge; 1,0–1,4 vibra três vezes */
+    const buzz = on(t, 1.0, 1.08) + on(t, 1.14, 1.22) + on(t, 1.28, 1.36);
+    phone.style.opacity = p(t, 0, 0.3);
+    phone.style.transform = `translateX(${buzz * 7 * Math.sin(t * 150)}px) scale(${lerp(0.9, 1, mola(t - 0.1, 2.2, 6))})`;
+
+    /* 1,3–1,9 o pedido cai no banner com mola; 5,2–7,0 é arrastado até quinta 14h */
+    const e = inOutCubic(p(t, 5.2, 7.0));
+    let x, y, w, h;
+    if (t < 5.2) { x = 740; y = 300 - (1 - mola(t - 1.3, 2.2, 6)) * 340; w = 440; h = 150; }
+    else { x = lerp(740, 2975, e); y = lerp(300, 632, e) - 150 * Math.sin(Math.PI * e); w = lerp(440, 200, e); h = lerp(150, 76, e); }
+    const st = t >= 7 ? 1 + 0.05 * (1 - mola(t - 7, 2.4, 7)) : 1;   /* encaixe com mola ao cair na célula */
+    card.style.left = x + 'px'; card.style.top = y + 'px'; card.style.width = w + 'px'; card.style.height = h + 'px';
+    card.style.opacity = p(t, 1.3, 1.35);
+    card.style.transform = `scale(${st})`;
+    card.style.boxShadow = `0 ${30 * Math.sin(Math.PI * e)}px ${60 * Math.sin(Math.PI * e)}px rgba(0,0,0,.6)`;
+    lab.style.opacity = 1 - e;
+    tit.style.left = lerp(28, 18, e) + 'px'; tit.style.top = lerp(50, 14, e) + 'px'; tit.style.fontSize = lerp(28, 20, e) + 'px';
+    prc.style.left = lerp(28, 18, e) + 'px'; prc.style.top = lerp(104, 44, e) + 'px'; prc.style.fontSize = lerp(30, 20, e) + 'px';
+    btn.style.opacity = 1 - e;
+
+    /* 3,9 toque em Aceitar; 4,0 o botão vira verde com ✓ */
+    const tap = on(t, 3.9, 4.02), ok = p(t, 4.1, 4.4), k = p(t, 4.0, 4.12);
+    btn.style.transform = `scale(${1 - 0.08 * tap})`;
+    btn.style.background = t >= 4.0 ? cores.verde : cores.azul;
+    btnTxt.style.opacity = 1 - k;
+    chk.style.opacity = k;
+    chkPath.style.strokeDashoffset = 1 - outCubic(ok);
+
+    /* cursor: chega ao botão, toca, segura o pedido durante o arraste */
+    let cx, cy;
+    if (t < 3.8) { const q = inOutCubic(p(t, 2.4, 3.8)); cx = lerp(1500, 1087, q); cy = lerp(760, 375, q); }
+    else if (t < 5.2) { cx = 1087; cy = 375; }
+    else { cx = x + lerp(347, 60, e); cy = y + lerp(75, 30, e); }
+    cur.style.opacity = p(t, 2.3, 2.4) * (1 - p(t, 7.0, 7.3));
+    cur.style.transform = `translate(${cx}px,${cy}px) scale(${1 - 0.15 * tap})`;
+
+    /* 8,6–9,2 os outros pedidos entram em cascata */
+    estat.forEach(({ e: el_, t0 }) => { el_.style.opacity = p(t, t0, t0 + 0.12); el_.style.transform = `scale(${lerp(0.6, 1, mola(t - t0, 2.2, 6))})`; });
+
+    /* 11,8–14,2 o valor conta de R$ 0 a R$ 4.860; 12–13,2 as barras crescem; 13,4–14,4 a linha se desenha */
+    valor.textContent = 'R$ ' + Math.round(4860 * outCubic(p(t, 11.8, 14.2))).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    SEM.forEach((v, i) => {
+      const hb = v / 1410 * 360 * outExpo(p(t, 12 + i * 0.12, 13.2 + i * 0.12));
+      bars[i].style.height = hb + 'px'; bars[i].style.top = (700 - hb) + 'px';
+    });
+    lin.style.strokeDashoffset = 1 - outCubic(p(t, 13.4, 14.4));
+
+    /* 15 avaliação 5★ aparece; as estrelas acendem uma a uma */
+    rev.style.opacity = p(t, 15, 15.25);
+    revTxt.style.opacity = revNome.style.opacity = p(t, 15, 15.25);
+    revStars.forEach((s, i) => { const a = 15.6 + i * 0.1; s.style.opacity = p(t, a, a + 0.12); s.style.transform = `scale(${lerp(0.4, 1, mola(t - a, 2.2, 6))})`; });
+
+    /* 17,3 corte para o fundo; 17,6–18,3 as estrelas sobem e convergem; 18,2 o símbolo surge */
+    fin.style.opacity = p(t, 17.3, 17.5);
+    const f = outCubic(p(t, 17.6, 18.3));
+    finStars.forEach((s, i) => {
+      const sx = PX + 1056 + i * 62 - CAM_F, sy = PY + 390;
+      s.style.opacity = p(t, 17.6, 17.7) * (1 - p(t, 18.2, 18.5));
+      s.style.transform = `translate(${(960 - sx) * f}px,${(410 - sy) * f - 120 * Math.sin(Math.PI * f)}px) scale(${1 - 0.8 * f})`;
+    });
+    simb.style.opacity = p(t, 18.2, 18.25);
+    simb.style.transform = `scale(${outBack(p(t, 18.2, 18.8))})`;
+
+    /* 18,9 marca em impacto (com flash); 19,3 frase */
+    finMarca.style.opacity = p(t, 18.9, 18.95);
+    finMarca.style.transform = `scale(${lerp(1.25, 1, outBack(p(t, 18.9, 19.3)))})`;
+    flashF.style.opacity = 0.5 * (1 - p(t, 18.9, 19.15));
+    frase.style.opacity = p(t, 19.3, 19.6);
+    frase.style.transform = `translateY(${(1 - outExpo(p(t, 19.3, 19.8))) * 30}px)`;
+  }
+};
+</script></body></html>

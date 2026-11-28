@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>28 · word emphasis</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: word-emphasis (awesome-ai-motion nº 095). A frase inteira aparece primeiro. Depois só
+   "só quando o serviço terminar" vira azul e cresce 1.06 (power2.inOut), e o resto cai para opacidade 0.32.
+   Um traço azul sublinha o trecho. No fim a frase sai e entra a marca. */
+const { p, lerp, inOutCubic, outExpo, mola, el, cores } = M;
+let grade, frase, resto, foco, traco, marca, simbolo, tag;
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    grade = el('div', 'position:absolute;inset:-120px;opacity:.1;background-image:linear-gradient(90deg,#2b59ff 2px,transparent 2px),linear-gradient(#2b59ff 2px,transparent 2px);background-size:120px 120px', palco);
+    frase = el('div', 'position:absolute;left:0;width:100%;top:420px;text-align:center;font-size:96px;font-weight:700;letter-spacing:-3px;white-space:nowrap', palco);
+    resto = el('span', 'white-space:pre;margin-right:.3em', frase, 'Pague');
+    foco = el('span', 'display:inline-block;position:relative;transform-origin:0 50%', frase, 'só quando o serviço terminar');
+    traco = el('div', `position:absolute;left:0;bottom:-16px;height:10px;width:100%;background:${cores.azul};border-radius:5px;transform-origin:0 50%;transform:scaleX(0)`, foco);
+    marca = el('div', 'position:absolute;left:0;width:100%;top:440px;text-align:center;font-size:200px;font-weight:700;letter-spacing:-8px;opacity:0;white-space:nowrap', palco, `Task<span style="color:${cores.azul}">GO</span>`);
+    simbolo = el('img', 'position:absolute;left:960px;top:260px;width:200px;margin-left:-100px;margin-top:-100px;opacity:0', palco);
+    simbolo.src = M.simbolo;
+    tag = el('div', `position:absolute;left:0;width:100%;top:760px;text-align:center;font-size:44px;font-weight:500;color:${cores.cinza};opacity:0`, palco, 'Marketplace de serviços locais');
+  },
+  quadro(t) {
+    grade.style.transform = `translate(${-((t * 60) % 120)}px,${-((t * 30) % 120)}px)`;
+    /* 0–0.6 s: frase entra com desfoque */
+    const entra = outExpo(p(t, 0, 0.6));
+    frase.style.opacity = p(t, 0, 0.35);
+    frase.style.filter = `blur(${(1 - entra) * 14}px)`;
+    /* 1.2–1.85 s: ênfase (cor e escala) e o resto some para 0.32 */
+    const enfase = inOutCubic(p(t, 1.2, 1.85));
+    foco.style.color = enfase > 0 ? cores.azul : '#fff';
+    foco.style.transform = `scale(${lerp(1, 1.06, enfase)})`;
+    resto.style.opacity = lerp(1, 0.32, enfase);
+    traco.style.transform = `scaleX(${outExpo(p(t, 1.9, 2.5))})`;
+    /* 3.6–4.0 s: frase sai; 3.9 s: marca entra com mola */
+    const sai = inOutCubic(p(t, 3.6, 4.0));
+    frase.style.opacity = p(t, 0, 0.35) * (1 - sai);
+    frase.style.transform = `translateY(${-sai * 60}px)`;
+    marca.style.opacity = p(t, 3.9, 4.2);
+    marca.style.transform = `scale(${lerp(1.2, 1, outExpo(p(t, 3.9, 4.5)))})`;
+    simbolo.style.opacity = p(t, 3.9, 4.1);
+    simbolo.style.transform = `scale(${mola(t - 3.9, 2.2, 5)})`;
+    tag.style.opacity = p(t, 4.5, 4.9);
+  }
+};
+</script></body></html>

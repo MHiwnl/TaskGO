@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>20 · partículas formam a marca</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: ~1500 partículas em canvas. Giram em redemoinho, convergem e formam "TaskGO" (amostrado de um
+   canvas oculto), explodem de leve e reassentam. Tudo é função pura de t (posições sorteadas com semente). */
+const { p, lerp, outCubic, el, cores } = M;
+const N = 1500, CX = 960, CY = 540;
+let cv, ctx, P = [];
+
+function pos(q, t) {
+  const k = outCubic(p(t, 1.0 + q.s * 0.9, 2.9 + q.s * 0.4));
+  const R = q.R0 * (1 - 0.6 * k), ang = q.ang + t * q.w;
+  const ox = CX + R * Math.cos(ang), oy = CY + R * Math.sin(ang) * 0.6;
+  let x = lerp(ox, q.tx, k), y = lerp(oy, q.ty, k);
+  const boom = t > 3.4 ? Math.exp(-6 * (t - 3.4)) * 260 : 0;
+  return [x + Math.cos(q.dir) * boom, y + Math.sin(q.dir) * boom];
+}
+
+window.CLIPE = {
+  dur: 5,
+  async montar(palco) {
+    await document.fonts.load("700 300px 'Spline Sans'");
+    cv = el('canvas', 'position:absolute;left:0;top:0', palco);
+    cv.width = 1920; cv.height = 1080;
+    ctx = cv.getContext('2d');
+    /* amostra os pixels do texto num canvas oculto */
+    const off = document.createElement('canvas');
+    off.width = 1920; off.height = 1080;
+    const o = off.getContext('2d');
+    o.font = "700 300px 'Spline Sans'";
+    o.textBaseline = 'middle';
+    const x0 = 960 - o.measureText('TaskGO').width / 2, xGO = x0 + o.measureText('Task').width;
+    o.fillStyle = '#fff';
+    o.fillText('TaskGO', x0, CY);
+    const dados = o.getImageData(0, 0, 1920, 1080).data;
+    const pts = [];
+    for (let y = 0; y < 1080; y += 4) for (let x = 0; x < 1920; x += 4) if (dados[(y * 1920 + x) * 4 + 3] > 128) pts.push([x, y]);
+    /* embaralha com semente e reaproveita se faltar ponto */
+    const rng = M.rnd(20260);
+    for (let i = pts.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [pts[i], pts[j]] = [pts[j], pts[i]]; }
+    for (let i = 0; i < N; i++) {
+      const [tx, ty] = pts[i % pts.length];
+      P.push({
+        tx, ty,
+        cor: tx > xGO ? cores.azul : '#ffffff',
+        ang: rng() * Math.PI * 2, R0: 380 + rng() * 520, w: 1.2 + rng() * 1.8,
+        s: rng(), dir: rng() * Math.PI * 2, tam: 1.5 + rng() * 2
+      });
+    }
+  },
+  quadro(t) {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 1920, 1080);
+    /* halo azul atrás do logo, cresce quando as partículas assentam */
+    const halo = 0.35 * p(t, 2.6, 3.6) * (1 - 0.6 * p(t, 4.4, 4.9));
+    const g = ctx.createRadialGradient(CX, CY, 0, CX, CY, 700);
+    g.addColorStop(0, `rgba(43,89,255,${halo})`);
+    g.addColorStop(1, 'rgba(43,89,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 1920, 1080);
+    /* partículas: rastro curto (posição 0,06 s antes) + ponto com brilho aditivo */
+    ctx.globalCompositeOperation = 'lighter';
+    const fade = p(t, 0, 0.5);
+    for (const q of P) {
+      const [x, y] = pos(q, t), [xa, ya] = pos(q, t - 0.06);
+      ctx.globalAlpha = 0.3 * fade;
+      ctx.strokeStyle = q.cor;
+      ctx.lineWidth = q.tam;
+      ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(x, y); ctx.stroke();
+      ctx.globalAlpha = 0.9 * fade;
+      ctx.fillStyle = q.cor;
+      ctx.beginPath(); ctx.arc(x, y, q.tam, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+};
+</script></body></html>

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>42 · conversa cliente e profissional</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: chat-thread (mensagens entram em sequência e a conversa sobe).
+   Aqui: cliente e profissional combinam um serviço; "digitando...", foto do serviço, ✓✓ azul na leitura e marca no fim. */
+const { p, lerp, outCubic, outExpo, outBack, inOutCubic, mola, el, cores } = M;
+const AREA = 700, GAP = 28;
+/* mensagens: quem, texto, entrada (s), altura, digitação antes (s) */
+const msgs = [
+  { de: 'c', txt: 'Preciso trocar um chuveiro.', t: 0.35, h: 110 },
+  { de: 'p', txt: 'Consigo ir hoje às 16h.', t: 1.45, h: 110, dig: 0.8 },
+  { de: 'c', foto: true, txt: 'Foto do chuveiro atual', t: 2.45, h: 300 },
+  { de: 'p', txt: 'Fechado! Pix enviado.', t: 3.35, h: 110, dig: 0.7 }
+];
+let thread, bolhas = [], digs = [], ticks = [], marca, simbolo, fundo;
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 50% 40%, #0a1440 0%, #000 70%)';
+    const cartao = el('div', 'position:absolute;left:560px;top:120px;width:800px;height:840px;border-radius:44px;background:#0b0c12;border:2px solid #1d2140;overflow:hidden', palco);
+    el('div', 'position:absolute;left:0;top:0;width:100%;height:120px;background:#10131f;border-bottom:2px solid #1d2140;display:flex;align-items:center;gap:24px;padding:0 40px;box-sizing:border-box', cartao,
+      `<div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,${cores.azul},${cores.azulClaro});display:grid;place-items:center;font-size:32px;font-weight:700">C</div><div><div style="font-size:34px;font-weight:700">Carlos · Eletricista</div><div style="font-size:24px;color:${cores.verde}">online</div></div>`);
+    fundo = el('div', 'position:absolute;left:0;top:120px;width:100%;height:' + AREA + 'px;overflow:hidden', cartao);
+    thread = el('div', 'position:absolute;left:0;top:0;width:100%', fundo);
+    let y = 36, acum = 0;
+    msgs.forEach((m, i) => {
+      const cli = m.de === 'c';
+      const b = el('div', `position:absolute;top:${y}px;${cli ? 'right:40px' : 'left:40px'};width:520px;height:${m.h}px;border-radius:28px;background:${cli ? cores.azul : '#171a28'};padding:24px 30px;box-sizing:border-box;font-size:34px;line-height:1.3;transform-origin:${cli ? '100% 100%' : '0 100%'}`, thread,
+        m.foto ? `<div style="height:170px;border-radius:18px;background:linear-gradient(135deg,#1f3fb8,#0a1440);display:grid;place-items:center;font-size:44px;font-weight:700;color:#8aa3ff">▮ foto</div><div style="margin-top:14px">${m.txt}</div>` : m.txt);
+      bolhas.push(b);
+      if (cli) {
+        ticks.push({ el: el('div', 'position:absolute;right:52px;bottom:-40px;font-size:26px;color:#8aa3ff;opacity:0', b, '✓✓'), t: m.t });
+      }
+      if (m.dig) {
+        digs.push(el('div', `position:absolute;left:40px;top:${y}px;width:150px;height:${70}px;border-radius:30px;background:#171a28;display:flex;align-items:center;justify-content:center;gap:12px;opacity:0`, thread,
+          [0, 1, 2].map(k => `<span style="width:16px;height:16px;border-radius:50%;background:#8aa3ff"></span>`).join('')));
+      } else digs.push(null);
+      /* a altura usada para subir a conversa: cada mensagem empurra o trecho quando passa da área visível */
+      m.bottom = y + m.h;
+      m.ov = Math.max(0, m.bottom - AREA + 20);
+      m.ovAnt = i ? msgs[i - 1].ov : 0;
+      y += m.h + GAP;
+    });
+    simbolo = el('img', 'position:absolute;left:960px;top:330px;width:150px;margin-left:-75px;opacity:0', palco); simbolo.src = M.simbolo;
+    marca = el('div', 'position:absolute;left:0;width:100%;top:520px;text-align:center;font-size:140px;font-weight:700;letter-spacing:-5px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    /* cada mensagem: "digitando..." (pontos pulsando) e depois a bolha entra com escala e opacidade */
+    let sobe = 0;
+    msgs.forEach((m, i) => {
+      const b = bolhas[i];
+      const k = outBack(p(t, m.t, m.t + 0.25));
+      b.style.opacity = p(t, m.t, m.t + 0.18);
+      b.style.transform = `scale(${lerp(0.75, 1, k)})`;
+      const d = digs[i];
+      if (d) {
+        const a = m.t - m.dig;
+        d.style.opacity = p(t, a, a + 0.15) * (1 - p(t, m.t - 0.05, m.t + 0.1));
+        [...d.children].forEach((pt, j) => { pt.style.transform = `translateY(${-10 * Math.max(0, Math.sin((t * 8) - j * 0.9))}px)`; });
+      }
+      /* sobe a conversa: deslocamento da bolha que passou da área */
+      sobe += (m.ov - m.ovAnt) * outCubic(p(t, m.t, m.t + 0.3));
+    });
+    thread.style.transform = `translateY(${-sobe}px)`;
+    /* ✓✓ fica azul na leitura (3,9 s) */
+    ticks.forEach(({ el: tk, t: ta }) => { tk.style.opacity = p(t, ta + 0.3, ta + 0.5); tk.style.color = t > 3.9 ? cores.azul : '#8aa3ff'; });
+    /* 4,0–4,5 o cartão some, a marca entra com o símbolo */
+    const some = 1 - inOutCubic(p(t, 4.0, 4.4));
+    fundo.parentNode.style.opacity = some;
+    simbolo.style.opacity = p(t, 4.2, 4.6);
+    simbolo.style.transform = `scale(${lerp(0.5, 1, outBack(p(t, 4.2, 4.8)))})`;
+    marca.style.opacity = p(t, 4.4, 4.9);
+    marca.style.transform = `translateY(${(1 - outExpo(p(t, 4.4, 5))) * 50}px)`;
+  }
+};
+</script></body></html>

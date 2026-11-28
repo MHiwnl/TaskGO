@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>21 · text scramble</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: text-scramble (awesome-ai-motion nº 092). Cada letra mostra símbolos que trocam a cada 0.05 s
+   e fixa, da esquerda para a direita, na letra certa. A letra real fica no fluxo (layout fixo) e o símbolo
+   é sobreposto, então a frase não treme. Depois a frase sai e entra a marca TaskGO. */
+const { p, lerp, outExpo, inOutCubic, mola, el, cores, rnd } = M;
+const FRASE = 'Profissional encontrado';
+const SIMB = '#@%&*!?/<>01+=';
+const sorteia = (i, k) => rnd(i * 7919 + k * 104729 + 17)();
+let grade, linha, barra, marca, simbolo, tag, letras = [];
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    grade = el('div', 'position:absolute;inset:-120px;opacity:.1;background-image:linear-gradient(90deg,#2b59ff 2px,transparent 2px),linear-gradient(#2b59ff 2px,transparent 2px);background-size:120px 120px', palco);
+    linha = el('div', 'position:absolute;left:0;width:100%;top:430px;text-align:center;font-size:124px;font-weight:700;letter-spacing:-4px;white-space:nowrap', palco);
+    const idxVerde = FRASE.indexOf('encontrado');
+    letras = [...FRASE].map((ch, i) => {
+      const s = el('span', 'position:relative;display:inline-block;white-space:pre', linha);
+      const real = el('span', `visibility:hidden;color:${i >= idxVerde ? cores.verde : '#fff'}`, s, ch === ' ' ? '&nbsp;' : ch);
+      const falso = el('span', `position:absolute;left:0;top:0;width:100%;text-align:center;color:${cores.azul}`, s);
+      return { ch, real, falso };
+    });
+    barra = el('div', `position:absolute;left:50%;top:620px;height:8px;width:900px;margin-left:-450px;background:${cores.azul};transform-origin:0 50%;border-radius:4px;transform:scaleX(0)`, palco);
+    marca = el('div', 'position:absolute;left:0;width:100%;top:440px;text-align:center;font-size:200px;font-weight:700;letter-spacing:-8px;opacity:0;white-space:nowrap', palco, `Task<span style="color:${cores.azul}">GO</span>`);
+    simbolo = el('img', 'position:absolute;left:960px;top:260px;width:200px;margin-left:-100px;margin-top:-100px;opacity:0', palco);
+    simbolo.src = M.simbolo;
+    tag = el('div', `position:absolute;left:0;width:100%;top:760px;text-align:center;font-size:44px;font-weight:500;color:${cores.cinza};opacity:0`, palco, 'Marketplace de serviços locais');
+  },
+  quadro(t) {
+    grade.style.transform = `translate(${-((t * 60) % 120)}px,${-((t * 30) % 120)}px)`;
+    /* 0.3 s: símbolos trocam a cada 0.05 s · 0.7 s + i·0.085: cada letra fixa na sua posição */
+    const tick = Math.floor(Math.max(0, t - 0.3) / 0.05);
+    letras.forEach((L, i) => {
+      const r = 0.7 + i * 0.085;
+      const fixo = t >= r;
+      L.real.style.visibility = fixo ? 'visible' : 'hidden';
+      L.real.style.transform = `translateY(${(1 - outExpo(p(t, r, r + 0.25))) * -30}px)`;
+      L.falso.textContent = fixo || t < 0.3 || L.ch === ' ' ? '' : SIMB[Math.floor(sorteia(i, tick) * SIMB.length)];
+    });
+    const sai = inOutCubic(p(t, 3.3, 3.75));
+    linha.style.opacity = 1 - sai;
+    linha.style.filter = `blur(${sai * 14}px)`;
+    linha.style.transform = `translateY(${-sai * 80}px)`;
+    barra.style.transform = `scaleX(${outExpo(p(t, 2.6, 3.2)) * (1 - p(t, 3.3, 3.6))})`;
+    /* 3.7 s: marca entra com desfoque e escala; símbolo entra com mola */
+    const entra = outExpo(p(t, 3.7, 4.3));
+    marca.style.opacity = p(t, 3.7, 3.95);
+    marca.style.transform = `scale(${lerp(1.25, 1, entra)})`;
+    marca.style.filter = `blur(${(1 - entra) * 14}px)`;
+    simbolo.style.opacity = p(t, 3.6, 3.8);
+    simbolo.style.transform = `scale(${mola(t - 3.6, 2.2, 5)})`;
+    tag.style.opacity = p(t, 4.2, 4.6);
+  }
+};
+</script></body></html>

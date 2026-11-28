@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>filme 5 · lançamento do TaskGO</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Filme 5: lançamento do TaskGO (18 s). Um celular 3D surge da escuridão, gira até a frente e a tela acende.
+   Três recursos (avaliação, Pix, mapa) com o celular girando para um ângulo novo a cada um.
+   Ele recua, se multiplica em arco (coverflow), converge para o símbolo e fecha com a marca. */
+const { p, lerp, outExpo, outCubic, inOutCubic, outBack, el, cores, rnd } = M;
+const E = {};
+
+/* janela com entrada e saída suaves entre a e b */
+const janela = (t, a, b, f = 0.3) => p(t, a, a + f) * (1 - p(t, b, b + f));
+/* curva por pontos [tempo, valor]; cada trecho com inOutCubic */
+const chave = (t, ks) => {
+  if (t <= ks[0][0]) return ks[0][1];
+  for (let i = 1; i < ks.length; i++) if (t <= ks[i][0]) return lerp(ks[i - 1][1], ks[i][1], inOutCubic(p(t, ks[i - 1][0], ks[i][0])));
+  return ks[ks.length - 1][1];
+};
+const mistura = (A, B, u) => ({ x: lerp(A.x, B.x, u), y: lerp(A.y, B.y, u), z: lerp(A.z, B.z, u), rx: lerp(A.rx, B.rx, u), ry: lerp(A.ry, B.ry, u), s: lerp(A.s, B.s, u) });
+/* poses: centro (celular pequeno atrás), arco (cinco telas) e sumiço (converge para o símbolo) */
+const CENTRO = { x: 0, y: 0, z: -300, rx: 0, ry: 0, s: 0.85 };
+const ARCO = k => ({ x: k * 340, y: Math.abs(k) * 36, z: -Math.abs(k) * 250, rx: 0, ry: -k * 30, s: 1 });
+const SUMIU = { x: 0, y: 0, z: -400, rx: 0, ry: 0, s: 0.3 };
+const aplicar = (r, P, op) => {
+  r.rig.style.transform = `translate3d(${P.x.toFixed(1)}px,${P.y.toFixed(1)}px,${P.z.toFixed(1)}px) rotateX(${P.rx.toFixed(2)}deg) rotateY(${P.ry.toFixed(2)}deg) scale(${P.s.toFixed(4)})`;
+  r.cena.style.opacity = op.toFixed(3);
+};
+
+/* celular 3D: corpo com camadas laterais (espessura), frente com tela e reflexo de vidro */
+function criarCelular(pai, telas, espelho) {
+  const cena = el('div', `position:absolute;inset:0;perspective:1800px;pointer-events:none${espelho ? ';transform-origin:0 900px;transform:scaleY(-1)' : ''}`, pai);
+  const rig = el('div', 'position:absolute;left:750px;top:40px;width:420px;height:860px;transform-style:preserve-3d', cena);
+  for (let i = 1; i <= 10; i++) el('div', `position:absolute;inset:0;border-radius:64px;background:${i % 2 ? '#1c1e28' : '#2a2d3c'};transform:translateZ(${-2 * i}px)`, rig);
+  el('div', 'position:absolute;inset:0;border-radius:64px;background:#15171f;backface-visibility:hidden;transform:translateZ(-21px) rotateY(180deg)', rig);
+  const frente = el('div', 'position:absolute;inset:0;border-radius:64px;background:#0b0c10;box-shadow:inset 0 0 0 8px #2a2d3c;backface-visibility:hidden', rig);
+  const tela = el('div', 'position:absolute;left:18px;top:18px;right:18px;bottom:18px;border-radius:50px;overflow:hidden;background:#07080c', frente);
+  const telasEl = telas.map(h => el('div', 'position:absolute;inset:0;opacity:0', tela, h));
+  const vidro = el('div', 'position:absolute;inset:0;border-radius:64px;pointer-events:none;background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.3) 50%,transparent 58%);opacity:0', frente);
+  return { cena, rig, telas: telasEl, vidro };
+}
+
+/* conteúdo das telas (384×824 úteis) */
+const R = rnd(7);
+const cel = Array.from({ length: 441 }, () => `<i style="background:${R() < 0.5 ? '#000' : '#fff'}"></i>`).join('');
+const check = (cor, tam) => `<svg viewBox="0 0 64 64" width="${tam}" height="${tam}"><path class="ck" d="M16 33 L28 45 L49 21" fill="none" stroke="${cor}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0"/></svg>`;
+const cat = n => `<div style="display:grid;place-items:center;height:110px;border-radius:26px;background:#13151d;font-size:24px;font-weight:600">${n}</div>`;
+const cartao = (n, s, a) => `<div style="display:flex;align-items:center;gap:20px;height:150px;margin-bottom:20px;padding:0 22px;box-sizing:border-box;border-radius:28px;background:#0e0f14;border:1px solid #23263a"><div style="width:76px;height:76px;flex:none;border-radius:50%;background:linear-gradient(135deg,${cores.azul},${cores.azulClaro});display:grid;place-items:center;font-size:32px;font-weight:700">${n[0]}</div><div><div style="font-size:30px;font-weight:600">${n}</div><div style="font-size:22px;color:${cores.cinza}">${s}</div><div style="font-size:22px;color:${cores.verde};margin-top:6px">★ ${a}</div></div></div>`;
+const SC = {
+  home: `<div style="position:absolute;left:28px;top:84px;font-size:44px;font-weight:700">Olá!</div>
+<div style="position:absolute;left:28px;top:142px;font-size:24px;color:${cores.cinza}">Ache um profissional</div>
+<div style="position:absolute;left:24px;top:200px;width:336px;height:70px;padding:0 26px;box-sizing:border-box;border-radius:35px;background:#13151d;display:flex;align-items:center;font-size:24px;color:${cores.cinza}">Buscar serviço</div>
+<div style="position:absolute;left:24px;top:300px;width:336px;height:190px;padding:24px;box-sizing:border-box;border-radius:30px;background:linear-gradient(135deg,${cores.azul},${cores.azulEscuro});font-size:30px;font-weight:700;line-height:1.2">Eletricista perto de você<div style="margin-top:16px;font-size:22px;font-weight:500;opacity:.85">3 disponíveis agora</div></div>
+<div style="position:absolute;left:24px;top:520px;width:336px;display:grid;grid-template-columns:1fr 1fr;gap:14px">${['Elétrica', 'Hidráulica', 'Limpeza', 'Pintura'].map(cat).join('')}</div>`,
+  pros: `<div style="position:absolute;left:28px;top:84px;font-size:40px;font-weight:700">Profissionais</div>
+<div style="position:absolute;left:24px;top:170px;width:336px">${cartao('Carlos', 'Eletricista', '4,9')}${cartao('Ana', 'Eletricista', '5,0')}${cartao('João', 'Hidráulica', '4,8')}</div>`,
+  pix: `<div style="position:absolute;left:28px;top:84px;font-size:40px;font-weight:700">Pagamento</div>
+<div class="qr" style="position:absolute;left:24px;top:160px;width:336px;height:336px;padding:22px;box-sizing:border-box;border-radius:30px;background:#fff;overflow:hidden"><div style="display:grid;grid-template-columns:repeat(21,1fr);grid-template-rows:repeat(21,1fr);width:292px;height:292px">${cel}</div></div>
+<div style="position:absolute;left:24px;top:520px;width:336px;text-align:center;font-size:30px;font-weight:600">Pix · R$ 120,00</div>
+<div style="position:absolute;left:24px;top:600px;width:336px;height:110px;border-radius:55px;background:${cores.verde};color:#000;display:flex;align-items:center;justify-content:center;gap:16px;font-size:30px;font-weight:700">${check('#000', 52)}Pago</div>`,
+  mapa: `<svg viewBox="0 0 384 824" width="384" height="824" style="position:absolute;left:0;top:0">
+<rect width="384" height="824" fill="#0b0d14"/>
+<path d="M0 230H384M0 470H384M0 680H384M110 0V824M270 0V824" stroke="#1a1d29" stroke-width="18" fill="none"/>
+<path class="rota" d="M90 560C90 420 290 420 290 250" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0" stroke="${cores.azul}" stroke-width="10" stroke-linecap="round" fill="none"/>
+<circle cx="90" cy="560" r="14" fill="#fff"/><circle cx="290" cy="250" r="18" fill="${cores.verde}"/></svg>
+<div style="position:absolute;left:20px;top:690px;width:344px;height:110px;box-sizing:border-box;padding:0 24px;border-radius:26px;background:#13151d;display:flex;align-items:center;font-size:26px;font-weight:600">Carlos chega em 6 min</div>`,
+  conf: `<div style="position:absolute;left:0;right:0;top:290px;text-align:center">
+<div style="display:grid;place-items:center;width:124px;height:124px;margin:0 auto;border-radius:50%;background:${cores.verde}">${check('#000', 64)}</div>
+<div style="margin-top:34px;font-size:34px;font-weight:700">Pedido confirmado</div>
+<div style="margin-top:12px;font-size:24px;color:${cores.cinza}">Ana · Eletricista</div></div>`
+};
+
+window.CLIPE = {
+  dur: 18,
+  /* som: kinds de onetake/score.py; x em px da tela; type com dur */
+  eventos: [
+    { t: 0.5, kind: 'whip', x: 0 },
+    { t: 1.1, kind: 'rise', x: 960 },
+    { t: 2.0, kind: 'land', x: 960 },
+    { t: 4.2, kind: 'word', x: 640 },
+    { t: 4.6, kind: 'word', x: 1280 },
+    { t: 4.9, kind: 'open', x: 960 },
+    { t: 7.8, kind: 'tap', x: 1300 },
+    { t: 8.7, kind: 'whip', x: 960 },
+    { t: 9.4, kind: 'qr', x: 960 },
+    { t: 9.6, kind: 'tap', x: 300 },
+    { t: 10.1, kind: 'paid', x: 960 },
+    { t: 10.8, kind: 'whip', x: 1100 },
+    { t: 11.7, kind: 'tap', x: 1300 },
+    { t: 12.0, kind: 'land', x: 1000 },
+    { t: 13.0, kind: 'dive', x: 960 },
+    { t: 13.5, kind: 'open', x: 960 },
+    { t: 15.5, kind: 'close', x: 960 },
+    { t: 16.45, kind: 'hit', x: 960 },
+    { t: 17.2, kind: 'type', x: 960, dur: 0.7 }
+  ],
+  montar(palco) {
+    palco.style.background = '#000';
+    E.piso = el('div', 'position:absolute;left:610px;top:900px;width:700px;height:160px;border-radius:50%;background:radial-gradient(ellipse,rgba(43,89,255,.55),transparent 70%);opacity:0', palco);
+    E.frase = el('div', 'position:absolute;left:0;top:0;width:1920px;height:1080px;text-align:center;font-size:200px;font-weight:800;line-height:1;letter-spacing:-8px;white-space:nowrap;opacity:0', palco,
+      '<div style="position:absolute;left:0;right:0;top:150px">Serviços perto</div><div style="position:absolute;left:0;right:0;top:420px">de você.</div>');
+    E.refl = criarCelular(palco, [SC.home], true);
+    /* ordem de criação = ordem de pintura: os mais distantes primeiro, o principal por último */
+    E.clones = [[-2, SC.pros], [2, SC.conf], [-1, SC.pix], [1, SC.mapa]].map(([k, h]) => { const c = criarCelular(palco, [h]); c.k = k; c.telas[0].style.opacity = 1; return c; });
+    E.main = criarCelular(palco, [SC.home, SC.pros, SC.pix, SC.mapa]);
+    E.scan = el('div', 'position:absolute;left:0;right:0;top:0;height:4px;background:#35d08f;box-shadow:0 0 14px #35d08f;opacity:0', E.main.telas[2].querySelector('.qr'));
+    E.ck = E.main.telas[2].querySelector('.ck');
+    E.rota = E.main.telas[3].querySelector('.rota');
+    E.beam = el('div', 'position:absolute;left:-200px;top:0;width:300px;height:1080px;background:linear-gradient(90deg,transparent,rgba(138,163,255,.55) 50%,transparent);mix-blend-mode:screen;opacity:0', palco);
+    const rotulo = (txt, css) => el('div', `position:absolute;${css};background:#0e0f14;border:1px solid #2b59ff;border-radius:40px;padding:14px 26px;font-size:32px;font-weight:600;white-space:nowrap;opacity:0`, palco, txt);
+    E.r = [rotulo('Profissionais avaliados', 'left:1300px;top:330px'), rotulo('Pix na hora', 'right:1340px;top:600px'), rotulo('Acompanhe no mapa', 'left:1300px;top:680px')];
+    E.svg = el('div', 'position:absolute;left:0;top:0;width:1920px;height:1080px;pointer-events:none', palco,
+      `<svg viewBox="0 0 1920 1080" width="1920" height="1080" fill="none" stroke="#8aa3ff" stroke-width="3">
+<path class="l" pathLength="1" stroke-dasharray="1" d="M1176 470 L1236 360 L1300 360"/>
+<path class="l" pathLength="1" stroke-dasharray="1" d="M744 520 L660 630 L584 630"/>
+<path class="l" pathLength="1" stroke-dasharray="1" d="M1176 640 L1236 710 L1300 710"/></svg>`);
+    E.linhas = [...E.svg.querySelectorAll('.l')];
+    /* partículas azuis: posição e velocidade por semente */
+    const Q = rnd(21);
+    E.part = [];
+    for (let i = 0; i < 40; i++) {
+      const c = i % 3 ? cores.azul : cores.azulClaro, sz = (4 + Q() * 8).toFixed(1);
+      const e = el('div', `position:absolute;left:${(Q() * 1920).toFixed(0)}px;top:0;width:${sz}px;height:${sz}px;border-radius:50%;background:${c};box-shadow:0 0 14px ${c};opacity:0`, palco);
+      E.part.push({ e, sp: 90 + Q() * 140, ph: Q() * 1200, a: 0.4 + Q() * 0.6 });
+    }
+    E.simbolo = el('img', 'position:absolute;left:960px;top:540px;width:180px;opacity:0', palco);
+    E.simbolo.src = M.simbolo;
+    E.marca = el('div', 'position:absolute;left:0;width:100%;top:430px;text-align:center;font-size:150px;font-weight:700;letter-spacing:-4px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+    E.linha = el('div', 'position:absolute;left:0;width:100%;top:640px;text-align:center;font-size:44px;font-weight:500;color:#9a9aa6;white-space:nowrap', palco);
+    E.flash = el('div', 'position:absolute;inset:0;background:#fff;opacity:0', palco);
+  },
+  quadro(t) {
+    /* 0–2.9 feixe varre e revela o celular · 1.1–2.0 sobe · 3–7 gira de frente · 4.9 tela acende */
+    const bx = lerp(-200, 2120, inOutCubic(p(t, 0.4, 2.5)));
+    const clip = t < 2.6 ? `polygon(0 0,${bx.toFixed(1)}px 0,${bx.toFixed(1)}px 1080px,0 1080px)` : 'none';
+    E.main.cena.style.clipPath = clip;
+    E.refl.cena.style.clipPath = clip;
+    E.beam.style.left = (bx - 150).toFixed(1) + 'px';
+    E.beam.style.opacity = (p(t, 0.2, 0.5) * (1 - p(t, 2.5, 2.9))).toFixed(3);
+    E.piso.style.opacity = (p(t, 1.8, 2.8) * (1 - p(t, 12.8, 13.4)) * 0.8).toFixed(3);
+
+    /* frase atrás do celular: entra grande, desfocada, e some quando os recursos chegam */
+    E.frase.style.opacity = (outCubic(p(t, 4.0, 4.9)) * (1 - p(t, 6.6, 7.2))).toFixed(3);
+    E.frase.style.filter = `blur(${((1 - p(t, 4.0, 6.4)) * 14 + 2).toFixed(1)}px)`;
+    E.frase.style.transform = `scale(${lerp(1.15, 1, outExpo(p(t, 4.0, 5.4))).toFixed(4)})`;
+
+    /* pose do celular principal: sobe, gira até a frente, gira para cada recurso, recua e entra no arco */
+    const P0 = {
+      x: 0,
+      y: chave(t, [[0, 300], [1.8, 0]]),
+      z: chave(t, [[12.9, 0], [13.5, -300]]),
+      rx: chave(t, [[0, 8], [3, 8], [7, 0], [7.9, 4], [9.4, -3], [11.6, -6], [12.8, -6], [13.2, 0]]),
+      ry: chave(t, [[0, -62], [0.6, -62], [3, -40], [7, 0], [7.9, -22], [9.4, 30], [10.8, 30], [11.6, -20], [12.8, -20], [13.2, 0]]),
+      s: chave(t, [[12.9, 1], [13.5, 0.85]])
+    };
+    const u0 = inOutCubic(p(t, 13.5, 14.5));
+    const conv = inOutCubic(p(t, 15.5, 16.2));
+    const P = mistura(mistura(P0, ARCO(0), u0), SUMIU, conv);
+    aplicar(E.main, P, 1 - conv);
+    aplicar(E.refl, P, 0.2 * (1 - p(t, 7.0, 7.6)));
+
+    /* telas: início acende em 4.9; recursos em 7.2, 9.0, 11.1; volta a início em 12.9 */
+    E.main.telas[0].style.opacity = Math.max(janela(t, 4.9, 7.2), p(t, 12.9, 13.2)).toFixed(3);
+    E.main.telas[1].style.opacity = janela(t, 7.2, 8.9).toFixed(3);
+    E.main.telas[2].style.opacity = janela(t, 9.0, 10.9).toFixed(3);
+    E.main.telas[3].style.opacity = janela(t, 11.1, 12.9).toFixed(3);
+    E.refl.telas[0].style.opacity = janela(t, 4.9, 7.2).toFixed(3);
+
+    /* varredura de luz no vidro entre recursos */
+    const s1 = p(t, 8.7, 9.2), s2 = p(t, 10.8, 11.3), sw = s1 > 0 && s1 < 1 ? s1 : s2;
+    E.main.vidro.style.transform = `translateX(${lerp(-460, 460, sw).toFixed(1)}px)`;
+    E.main.vidro.style.opacity = (Math.sin(Math.PI * sw) * 0.9).toFixed(3);
+
+    /* Pix: scanner do QR em 9.4–9.9, check verde em 10.0 */
+    E.scan.style.top = (p(t, 9.4, 9.9) * 292).toFixed(1) + 'px';
+    E.scan.style.opacity = Math.sin(Math.PI * p(t, 9.4, 9.9)).toFixed(3);
+    E.ck.style.strokeDashoffset = (1 - outCubic(p(t, 10.0, 10.4))).toFixed(3);
+    /* mapa: rota desenha em 11.3–12.0 */
+    E.rota.style.strokeDashoffset = (1 - outCubic(p(t, 11.3, 12.0))).toFixed(3);
+
+    /* rótulos com linha que se desenha: [linha inicia, rótulo entra, rótulo sai] */
+    [[7.5, 7.8, 8.9], [9.3, 9.6, 10.9], [11.4, 11.7, 13.0]].forEach(([a, b, c], i) => {
+      const op = janela(t, b, c).toFixed(3);
+      E.r[i].style.opacity = op;
+      E.r[i].style.transform = `translateX(${((1 - outCubic(p(t, b, b + 0.3))) * (i === 1 ? -30 : 30)).toFixed(1)}px)`;
+      E.linhas[i].style.strokeDashoffset = (1 - outCubic(p(t, a, a + 0.4))).toFixed(3);
+      E.linhas[i].style.opacity = op;
+    });
+
+    /* clones em arco: saem do centro em 13.45–14.5 (com atraso por distância) */
+    E.clones.forEach(c => {
+      const d = Math.abs(c.k) * 0.08;
+      const u = inOutCubic(p(t, 13.5 + d, 14.5 + d));
+      aplicar(c, mistura(mistura(CENTRO, ARCO(c.k), u), SUMIU, conv), p(t, 13.45 + d, 13.75 + d) * (1 - conv));
+    });
+
+    /* partículas azuis sobem de 13.0 a 15.9 */
+    E.part.forEach(q => {
+      const y = 1140 - ((((t - 13) * q.sp + q.ph) % 1200) + 1200) % 1200;
+      q.e.style.transform = `translateY(${y.toFixed(1)}px)`;
+      q.e.style.opacity = (janela(t, 13.0, 15.9, 0.6) * q.a).toFixed(3);
+    });
+
+    /* convergência: símbolo aparece em 15.9, sobe para o alto em 16.6–17.2, marca e linha entram */
+    const sb = outBack(p(t, 15.9, 16.5));
+    const sy = lerp(540, 300, inOutCubic(p(t, 16.6, 17.2)));
+    E.simbolo.style.opacity = p(t, 15.9, 16.0).toFixed(3);
+    E.simbolo.style.transform = `translate(-50%,-50%) translateY(${(sy - 540).toFixed(1)}px) scale(${Math.max(0, sb).toFixed(4)})`;
+    E.marca.style.opacity = p(t, 16.9, 17.3).toFixed(3);
+    E.marca.style.transform = `translateY(${((1 - outExpo(p(t, 16.9, 17.4))) * 40).toFixed(1)}px)`;
+    E.marca.style.filter = `blur(${((1 - p(t, 16.9, 17.3)) * 10).toFixed(1)}px)`;
+    const linhaTxt = 'Disponível em Recife.';
+    E.linha.textContent = linhaTxt.slice(0, Math.round(linhaTxt.length * p(t, 17.2, 17.9)));
+    E.flash.style.opacity = (0.85 * Math.min(p(t, 16.3, 16.45), 1 - p(t, 16.45, 16.95))).toFixed(3);
+  }
+};
+</script></body></html>

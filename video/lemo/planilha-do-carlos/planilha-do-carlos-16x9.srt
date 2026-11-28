@@ -1,0 +1,43 @@
+1
+00:00:00,400 --> 00:00:05,852
+Carlos é eletricista em Recife. A agenda e o caixa dele estão nesta planilha.
+
+2
+00:00:06,152 --> 00:00:10,544
+Esta conta mostra os serviços sem pagamento: sete.
+
+3
+00:00:10,844 --> 00:00:14,479
+Dois mil, quatrocentos e cinquenta reais ainda não entraram.
+
+4
+00:00:14,779 --> 00:00:19,950
+Ele soma tudo. Seis mil, duzentos e dez reais no mês.
+
+5
+00:00:20,250 --> 00:00:24,809
+Mas existe uma coluna escondida: o gasto de ir e voltar.
+
+6
+00:00:25,109 --> 00:00:31,113
+Sem ela, o caixa não fecha. Sobram cinco mil, duzentos e sessenta e seis.
+
+7
+00:00:31,413 --> 00:00:36,410
+E os horários também batem: dois clientes às duas da tarde, no dia doze.
+
+8
+00:00:36,710 --> 00:00:41,424
+Com a TaskGO, o pedido chega com bairro, preço combinado e horário.
+
+9
+00:00:41,724 --> 00:00:46,114
+O valor já vem combinado, e a agenda se organiza pela distância.
+
+10
+00:00:46,414 --> 00:00:50,407
+As notas de cinco estrelas sobem de treze para vinte e uma.
+
+11
+00:00:50,707 --> 00:00:54,847
+TaskGO. Serviço perto de casa, com preço combinado.

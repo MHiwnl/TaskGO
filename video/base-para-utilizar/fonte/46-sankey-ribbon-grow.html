@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>46 · pedidos viram categorias e concluídos</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: sankey-ribbon-grow (fitas crescem da origem ao destino, uma coluna por vez, revelando a rede).
+   Aqui: pedidos por tipo de serviço (origem) passam por categorias e chegam a concluídos. Valores ilustrativos. */
+const { p, lerp, outExpo, inOutCubic, outBack, el, cores } = M;
+const K = 0.6, XS = [300, 920, 1540], NW = 26, TOP = 280, GAP = 40;
+const origem = [['Elétrica', 340], ['Limpeza', 300], ['Pintura', 260]];
+const meio = [['Reparos', 300], ['Casa', 400], ['Obra', 200]];
+/* fluxos origem → categoria (valores ilustrativos) */
+const fluxos1 = [[0, 0, 200], [0, 2, 40], [0, 1, 100], [1, 1, 300], [2, 2, 160], [2, 0, 100]];
+let svg, tot, marca, simbolo;
+const geo = {};
+function altura(v) { return v * K; }
+function colunaTopos(lista) { let y = TOP, out = []; lista.forEach(([n, v]) => { out.push(y); y += altura(v) + GAP; }); return out; }
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 50% 45%, #0a1440 0%, #000 70%)';
+    el('div', 'position:absolute;left:0;top:120px;width:100%;text-align:center;font-size:44px;font-weight:700;letter-spacing:-1px', palco, 'Pedidos por tipo de serviço');
+    const topoO = colunaTopos(origem), topoM = colunaTopos(meio);
+    const topoD = TOP + 60;
+    const totalD = 900;
+    const nosO = origem.map(([n, v], i) => ({ x: XS[0], y: topoO[i], h: altura(v), n, v }));
+    const nosM = meio.map(([n, v], i) => ({ x: XS[1], y: topoM[i], h: altura(v), n, v }));
+    const nosD = [{ x: XS[2], y: topoD, h: altura(totalD), n: 'Concluídos', v: totalD }];
+    /* deslocamentos dentro de cada nó para empilhar as fitas */
+    const offO = [0, 0, 0], offM = [0, 0, 0];
+    let offD = 0;
+    const fitas = [];
+    fluxos1.forEach(([a, b, v], f) => {
+      const y1 = nosO[a].y + offO[a] + altura(v) / 2, y2 = nosM[b].y + offM[b] + altura(v) / 2;
+      offO[a] += altura(v); offM[b] += altura(v);
+      fitas.push({ x1: nosO[a].x + NW, y1, x2: nosM[b].x, y2, th: altura(v), f, g: 0.5 + f * 0.12, cor: cores.azul, op: 0.55 });
+    });
+    /* categorias → concluídos */
+    meio.forEach(([n, v], b) => {
+      const y1 = nosM[b].y + altura(v) / 2 + 0, y2 = nosD[0].y + offD + altura(v) / 2;
+      offD += altura(v);
+      fitas.push({ x1: nosM[b].x + NW, y1, x2: nosD[0].x, y2, th: altura(v), f: 6 + b, g: 2.2 + b * 0.2, cor: cores.azulClaro, op: 0.45 });
+    });
+    const defs = fitas.map(q => {
+      const xm = (q.x1 + q.x2) / 2;
+      const d = `M${q.x1} ${q.y1} C${xm} ${q.y1}, ${xm} ${q.y2}, ${q.x2} ${q.y2}`;
+      return `<clipPath id="c${q.f}"><rect id="r${q.f}" x="${q.x1 - 10}" y="0" width="0" height="1080"/></clipPath>` +
+        `<path id="p${q.f}" d="${d}" fill="none" stroke="${q.cor}" stroke-opacity="${q.op}" stroke-width="${q.th}" clip-path="url(#c${q.f})"/>`;
+    }).join('');
+    const nos = [...nosO, ...nosM, ...nosD];
+    const retang = nos.map((q, k) => `<rect id="n${k}" x="${q.x}" y="${q.y}" width="${NW}" height="${q.h}" rx="6" fill="${cores.azul}" opacity="0"/>`).join('');
+    const rot = nos.map((q, k) => {
+      const esq = q.x === XS[0];
+      const xt = esq ? q.x - 20 : q.x + NW + 20;
+      const anc = esq ? 'end' : 'start';
+      return `<text id="t${k}" x="${xt}" y="${q.y + q.h / 2 + 10}" text-anchor="${anc}" font-size="34" font-weight="600" fill="#fff" stroke="#000" stroke-width="8" paint-order="stroke" opacity="0">${q.n} ${q.v}</text>`;
+    }).join('');
+    svg = el('div', 'position:absolute;left:0;top:0;width:1920px;height:1080px', palco,
+      `<svg width="1920" height="1080" viewBox="0 0 1920 1080" style="overflow:visible"><defs>${defs}</defs><g id="fitas">${fitas.map(q => `<use href="#p${q.f}"/>`).join('')}</g>${retang}${rot}</svg>`);
+    geo.fitas = fitas; geo.nos = nos.length;
+    tot = el('div', 'position:absolute;left:1600px;top:640px;width:320px;text-align:left;font-size:44px;font-weight:700;opacity:0', palco, '0');
+    marca = el('div', 'position:absolute;left:0;width:100%;top:820px;text-align:center;font-size:110px;font-weight:700;letter-spacing:-4px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+    simbolo = el('img', 'position:absolute;left:960px;top:330px;width:140px;margin-left:-70px;opacity:0', palco); simbolo.src = M.simbolo;
+  },
+  quadro(t) {
+    const q = id => document.getElementById(id);
+    /* nós surgem em cascata (0–0,8) */
+    for (let k = 0; k < geo.nos; k++) {
+      q('n' + k).setAttribute('opacity', p(t, 0.05 + k * 0.07, 0.4 + k * 0.07));
+      q('t' + k).setAttribute('opacity', p(t, 0.3 + k * 0.07, 0.6 + k * 0.07));
+    }
+    /* fitas: origem → categorias (0,5–2,1) e categorias → concluídos (2,2–3,4) */
+    geo.fitas.forEach(f => {
+      const g = inOutCubic(p(t, f.g, f.g + 0.9));
+      const larg = (f.x2 - f.x1 + 20) * g;
+      q('r' + f.f).setAttribute('width', larg);
+    });
+    /* contagem final em 3,4–4,0 */
+    const n = Math.round(900 * inOutCubic(p(t, 2.6, 3.6)));
+    tot.textContent = n + ' concluídos';
+    tot.style.opacity = p(t, 2.6, 2.9) * (1 - p(t, 4.0, 4.4));
+    /* 4,0–4,5 a rede some, símbolo e marca entram */
+    const sai = inOutCubic(p(t, 4.0, 4.5));
+    document.querySelector('svg').style.opacity = 1 - sai;
+    simbolo.style.opacity = p(t, 4.2, 4.6);
+    simbolo.style.transform = `scale(${lerp(0.5, 1, outBack(p(t, 4.2, 4.8)))})`;
+    marca.style.opacity = p(t, 4.4, 4.9);
+    marca.style.transform = `translateY(${(1 - outExpo(p(t, 4.4, 5))) * 50}px)`;
+  }
+};
+</script></body></html>

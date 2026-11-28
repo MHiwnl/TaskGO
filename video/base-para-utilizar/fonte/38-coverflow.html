@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>38 · coverflow</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: coverflow (cards em arco 3D). Para cada card, d = distância ao centro contínuo c(t):
+   x = d·320 + sinal(d)·120, z = -|d|·160, rotateY = -sinal(d)·45·min(1,|d|), escala 1 - min(0.3,|d|·0.1).
+   O centro anda três posições; no fim os cards somem e entra a marca. */
+const { p, outBack, inOutCubic, el, cores } = M;
+const SERV = [
+  ['Eletricista', 'R$ 80', '4,9'], ['Encanador', 'R$ 70', '4,8'], ['Diarista', 'R$ 60', '5,0'],
+  ['Pintor', 'R$ 120', '4,7'], ['Montador', 'R$ 90', '4,9'], ['Jardineiro', 'R$ 75', '4,8'], ['Pedreiro', 'R$ 150', '4,9']
+];
+let cards = [], marca;
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 50% 40%, #0a1440 0%, #000 65%)';
+    const palcoCena = el('div', 'position:absolute;inset:0;perspective:900px', palco);
+    cards = SERV.map(([nome, preco, nota], i) => el('div', 'position:absolute;left:750px;top:260px;width:420px;height:560px;border-radius:32px;background:#0e0f14;border:2px solid #23263a;box-sizing:border-box;padding:36px;display:flex;flex-direction:column;justify-content:space-between', palcoCena,
+      `<div style="width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,${cores.azul},${cores.azulClaro});display:grid;place-items:center;font-size:44px;font-weight:700">${nome[0]}</div>
+       <div><div style="font-size:52px;font-weight:700;line-height:1.1">${nome}</div><div style="font-size:30px;color:${cores.cinza};margin-top:14px">★ ${nota} · a partir de ${preco}</div></div>`));
+    marca = el('div', 'position:absolute;left:0;width:100%;top:400px;text-align:center;font-size:260px;font-weight:700;letter-spacing:-10px;line-height:1;opacity:0', palco, `Task<span style="color:${cores.azul}">GO</span>`);
+  },
+  quadro(t) {
+    /* três passos do centro: 0.8–1.5, 1.9–2.6, 3.0–3.7; cards somem em 3.9–4.3 e a marca entra */
+    const c = inOutCubic(p(t, 0.8, 1.5)) + inOutCubic(p(t, 1.9, 2.6)) + inOutCubic(p(t, 3.0, 3.7));
+    const sumir = 1 - p(t, 3.9, 4.3);
+    cards.forEach((card, i) => {
+      const d = i - c, ad = Math.abs(d), sg = Math.sign(d);
+      const x = d * 320 + sg * 120, z = -ad * 160, ry = -sg * 45 * Math.min(1, ad), esc = 1 - Math.min(0.3, ad * 0.1);
+      const bob = Math.sin(t * 2 + i) * 6;
+      card.style.transform = `translate(${x.toFixed(2)}px,${bob.toFixed(2)}px) translateZ(${z.toFixed(2)}px) rotateY(${ry.toFixed(3)}deg) scale(${esc.toFixed(4)})`;
+      card.style.opacity = (Math.max(0, 1 - Math.max(0, ad - 2.2)) * sumir).toFixed(4);
+      card.style.zIndex = Math.round(100 - ad * 10);
+      card.style.borderColor = ad < 0.5 ? cores.azul : '#23263a';
+    });
+    marca.style.opacity = p(t, 4.0, 4.5).toFixed(4);
+    marca.style.transform = `scale(${(0.8 + 0.2 * outBack(p(t, 4.0, 4.8))).toFixed(4)})`;
+  }
+};
+</script></body></html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>26 · giant mask reveal</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: giant-mask-reveal (awesome-ai-motion nº 232). O texto "TaskGO" é a janela (clipPath SVG). Por dentro
+   há uma cena de serviço concluído. A janela cresce com 12^p (p com power1.in) e a cena cresce de 0.72 a 1 com
+   power3.inOut, no mesmo ponto de origem. Quando a cena cobre a tela, a cópia sem máscara entra e a marca fecha. */
+const { p, lerp, inOutCubic, mola, el, cores } = M;
+const NS = 'http://www.w3.org/2000/svg';
+const ORIGEM = [420, 470];
+const svg = document.createElementNS(NS, 'svg');
+svg.style.cssText = 'position:absolute;left:0;top:0';
+let mascara, mundo, cheio, escuro, marca, simbolo, tag;
+function cena(pai) {
+  const g = document.createElementNS(NS, 'g');
+  g.innerHTML = `
+    <defs><linearGradient id="gc${pai.id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1a3fd6"/><stop offset="1" stop-color="#050818"/></linearGradient></defs>
+    <rect width="1920" height="1080" fill="url(#gc${pai.id})"/>
+    <g opacity=".18" stroke="#8aa3ff" stroke-width="2">${Array.from({ length: 16 }, (_, i) => `<line x1="${i * 120}" y1="0" x2="${i * 120}" y2="1080"/>`).join('')}</g>
+    <circle cx="960" cy="420" r="260" fill="#2b59ff" opacity=".35"/>
+    <circle cx="960" cy="420" r="110" fill="#35d08f"/>
+    <path d="M905 420 L945 460 L1018 380" fill="none" stroke="#000" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="960" y="700" text-anchor="middle" font-family="Spline Sans" font-weight="700" font-size="120" fill="#fff">Serviço concluído</text>
+    <text x="960" y="790" text-anchor="middle" font-family="Spline Sans" font-weight="500" font-size="50" fill="${cores.cinza}">Carlos · Eletricista · ★ 4,9</text>`;
+  pai.appendChild(g);
+  return g;
+}
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    svg.setAttribute('width', 1920); svg.setAttribute('height', 1080); svg.setAttribute('viewBox', '0 0 1920 1080');
+    palco.appendChild(svg);
+    svg.innerHTML = `
+      <defs><clipPath id="janela" clipPathUnits="userSpaceOnUse"><text id="mascara" x="960" y="705" text-anchor="middle" font-family="Spline Sans" font-weight="800" font-size="360" letter-spacing="-12">TaskGO</text></clipPath></defs>
+      <g clip-path="url(#janela)"><g id="mundo"></g></g>
+      <g id="cheio" opacity="0"></g>`;
+    mascara = svg.querySelector('#mascara');
+    mundo = svg.querySelector('#mundo');
+    cheio = svg.querySelector('#cheio');
+    cena(mundo); cena(cheio);
+    escuro = el('div', 'position:absolute;inset:0;background:#000;opacity:0', palco);
+    marca = el('div', 'position:absolute;left:0;width:100%;top:440px;text-align:center;font-size:200px;font-weight:700;letter-spacing:-8px;opacity:0;white-space:nowrap', palco, `Task<span style="color:${cores.azul}">GO</span>`);
+    simbolo = el('img', 'position:absolute;left:960px;top:260px;width:200px;margin-left:-100px;margin-top:-100px;opacity:0', palco);
+    simbolo.src = M.simbolo;
+    tag = el('div', `position:absolute;left:0;width:100%;top:760px;text-align:center;font-size:44px;font-weight:500;color:${cores.cinza};opacity:0`, palco, 'Marketplace de serviços locais');
+  },
+  quadro(t) {
+    const q = p(t, 0.3, 2.6);
+    /* janela: 12^p com p em power1 (x²); cena: 0.72 → 1 com power3.inOut; mesmo ponto de origem */
+    const k = Math.pow(12, q * q);
+    const [ox, oy] = ORIGEM;
+    const ancora = (s) => `translate(${ox} ${oy}) scale(${s}) translate(${-ox} ${-oy})`;
+    mascara.setAttribute('transform', ancora(k));
+    mundo.setAttribute('transform', ancora(lerp(0.72, 1, inOutCubic(q))));
+    cheio.setAttribute('opacity', p(t, 2.6, 2.9));
+    /* 3.7 s: tela preta sobe e a marca entra com mola */
+    escuro.style.opacity = p(t, 3.7, 4.0);
+    marca.style.opacity = p(t, 3.9, 4.2);
+    marca.style.transform = `scale(${lerp(1.2, 1, inOutCubic(p(t, 3.9, 4.4)))})`;
+    simbolo.style.opacity = p(t, 3.9, 4.1);
+    simbolo.style.transform = `scale(${mola(t - 3.9, 2.2, 5)})`;
+    tag.style.opacity = p(t, 4.5, 4.9);
+  }
+};
+</script></body></html>

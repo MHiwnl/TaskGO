@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>40 · ink bleed</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: ink-bleed (tinta se espalha e revela a cena). Em canvas: manchas com M.rnd (semente fixa) crescem,
+   são borradas e limiarizadas no alfa; a cena nova aparece só dentro da máscara. Pedido → aceito → marca. */
+const { p, outCubic, el, cores, rnd } = M;
+const W = 1920, H = 1080;
+let cx, mk, mkx, mb, mbx, tmp, tmpx;
+const r = rnd(40);
+/* grupo 0 = transição 1 (início 0.8), grupo 1 = transição 2 (início 3.0) */
+const manchas = [];
+for (let i = 0; i < 46; i++) manchas.push({ g: i % 2, x: 200 + r() * 1520, y: 150 + r() * 780, R: 120 + r() * 220, d: 0.05 + r() * 0.85 });
+const CENTROS = [[960, 540], [960, 540]];
+const T0 = [0.8, 3.0];
+
+function txt(c, s, x, y, font, cor, alinha = 'left') { c.font = font; c.fillStyle = cor; c.textAlign = alinha; c.fillText(s, x, y); }
+function cartao(c, x, y, w, h, cor, borda) {
+  c.beginPath(); c.roundRect(x, y, w, h, 28); c.fillStyle = cor; c.fill();
+  if (borda) { c.strokeStyle = borda; c.lineWidth = 2; c.stroke(); }
+}
+function botao(c, x, y, w, texto) {
+  c.beginPath(); c.roundRect(x, y, w, 80, 40); c.fillStyle = cores.azul; c.fill();
+  txt(c, texto, x + w / 2, y + 52, '700 32px "Spline Sans", sans-serif', '#fff', 'center');
+}
+
+function drawA(c, t) {
+  c.fillStyle = '#0b0d14'; c.fillRect(0, 0, W, H);
+  const y = Math.sin(t * 2) * 6;
+  txt(c, 'NOVO PEDIDO', 160, 240 + y, '700 30px "Spline Sans", sans-serif', cores.azul);
+  txt(c, 'Preciso de um eletricista', 160, 360 + y, '700 120px "Spline Sans", sans-serif', '#fff');
+  cartao(c, 160, 470 + y, 1000, 320, '#0e0f14', '#23263a');
+  txt(c, 'Troca de chuveiro', 208, 560 + y, '600 44px "Spline Sans", sans-serif', '#fff');
+  txt(c, 'Hoje, 16h · Vila Mariana', 208, 615 + y, '400 30px "Spline Sans", sans-serif', cores.cinza);
+  botao(c, 208, 660 + y, 330, 'Enviar pedido');
+}
+function drawB(c, t) {
+  c.fillStyle = '#f4f5f8'; c.fillRect(0, 0, W, H);
+  const y = Math.sin(t * 1.6 + 1) * 8;
+  txt(c, 'PEDIDO ACEITO', 160, 240, '700 30px "Spline Sans", sans-serif', cores.azul);
+  txt(c, 'Carlos aceitou', 160, 360, '700 120px "Spline Sans", sans-serif', '#000');
+  c.save(); c.shadowColor = 'rgba(0,0,0,.14)'; c.shadowBlur = 60; c.shadowOffsetY = 30;
+  cartao(c, 160, 470 + y, 1000, 320, '#fff', '#d9dce6'); c.restore();
+  c.beginPath(); c.arc(260, 590 + y, 60, 0, Math.PI * 2); c.fillStyle = cores.azul; c.fill();
+  txt(c, 'C', 260, 610 + y, '700 52px "Spline Sans", sans-serif', '#fff', 'center');
+  txt(c, 'Carlos · Eletricista', 360, 600 + y, '700 44px "Spline Sans", sans-serif', '#000');
+  txt(c, '★ 4,9 · 128 serviços', 360, 650 + y, '400 30px "Spline Sans", sans-serif', '#555');
+  botao(c, 700, 660 + y, 380, 'Pagar por Pix');
+}
+function drawC(c, t) {
+  c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+  c.font = '700 260px "Spline Sans", sans-serif';
+  const a = 'Task', b = 'GO', wa = c.measureText(a).width, wb = c.measureText(b).width;
+  const x0 = (W - wa - wb) / 2;
+  txt(c, a, x0, 620, '700 260px "Spline Sans", sans-serif', '#fff');
+  txt(c, b, x0 + wa, 620, '700 260px "Spline Sans", sans-serif', cores.azul);
+}
+
+/* máscara da transição g no instante t: manchas borradas e limiarizadas no alfa */
+function mascara(g, t) {
+  const t0 = T0[g];
+  mkx.clearRect(0, 0, W, H); mkx.fillStyle = '#fff';
+  for (const m of manchas) {
+    if (m.g !== g) continue;
+    const rad = m.R * outCubic(p(t, t0 + m.d, t0 + m.d + 0.8));
+    if (rad > 0) { mkx.beginPath(); mkx.arc(m.x, m.y, rad, 0, Math.PI * 2); mkx.fill(); }
+  }
+  const cobre = 2000 * outCubic(p(t, t0 + 1.0, t0 + 1.5));
+  mkx.beginPath(); mkx.arc(CENTROS[g][0], CENTROS[g][1], cobre, 0, Math.PI * 2); mkx.fill();
+  mbx.clearRect(0, 0, W, H); mbx.filter = 'blur(22px)'; mbx.drawImage(mk, 0, 0); mbx.filter = 'none';
+  const d = mbx.getImageData(0, 0, W, H), v = d.data;
+  for (let i = 0; i < v.length; i += 4) { v[i] = v[i + 1] = v[i + 2] = 255; v[i + 3] = v[i + 3] >= 128 ? 255 : 0; }
+  mbx.putImageData(d, 0, 0);
+}
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#000';
+    const cv = el('canvas', 'position:absolute;left:0;top:0;width:1920px;height:1080px', palco);
+    cv.width = W; cv.height = H; cx = cv.getContext('2d');
+    mk = document.createElement('canvas'); mk.width = W; mk.height = H; mkx = mk.getContext('2d');
+    mb = document.createElement('canvas'); mb.width = W; mb.height = H; mbx = mb.getContext('2d');
+    tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H; tmpx = tmp.getContext('2d');
+  },
+  quadro(t) {
+    drawA(cx, t);
+    /* cena seguinte entra pela máscara; depois de completa, desenha direto */
+    for (let g = 0; g < 2; g++) {
+      const t0 = T0[g];
+      if (t <= t0) continue;
+      const cena = g === 0 ? drawB : drawC;
+      if (t >= t0 + 1.5) { cena(cx, t); continue; }
+      tmpx.clearRect(0, 0, W, H); cena(tmpx, t);
+      mascara(g, t);
+      tmpx.globalCompositeOperation = 'destination-in';
+      tmpx.drawImage(mb, 0, 0);
+      tmpx.globalCompositeOperation = 'source-over';
+      cx.drawImage(tmp, 0, 0);
+    }
+  }
+};
+</script></body></html>

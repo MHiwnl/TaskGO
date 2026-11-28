@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>35 · morph match cut</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: morph-match-cut (a forma de uma cena vira a forma da seguinte). Pino do mapa → ✓ → estrela → símbolo.
+   Cada forma é um contorno de N pontos com raio r(θ); o morph interpola só os raios (mesmo número de pontos). */
+const { p, lerp, inOutCubic, outBack, outCubic, el, cores } = M;
+const N = 120, R = 200, CX = 960, CY = 540;
+let forma, check, rotulos = [], simbolo, marca, grupo;
+
+const fPin = th => { const d = Math.atan2(Math.sin(th - Math.PI / 2), Math.cos(th - Math.PI / 2)); return R * (0.8 + 0.6 * Math.exp(-d * d / 0.25)); };
+const fCirc = () => R * 0.8;
+const fEstrela = th => R * (0.55 + 0.45 * Math.pow(0.5 + 0.5 * Math.cos(5 * th - Math.PI / 2), 6));
+
+function caminho(fa, fb, k) {
+  let d = '';
+  for (let i = 0; i <= N; i++) {
+    const th = i / N * 2 * Math.PI, r = lerp(fa(th), fb(th), k);
+    d += (i ? 'L' : 'M') + (CX + r * Math.cos(th)).toFixed(1) + ' ' + (CY + r * Math.sin(th)).toFixed(1);
+  }
+  return d + 'Z';
+}
+
+const rotulosHtml = [
+  ['Rua das Flores, 120', 0.6, 1.1],
+  ['Endereço confirmado', 1.9, 2.5],
+  ['Avalie o serviço', 3.3, 4.1]
+];
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 50% 50%, #0a1440 0%, #000 65%)';
+    /* SVG precisa nascer por innerHTML: el('svg') cria elemento HTML e nada aparece */
+    const svgBox = el('div', 'position:absolute;inset:0', palco, `<svg width="1920" height="1080" viewBox="0 0 1920 1080"><g class="grupo"><path class="forma" fill="${cores.azul}"/><path class="check" d="M880 545 L945 610 L1050 480" fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></g></svg>`);
+    grupo = svgBox.querySelector('.grupo'); forma = svgBox.querySelector('.forma'); check = svgBox.querySelector('.check');
+    simbolo = el('img', 'position:absolute;left:810px;top:390px;width:300px;height:300px', palco); simbolo.src = M.simbolo;
+    rotulos = rotulosHtml.map(([txt]) => el('div', 'position:absolute;left:0;width:100%;top:880px;text-align:center;font-size:56px;font-weight:600;opacity:0', palco, txt));
+    marca = el('div', 'position:absolute;left:0;width:100%;top:880px;text-align:center;font-size:110px;font-weight:700;letter-spacing:-4px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    /* 0–1.1 pino cai · 1.1–1.6 pino → círculo verde (corte de cor no início) · 1.7–2.1 ✓ desenha
+       2.6–3.3 círculo → estrela azul · 4.2–4.6 estrela some e o símbolo entra */
+    const k1 = inOutCubic(p(t, 1.1, 1.6)), k2 = inOutCubic(p(t, 2.6, 3.3));
+    const d = t < 2.6 ? caminho(fPin, fCirc, k1) : caminho(fCirc, fEstrela, k2);
+    forma.setAttribute('d', d);
+    forma.setAttribute('fill', t < 1.1 ? cores.azul : t < 2.6 ? cores.verde : cores.azul);
+    const queda = (1 - outBack(p(t, 0, 0.7))) * -500;
+    const sai = 1 - p(t, 4.2, 4.5);
+    grupo.setAttribute('transform', `translate(0 ${queda.toFixed(1)}) translate(${CX} ${CY}) rotate(${(Math.sin(t * 2) * 6).toFixed(2)}) scale(${sai.toFixed(4)}) translate(${-CX} ${-CY})`);
+    check.setAttribute('stroke-dashoffset', (1 - outCubic(p(t, 1.7, 2.1))).toFixed(4));
+    check.style.opacity = t < 2.6 ? 1 : (1 - p(t, 2.5, 2.7)).toFixed(4);
+    rotulos.forEach((el_, i) => {
+      const [, a, b] = rotulosHtml[i];
+      el_.style.opacity = (p(t, a, a + 0.25) * (1 - p(t, b, b + 0.2))).toFixed(4);
+    });
+    simbolo.style.transform = `scale(${Math.max(0, outBack(p(t, 4.2, 4.8))).toFixed(4)})`;
+    marca.style.opacity = p(t, 4.5, 4.9).toFixed(4);
+  }
+};
+</script></body></html>

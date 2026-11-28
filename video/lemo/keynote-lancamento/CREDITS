@@ -1,0 +1,22 @@
+TaskGO — lançamento (estilo Dark Tech Keynote, biblioteca Lemo-Opuscar)
+
+Imagem
+- Toda a interface, os cartões, o mapa e as tipografias são desenhados em código (engine.js e main.js). Sem imagens geradas nem de banco de imagens.
+- Nomes de profissionais, notas e preços são fictícios (dados de demonstração). Nenhuma pessoa real, nenhum logotipo de terceiros.
+
+Fontes (SIL Open Font License 1.1; arquivos de licença em fonts/)
+- Inter — The Inter Project Authors (github.com/rsms/inter)
+- Inter Tight — The Inter Project Authors
+- JetBrains Mono — The JetBrains Mono Project Authors
+
+Voz
+- Narração gerada com ElevenLabs (voz "Brian", API, modelo eleven_multilingual_v2), a partir de lines.json. Uso sob a conta de quem gerou; sujeito aos termos da ElevenLabs.
+
+Música e efeitos
+- Sintetizados em código (mix.py, numpy) e de foley procedural (core/audio/sfx.py). Nenhuma amostra de terceiros.
+
+Código do motor
+- engine.js é uma cópia do motor de desenho da biblioteca Lemo-Opuscar (LemoLab), com um ajuste de importação e a função setSize. Licença da biblioteca em LICENSE da própria biblioteca.
+
+Responsabilidade
+- O autor responde pelos materiais que usar no filme.

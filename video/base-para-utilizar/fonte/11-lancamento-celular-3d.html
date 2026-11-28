@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>11 · lançamento do celular 3D</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: product launch. Um celular 3D (rotateY de -60° a 0°) surge da escuridão sobre um feixe de luz,
+   a tela acende, uma faixa de luz varre o vidro, e o texto "Novo TaskGO" aparece atrás dele em escala grande
+   até o aparelho subir e deixar a marca à mostra. */
+const { p, lerp, clamp, outExpo, outCubic, inOutCubic, mola, el, cores } = M;
+let beam, glow, piso, cena, celular, frente, tela, cortina, sweep, texto, textoL = [], fills = [];
+
+/* posição vertical do celular: sobe da base, flutua e, no fim, sobe para dar lugar ao texto */
+const yPh = t => lerp(500, 0, outExpo(p(t, 0.6, 2.0))) + Math.sin(t * 2) * 6 * p(t, 2.2, 2.6) - 260 * inOutCubic(p(t, 3.4, 4.0));
+
+const UI = `<div style="position:absolute;left:30px;top:80px;font-size:46px;font-weight:700">Olá!</div>
+<div style="position:absolute;left:30px;top:146px;font-size:26px;color:${cores.cinza}">Ache um profissional</div>
+<div style="position:absolute;left:24px;top:230px;width:340px;height:200px;border-radius:30px;background:linear-gradient(135deg,${cores.azul},${cores.azulEscuro});padding:26px;font-size:30px;font-weight:700;line-height:1.25;box-sizing:border-box">Eletricista perto de você<div style="margin-top:20px;font-size:22px;font-weight:500;opacity:.85">3 disponíveis agora</div></div>`;
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#000';
+    beam = el('div', `position:absolute;left:660px;top:0;width:600px;height:1080px;clip-path:polygon(44% 0,56% 0,100% 100%,0 100%);background:linear-gradient(rgba(138,163,255,.8),rgba(43,89,255,.18) 60%,transparent);opacity:0`, palco);
+    glow = el('div', `position:absolute;left:460px;top:-40px;width:1000px;height:1000px;border-radius:50%;background:radial-gradient(circle,rgba(43,89,255,.55),transparent 62%);opacity:0`, palco);
+    texto = el('div', 'position:absolute;left:0;width:100%;top:600px;text-align:center;font-size:230px;font-weight:700;letter-spacing:-8px;white-space:nowrap', palco);
+    'Novo TaskGO'.split('').forEach((ch, i) => textoL.push(el('span', `display:inline-block;color:${i >= 9 ? cores.azul : '#fff'}`, texto, ch === ' ' ? '&nbsp;' : ch)));
+    piso = el('div', `position:absolute;left:610px;top:930px;width:700px;height:140px;border-radius:50%;background:radial-gradient(ellipse,rgba(43,89,255,.6),transparent 70%);opacity:0`, palco);
+    cena = el('div', 'position:absolute;inset:0;perspective:1800px', palco);
+    celular = el('div', 'position:absolute;left:750px;top:110px;width:420px;height:860px;transform-style:preserve-3d;opacity:0', cena);
+    frente = el('div', 'position:absolute;inset:0;border-radius:64px;background:#0b0c10;box-shadow:inset 0 0 0 8px #2a2d3c;backface-visibility:hidden;transform:translateZ(10px)', celular);
+    el('div', 'position:absolute;inset:0;border-radius:64px;background:#15171f;backface-visibility:hidden;transform:rotateY(180deg) translateZ(10px)', celular);
+    tela = el('div', 'position:absolute;left:18px;top:18px;right:18px;bottom:18px;border-radius:50px;overflow:hidden;background:#07080c', frente, UI);
+    for (let i = 0; i < 3; i++) {
+      const linha = el('div', `position:absolute;left:24px;top:${470 + i * 82}px;width:340px;height:60px;border-radius:30px;background:#13151d;overflow:hidden`, tela);
+      fills.push(el('div', `position:absolute;left:0;top:0;bottom:0;width:0;background:${cores.azul};opacity:.55`, linha));
+    }
+    el('div', `position:absolute;left:24px;top:730px;width:340px;height:76px;border-radius:38px;background:${cores.verde};color:#000;font-size:28px;font-weight:700;display:grid;place-items:center`, tela, 'Pedir agora');
+    sweep = el('div', 'position:absolute;top:-300px;left:0;width:200px;height:1400px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);transform:rotate(18deg);opacity:0', tela);
+    cortina = el('div', 'position:absolute;inset:0;background:#000', tela);
+  },
+  quadro(t) {
+    const luz = p(t, 1.6, 2.3);
+    /* 0–0.8 feixe sobe · 0.6–2.2 celular surge e gira · 1.6–2.3 tela acende · 2.6–3.5 luz varre o vidro */
+    beam.style.opacity = p(t, 0.3, 0.9) * (1 - 0.6 * p(t, 3.4, 3.9));
+    beam.style.transform = `scaleX(${lerp(0.4, 1, outExpo(p(t, 0.3, 1.2))).toFixed(3)})`;
+    glow.style.opacity = luz * 0.7 * (1 - 0.6 * p(t, 3.4, 3.9));
+    glow.style.transform = `scale(${lerp(0.6, 1, luz).toFixed(3)})`;
+    piso.style.opacity = luz * 0.7;
+    const y = yPh(t), v = Math.abs(yPh(t + 0.02) - yPh(t - 0.02)) / 0.04;
+    const rot = lerp(-60, 0, outExpo(p(t, 0.6, 2.2)));
+    const s = lerp(1, 0.7, inOutCubic(p(t, 3.4, 4.0)));
+    celular.style.opacity = clamp(p(t, 0.4, 0.8));
+    celular.style.transform = `translate(0px,${y.toFixed(1)}px) scale(${s.toFixed(4)}) rotateY(${rot.toFixed(2)}deg)`;
+    celular.style.filter = `blur(${Math.min(8, v * 0.004).toFixed(2)}px)`;
+    cortina.style.opacity = 1 - luz;
+    sweep.style.opacity = clamp(p(t, 2.5, 2.7)) * (1 - p(t, 3.5, 3.7));
+    sweep.style.left = lerp(-300, 520, p(t, 2.6, 3.5)).toFixed(1) + 'px';
+    fills.forEach((f, i) => { f.style.width = (340 * outCubic(p(t, 2.0 + i * 0.12, 2.5 + i * 0.12))).toFixed(1) + 'px'; });
+    /* 3.1–4.0 o texto aparece atrás do celular em escala grande e assenta; letras em cascata */
+    const tx = outExpo(p(t, 3.1, 4.0));
+    texto.style.transform = `scale(${lerp(0.45, 1, tx).toFixed(4)})`;
+    texto.style.filter = `blur(${((1 - p(t, 3.1, 3.6)) * 20).toFixed(1)}px)`;
+    textoL.forEach((s, i) => {
+      const k = mola(t - (3.3 + i * 0.03), 2.2, 6);
+      s.style.opacity = clamp(k);
+      s.style.transform = `translateY(${((1 - k) * 60).toFixed(1)}px)`;
+    });
+  }
+};
+</script></body></html>

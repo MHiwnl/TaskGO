@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>10 · colagem b-roll</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: colagem b-roll em stop-motion. Recortes de papel com bordas irregulares caem em batidas
+   de 12 quadros por segundo (posição em degraus de 1/12 s), fitas adesivas prendem os cantos, estrelas
+   estouram, um carimbo "Feito!" bate no centro e a colagem sai para a marca. */
+const { p, lerp, clamp, outBack, outCubic, outExpo, mola, el, cores } = M;
+const FPS_STOP = 12;
+const ESTRELA = 'polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)';
+let fundo, pecas = [], carimbo, simbolo, marca, marcaL = [];
+
+/* borda irregular: cada lado vira n segmentos com desvio pseudoaleatório (semente fixa) */
+function recorte(seed, n) {
+  const r = M.rnd(seed), pts = [], cant = [[0, 0], [100, 0], [100, 100], [0, 100]];
+  for (let c = 0; c < 4; c++) {
+    const [ax, ay] = cant[c], [bx, by] = cant[(c + 1) % 4];
+    for (let k = 0; k < n; k++) {
+      const f = k / n;
+      pts.push(`${(lerp(ax, bx, f) + (r() - 0.5) * 5).toFixed(1)}% ${(lerp(ay, by, f) + (r() - 0.5) * 5).toFixed(1)}%`);
+    }
+  }
+  return `polygon(${pts.join(',')})`;
+}
+
+function peca(o) {
+  const wrap = el('div', `position:absolute;left:0;top:0;width:${o.w}px;height:${o.h}px;filter:drop-shadow(0 30px 30px rgba(0,0,0,.6))`, palco);
+  const papel = el('div', `position:absolute;inset:0;background:${o.cor};clip-path:${o.clip}`, wrap, o.html || '');
+  pecas.push({ wrap, o });
+  return wrap;
+}
+
+const svg = (vb, corpo) => `<svg viewBox="${vb}" width="100%" height="100%" style="position:absolute;inset:0">${corpo}</svg>`;
+const CASA = svg('0 0 100 100', `<path d="M50 12 L90 48 L80 48 L80 90 L20 90 L20 48 L10 48Z" fill="${cores.azul}"/><rect x="42" y="62" width="16" height="28" fill="#000"/>`);
+const CHAVE = svg('0 0 100 40', `<rect x="8" y="16" width="70" height="8" rx="4" fill="#000"/><circle cx="84" cy="20" r="15" fill="#000"/><circle cx="84" cy="20" r="6" fill="#f4f4f1"/>`);
+const MARTELO = svg('0 0 100 100', `<rect x="44" y="30" width="12" height="66" fill="#000"/><rect x="18" y="10" width="64" height="26" rx="4" fill="#000"/>`);
+const CELULAR = `<div style="position:absolute;left:18px;top:18px;right:18px;bottom:18px;border-radius:26px;background:linear-gradient(160deg,${cores.azul},${cores.azulEscuro});padding:28px 20px;color:#fff;font-size:28px;font-weight:700">Pedido<div style="margin-top:22px;height:18px;border-radius:9px;background:rgba(255,255,255,.4)"></div><div style="margin-top:14px;height:18px;width:70%;border-radius:9px;background:rgba(255,255,255,.4)"></div><div style="margin-top:34px;height:64px;border-radius:32px;background:${cores.verde}"></div></div>`;
+
+let palco;
+window.CLIPE = {
+  dur: 5,
+  montar(palco_) {
+    palco = palco_;
+    palco.style.background = '#0c0e16';
+    fundo = el('div', 'position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.12) 2px,transparent 2px);background-size:60px 60px', palco);
+    const P = (o) => peca(o);
+    P({ x: 560, y: 420, w: 380, h: 380, rot: -6, s0: 0.2, cor: '#f4f4f1', clip: recorte(3, 4), html: CASA, dx: -700 });
+    P({ x: 1340, y: 400, w: 260, h: 460, rot: 5, s0: 0.5, cor: '#1a1d2b', clip: recorte(7, 4), html: CELULAR, dx: 700 });
+    P({ x: 900, y: 780, w: 460, h: 190, rot: -4, s0: 0.8, cor: '#f4f4f1', clip: recorte(11, 5), html: CHAVE, dx: -600 });
+    P({ x: 1480, y: 760, w: 300, h: 280, rot: 8, s0: 1.1, cor: cores.verde, clip: recorte(13, 4), html: MARTELO, dx: 600 });
+    P({ x: 1120, y: 260, w: 220, h: 220, rot: 12, s0: 2.0, cor: cores.azul, clip: ESTRELA, pop: true });
+    P({ x: 300, y: 760, w: 170, h: 170, rot: -10, s0: 2.1, cor: '#f4f4f1', clip: ESTRELA, pop: true });
+    P({ x: 1720, y: 190, w: 130, h: 130, rot: 6, s0: 2.2, cor: cores.verde, clip: ESTRELA, pop: true });
+    P({ x: 620, y: 230, w: 300, h: 80, rot: -20, s0: 0.9, cor: 'rgba(255,255,255,.6)', clip: recorte(17, 6), dx: 0 });
+    P({ x: 1280, y: 640, w: 260, h: 72, rot: 14, s0: 1.3, cor: 'rgba(255,255,255,.6)', clip: recorte(19, 6), dx: 0 });
+    carimbo = el('div', `position:absolute;left:${960 - 330}px;top:${540 - 160}px;width:660px;height:320px;border:16px solid ${cores.verde};border-radius:28px;display:grid;place-items:center;font-size:180px;font-weight:900;color:${cores.verde};letter-spacing:-6px;opacity:0;background:rgba(12,14,22,.75)`, palco, 'Feito!');
+    simbolo = el('img', 'position:absolute;left:860px;top:370px;width:200px', palco); simbolo.src = M.simbolo;
+    marca = el('div', 'position:absolute;left:0;width:100%;top:620px;text-align:center;font-size:120px;font-weight:700;letter-spacing:-4px;white-space:nowrap', palco);
+    'TaskGO'.split('').forEach((ch, i) => marcaL.push(el('span', `display:inline-block;color:${i > 3 ? cores.azul : '#fff'}`, marca, ch)));
+  },
+  quadro(t) {
+    /* stop-motion: tudo do papel usa o tempo em degraus de 1/12 s; o fundo de pontos anda suave */
+    const q = Math.floor(t * FPS_STOP) / FPS_STOP;
+    fundo.style.backgroundPosition = `${(t * 30).toFixed(1)}px ${(t * 18).toFixed(1)}px`;
+    const ex = outCubic(p(q, 4.3, 4.75));
+    pecas.forEach(({ wrap, o }) => {
+      const k = o.pop ? outBack(p(q, o.s0, o.s0 + 0.45), 1.6) : outBack(p(q, o.s0, o.s0 + 0.5), 1.2);
+      const kc = clamp(k);
+      const dx = o.dx != null && !o.pop ? (1 - kc) * o.dx * 0.5 : 0; // entra de um lado (fitas caem)
+      const X = o.x - o.w / 2 + dx + (o.x - 960) * ex * 1.2;
+      const Y = o.y - o.h / 2 + (1 - kc) * -520 + (o.y - 540) * ex * 1.2;
+      const sc = o.pop ? Math.max(0, k) : 1;
+      const r = o.rot + (1 - kc) * 40;
+      wrap.style.transform = `translate(${X.toFixed(1)}px,${Y.toFixed(1)}px) rotate(${r.toFixed(2)}deg) scale(${sc.toFixed(3)})`;
+      wrap.style.opacity = o.pop ? 1 : clamp(p(q, o.s0, o.s0 + 0.1)) * (1 - ex);
+    });
+    /* 3.0 carimbo "Feito!" bate com escala de 2,4 para 1 */
+    const bate = outBack(p(q, 3.0, 3.25), 1.5);
+    carimbo.style.opacity = clamp(p(q, 3.0, 3.05)) * (1 - ex);
+    carimbo.style.transform = `rotate(-12deg) scale(${lerp(2.4, 1, bate).toFixed(3)})`;
+    /* 4.5–5 símbolo e marca */
+    const sk = mola(q - 4.5, 2, 6);
+    simbolo.style.transform = `scale(${Math.max(0, sk).toFixed(3)}) rotate(${((1 - outExpo(p(q, 4.5, 5))) * -120).toFixed(1)}deg)`;
+    simbolo.style.opacity = clamp(p(q, 4.5, 4.55));
+    marcaL.forEach((s, i) => {
+      const k = mola(q - (4.6 + i * 0.04), 2.2, 6);
+      s.style.transform = `translateY(${((1 - k) * 90).toFixed(1)}px)`;
+      s.style.opacity = clamp(k);
+      s.style.filter = `blur(${((1 - clamp(k)) * 14).toFixed(1)}px)`;
+    });
+  }
+};
+</script></body></html>

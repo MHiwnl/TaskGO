@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>06 · glassmorphism</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: glassmorphism. Blobs coloridos desfocados se movem atrás de três cards de vidro
+   (pedido, profissional, Pix aprovado) que entram em profundidade 3D; no fim o wordmark assume o centro. */
+const { p, lerp, outExpo, outCubic, outBack, mola, el, cores } = M;
+const VIDRO = 'position:absolute;left:0;top:0;width:500px;height:300px;border-radius:36px;padding:40px 44px;background:linear-gradient(135deg,rgba(255,255,255,.2),rgba(255,255,255,.04));backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);border:1.5px solid rgba(255,255,255,.28);box-shadow:0 40px 90px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.35)';
+const BLOBS = [[cores.azul, 820, 0], [cores.azulClaro, 620, 2.1], [cores.verde, 560, 4.2], [cores.azulEscuro, 900, 5.3]];
+let blobs = [], cartoes = [], valor, check, marca;
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#03050c';
+    blobs = BLOBS.map(([c, s, fase], k) => ({ e: el('div', `position:absolute;left:0;top:0;width:${s}px;height:${s}px;border-radius:50%;background:radial-gradient(circle,${c} 0%,rgba(0,0,0,0) 68%);filter:blur(40px);opacity:0`, palco), s, fase, k }));
+    const cena = el('div', 'position:absolute;inset:0;perspective:1800px;transform-style:preserve-3d', palco);
+    cartoes = [0, 1, 2].map(() => el('div', VIDRO, cena));
+    cartoes[0].innerHTML = `<div style="font-size:24px;letter-spacing:4px;color:#8aa3ff;font-weight:600">PEDIDO</div>
+      <div style="font-size:54px;font-weight:700;line-height:1.1;margin-top:20px">Trocar chuveiro</div>
+      <div style="font-size:28px;color:#c7cdf0;margin-top:16px">Eletricista · hoje, 14h</div>`;
+    cartoes[1].innerHTML = `<div style="display:flex;align-items:center;gap:26px">
+        <div style="width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,${cores.azul},${cores.azulClaro});display:grid;place-items:center;font-size:44px;font-weight:700">C</div>
+        <div><div style="font-size:40px;font-weight:700">Carlos</div><div style="font-size:26px;color:#c7cdf0;margin-top:6px">Eletricista · ★ 4,9</div></div></div>
+      <div style="display:inline-block;margin-top:40px;padding:12px 24px;border-radius:99px;background:rgba(53,208,143,.18);color:${cores.verde};font-size:26px;font-weight:600">Aceitou o pedido</div>`;
+    cartoes[2].innerHTML = `<div style="font-size:24px;letter-spacing:4px;color:#8aa3ff;font-weight:600">PIX</div>
+      <div id="valor" style="font-size:84px;font-weight:700;margin-top:8px">R$ 0,00</div>
+      <div style="display:flex;align-items:center;gap:18px;margin-top:18px;font-size:32px;color:${cores.verde};font-weight:600">
+        <svg viewBox="0 0 64 64" width="56" height="56"><circle cx="32" cy="32" r="32" fill="${cores.verde}"/><path d="M18 33 L28 43 L47 22" fill="none" stroke="#000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>Pix aprovado</div>`;
+    valor = cartoes[2].querySelector('#valor');
+    check = cartoes[2].querySelector('path');
+    marca = el('div', 'position:absolute;left:0;width:100%;top:440px;text-align:center;font-size:150px;font-weight:700;letter-spacing:-5px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    /* 0–0.9 blobs acendem e orbitam · 0.3–1.4 cards entram de trás em cascata · 1.8–2.6 card do meio ganha brilho
+       · 3.0–3.8 valor sobe · 3.2–3.6 check desenha · 4.0–4.6 cards recuam · 4.2–4.9 wordmark */
+    const sai = p(t, 4.0, 4.6);
+    blobs.forEach(b => {
+      const a = t * 0.45 * (b.k % 2 ? 1 : -1) + b.fase;
+      const x = 960 + Math.cos(a) * (420 + 160 * Math.sin(b.fase)), y = 540 + Math.sin(t * 0.6 + b.fase * 1.7) * 320;
+      b.e.style.transform = `translate(${(x - b.s / 2).toFixed(1)}px,${(y - b.s / 2).toFixed(1)}px) scale(${(1 + 0.12 * Math.sin(t * 0.9 + b.fase)).toFixed(4)})`;
+      b.e.style.opacity = (0.55 * p(t, 0, 0.9) * (1 - 0.5 * p(t, 4.2, 4.9))).toFixed(3);
+    });
+    cartoes.forEach((c, i) => {
+      const k = p(t, 0.3 + i * 0.22, 1.2 + i * 0.22), e = outExpo(k), b = outBack(k);
+      const z = lerp(-900, 0, e) - 500 * sai;
+      const y = lerp(300, 0, b);
+      const rx = lerp(35, 6, e);
+      const ry = (1 - i) * 16 * e + 5 * Math.sin(t * 1.3 + i * 2) - (1 - e) * 40;
+      c.style.transform = `translate3d(${150 + i * 560}px,${(390 + y).toFixed(1)}px,${z.toFixed(1)}px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
+      c.style.opacity = (Math.min(1, k * 2) * (1 - sai)).toFixed(3);
+      if (i === 1) {
+        const gl = p(t, 1.8, 2.6) * (1 - 0.3 * p(t, 3.0, 4.0));
+        c.style.boxShadow = `0 40px 90px rgba(0,0,0,.45), 0 0 ${(70 * gl).toFixed(1)}px rgba(43,89,255,${(0.6 * gl).toFixed(3)})`;
+      }
+    });
+    valor.textContent = 'R$ ' + (outCubic(p(t, 3.0, 3.8)) * 120).toFixed(2).replace('.', ',');
+    check.style.strokeDashoffset = (1 - outCubic(p(t, 3.2, 3.6))).toFixed(4);
+    marca.style.opacity = p(t, 4.2, 4.5).toFixed(3);
+    marca.style.transform = `translateY(${((1 - mola(t - 4.2, 2, 6)) * 70).toFixed(1)}px) scale(${lerp(0.9, 1, mola(t - 4.2, 2, 6)).toFixed(4)})`;
+  }
+};
+</script></body></html>

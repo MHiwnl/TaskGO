@@ -1,0 +1,23 @@
+1
+00:00:00,200 --> 00:00:02,472
+Sete serviços sem pagamento.
+
+2
+00:00:02,772 --> 00:00:05,753
+São dois mil, quatrocentos e cinquenta reais.
+
+3
+00:00:06,053 --> 00:00:08,941
+Ele não somava o gasto de ir e voltar.
+
+4
+00:00:09,241 --> 00:00:13,955
+Com a TaskGO, o pedido chega com bairro, preço combinado e horário.
+
+5
+00:00:15,755 --> 00:00:19,748
+As notas de cinco estrelas sobem de treze para vinte e uma.
+
+6
+00:00:20,048 --> 00:00:24,188
+TaskGO. Serviço perto de casa, com preço combinado.

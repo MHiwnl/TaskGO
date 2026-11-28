@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>23 · text extrusion</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: text-extrusion (awesome-ai-motion nº 552). A marca é copiada em 12 camadas que se afastam em z
+   (2.5 px por camada, abaixo do limite de 3 px que separa as camadas) enquanto o grupo gira 18 graus e balança.
+   A camada da frente é a marca legível; as de trás escurecem. No fim o volume se fecha. */
+const { p, lerp, outExpo, outCubic, inOutCubic, el, cores } = M;
+const N = 12, PASSO = 2.5;
+let grupo, camadas = [], tag, brilho;
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 50% 50%, #0a1440 0%, #000 65%)';
+    brilho = el('div', 'position:absolute;left:50%;top:50%;width:1000px;height:1000px;margin:-500px;border-radius:50%;background:radial-gradient(circle,rgba(43,89,255,.35),transparent 60%);filter:blur(20px)', palco);
+    const wrap = el('div', 'position:absolute;inset:0;perspective:1400px', palco);
+    grupo = el('div', 'position:absolute;inset:0;transform-style:preserve-3d', wrap);
+    for (let i = 0; i < N; i++) {
+      const frente = i === 0;
+      const esc = 1 - (i / N) * 0.75;
+      const cor = frente ? '#fff' : `rgb(${Math.round(43 * esc)},${Math.round(89 * esc)},${Math.round(255 * esc)})`;
+      const go = frente ? cores.azul : cor;
+      camadas.push(el('div', `position:absolute;left:0;width:100%;top:330px;text-align:center;font-size:300px;font-weight:700;letter-spacing:-12px;white-space:nowrap;color:${cor}`, grupo,
+        `Task<span style="color:${go}">GO</span>`));
+    }
+    tag = el('div', `position:absolute;left:0;width:100%;top:800px;text-align:center;font-size:48px;font-weight:500;color:${cores.cinza};opacity:0`, palco, 'Marketplace de serviços locais');
+  },
+  quadro(t) {
+    const abre = outExpo(p(t, 0.3, 1.5));
+    const fecha = 1 - inOutCubic(p(t, 3.4, 4.0));
+    const gap = PASSO * abre * fecha;
+    /* gira 18 graus ao abrir, depois balança suave até 3.4 s e volta a zero */
+    const giro = 18 * outCubic(p(t, 0.3, 1.5)) + 10 * Math.sin((2 * Math.PI * (t - 1.5)) / 2.5) * p(t, 1.5, 2.0);
+    grupo.style.transform = `rotateY(${giro * fecha}deg)`;
+    camadas.forEach((c, i) => {
+      c.style.transform = `translateZ(${-i * gap}px)`;
+    });
+    brilho.style.transform = `scale(${1 + 0.15 * Math.sin(t * 1.6)})`;
+    tag.style.opacity = p(t, 4.1, 4.5);
+  }
+};
+</script></body></html>

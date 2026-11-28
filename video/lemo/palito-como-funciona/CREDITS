@@ -1,0 +1,11 @@
+Palito: como a TaskGO funciona. Ativos de terceiros usados no filme.
+
+Fonte: Jost (variável, latim), de The Jost Project Authors (https://github.com/indestructible-type/Jost).
+Licença: SIL Open Font License 1.1. Arquivos: fonts/Jost-latin-variable.woff2 e fonts/OFL-Jost.txt.
+Pacote de origem: @fontsource-variable/jost 5.3.0 (npm).
+
+Voz (narração): ElevenLabs, voz "Liam" (id TX3LPaxmHKxFdv7VOQHJ), plano gratuito. As falas são geradas pelo serviço
+e ficam em vo/ e vo-9x16/. Uso sujeito aos termos do ElevenLabs.
+
+Música e efeitos: sintetizados pelo próprio código (mix.py, síntese aditiva e procedural); sem amostras de terceiros.
+Biblioteca de ferramentas: lemo-opuscar (ferramentas de render, efeitos e mixagem), usada sem alterações.

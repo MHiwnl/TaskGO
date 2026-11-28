@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>13 · cursor gigante</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: oversized cursor. Um cursor enorme passeia por uma tela de pedido, clica nas categorias
+   (cada clique dá squash no chip e uma onda azul), arrasta o controle de preço e aperta "Pedir".
+   No fim a tela sai e a marca aparece. */
+const { p, lerp, clamp, outExpo, inOutCubic, mola, el, cores } = M;
+const CHIPS = [['Elétrica', 420, 330], ['Hidráulica', 680, 330], ['Limpeza', 940, 330], ['Pintura', 1200, 330], ['Montagem', 1460, 330]];
+/* trajeto do cursor: [tempo, x, y]; entre dois pontos o movimento tem aceleração e pausa */
+const TRAJETO = [[0, 1500, 900], [0.3, 1500, 900], [1.0, 420, 330], [1.1, 420, 330], [1.7, 940, 330], [2.05, 940, 330],
+  [2.4, 636, 600], [2.5, 636, 600], [3.5, 1100, 600], [3.6, 1100, 600], [4.2, 960, 790], [4.35, 960, 790], [4.9, 1100, 840]];
+/* cliques: [tempo, x, y, índice do chip ou -1 para o controle e o botão] */
+const CLIQUES = [[1.0, 420, 330], [2.0, 940, 330], [2.45, 636, 600], [4.35, 960, 790]];
+let ui, chips = [], fills = [], labels = [], rings = [], trilho, preench, knob, valor, btn, btnFill, btnTxt = [], btnOk, cursor, simb, marca, marcaL = [];
+
+function ponto(t) {
+  if (t <= TRAJETO[0][0]) return TRAJETO[0];
+  for (let i = 0; i < TRAJETO.length - 1; i++) {
+    const a = TRAJETO[i], b = TRAJETO[i + 1];
+    if (t <= b[0]) { const k = inOutCubic(p(t, a[0], b[0])); return [t, lerp(a[1], b[1], k), lerp(a[2], b[2], k)]; }
+  }
+  return TRAJETO[TRAJETO.length - 1];
+}
+/* o botão e os chips recebem o squash (pico no clique) */
+const bate = (t, c, dur = 0.2) => Math.sin(Math.PI * p(t, c, c + dur));
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#07080c';
+    ui = el('div', 'position:absolute;inset:0', palco);
+    el('div', 'position:absolute;left:120px;top:110px;font-size:64px;font-weight:700;letter-spacing:-1px', ui, 'Pedir serviço');
+    el('div', `position:absolute;left:120px;top:192px;font-size:26px;color:${cores.cinza}`, ui, 'Escolha a categoria');
+    CHIPS.forEach(([nome, cx, cy]) => {
+      const box = el('div', `position:absolute;left:${cx - 110}px;top:${cy - 42}px;width:220px;height:84px;border-radius:42px;background:#13151d;border:2px solid #23263a;overflow:hidden`, ui);
+      chips.push(box);
+      fills.push(el('div', `position:absolute;inset:0;background:${cores.azul};opacity:0`, box));
+      labels.push(el('div', 'position:absolute;inset:0;display:grid;place-items:center;font-size:26px;font-weight:600', box, nome));
+    });
+    CLIQUES.forEach(() => rings.push(el('div', `position:absolute;border:5px solid ${cores.azul};border-radius:50%;opacity:0`, ui)));
+    el('div', `position:absolute;left:420px;top:480px;font-size:26px;color:${cores.cinza}`, ui, 'Preço máximo');
+    trilho = el('div', 'position:absolute;left:420px;top:596px;width:1080px;height:8px;border-radius:4px;background:#1a1d2b', ui);
+    preench = el('div', `position:absolute;left:420px;top:596px;width:0;height:8px;border-radius:4px;background:${cores.azul}`, ui);
+    knob = el('div', 'position:absolute;top:578px;width:44px;height:44px;border-radius:50%;background:#fff;box-shadow:0 0 0 6px rgba(43,89,255,.35)', ui);
+    valor = el('div', 'position:absolute;top:636px;width:240px;text-align:center;font-size:32px;font-weight:700', ui);
+    btn = el('div', 'position:absolute;left:780px;top:744px;width:360px;height:92px;border-radius:46px;background:' + cores.azul + ';overflow:hidden;display:grid;place-items:center;font-size:32px;font-weight:700', ui);
+    btnFill = el('div', `position:absolute;inset:0;background:${cores.verde};opacity:0`, btn);
+    btnTxt.push(el('div', 'position:absolute;inset:0;display:grid;place-items:center', btn, 'Pedir'));
+    btnTxt.push(el('div', 'position:absolute;inset:0;display:grid;place-items:center;color:#000;opacity:0', btn, 'Pedido enviado'));
+    cursor = el('div', 'position:absolute;left:0;top:0;width:240px;height:312px;transform-origin:0 0', palco,
+      `<svg viewBox="0 0 100 130" width="240" height="312"><path d="M4 4 L4 110 L32 84 L52 126 L72 117 L52 75 L92 75 Z" fill="#fff" stroke="#000" stroke-width="5" stroke-linejoin="round"/></svg>`);
+    simb = el('img', 'position:absolute;left:860px;top:360px;width:200px;opacity:0', palco); simb.src = M.simbolo;
+    marca = el('div', 'position:absolute;left:0;width:100%;top:600px;text-align:center;font-size:130px;font-weight:700;letter-spacing:-4px;white-space:nowrap', palco);
+    'TaskGO'.split('').forEach((ch, i) => marcaL.push(el('span', `display:inline-block;color:${i > 3 ? cores.azul : '#fff'}`, marca, ch)));
+  },
+  quadro(t) {
+    const [, cx, cy] = ponto(t), v = Math.abs(ponto(t + 0.02)[1] - ponto(t - 0.02)[1]) / 0.04;
+    const fx = 1 - p(t, 4.7, 4.8); // a interface sai só depois do status "Pedido enviado"
+    /* chips: squash no clique e a seleção fica no último escolhido */
+    chips.forEach((c, i) => {
+      const sq = i === 0 ? bate(t, 1.0) : (i === 2 ? bate(t, 2.0) : 0);
+      c.style.transform = `scale(${(1 - 0.1 * sq).toFixed(4)})`;
+      if (i === 0) fills[i].style.opacity = p(t, 1.0, 1.1) * (1 - p(t, 2.0, 2.1));
+      if (i === 2) fills[i].style.opacity = p(t, 2.0, 2.1);
+      if (i !== 0 && i !== 2) fills[i].style.opacity = 0;
+      c.style.opacity = fx;
+    });
+    /* ondas azuis em cada clique */
+    CLIQUES.forEach(([c, x, y], i) => {
+      const k = p(t, c, c + 0.6), r = 30 + 170 * outExpo(k);
+      rings[i].style.left = (x - r).toFixed(1) + 'px';
+      rings[i].style.top = (y - r).toFixed(1) + 'px';
+      rings[i].style.width = rings[i].style.height = (2 * r).toFixed(1) + 'px';
+      rings[i].style.opacity = (1 - k) * 0.9 * fx;
+    });
+    /* controle de preço: a bolinha segue o cursor enquanto ele arrasta (2.4–3.6 s) */
+    const kx = t < 2.4 ? 636 : t > 3.6 ? 1100 : cx;
+    const valorR = 40 + (kx - 420) / 1080 * 240;
+    preench.style.width = (kx - 420).toFixed(1) + 'px';
+    knob.style.left = (kx - 22).toFixed(1) + 'px';
+    valor.style.left = (kx - 120).toFixed(1) + 'px';
+    valor.textContent = 'R$ ' + Math.round(valorR);
+    valor.style.opacity = fx;
+    /* botão: squash no clique, texto e cor trocam como status */
+    const sb = bate(t, 4.35, 0.2);
+    btn.style.transform = `scale(${(1 - 0.08 * sb).toFixed(4)})`;
+    btnFill.style.opacity = p(t, 4.4, 4.45);
+    btnTxt[0].style.opacity = 1 - p(t, 4.4, 4.45);
+    btnTxt[1].style.opacity = p(t, 4.4, 4.45);
+    btn.style.opacity = fx;
+    ui.style.opacity = fx;
+    /* cursor gigante: squash no clique e desfoque de movimento pela velocidade */
+    const pulso = Math.max(bate(t, 1.0, 0.15), bate(t, 2.0, 0.15), bate(t, 2.45, 0.15), bate(t, 4.35, 0.15));
+    cursor.style.transform = `translate(${cx.toFixed(1)}px,${cy.toFixed(1)}px) scale(${(1 - 0.12 * pulso).toFixed(4)})`;
+    cursor.style.filter = `blur(${Math.min(6, v * 0.004).toFixed(2)}px)`;
+    cursor.style.opacity = fx;
+    /* 4.6–5 marca */
+    simb.style.opacity = clamp(p(t, 4.6, 4.7));
+    simb.style.transform = `scale(${Math.max(0, mola(t - 4.6, 2, 6)).toFixed(3)})`;
+    marcaL.forEach((s, i) => {
+      const k = mola(t - (4.72 + i * 0.03), 2.2, 6);
+      s.style.transform = `translateY(${((1 - k) * 90).toFixed(1)}px)`;
+      s.style.opacity = clamp(k);
+      s.style.filter = `blur(${((1 - clamp(k)) * 14).toFixed(1)}px)`;
+    });
+  }
+};
+</script></body></html>

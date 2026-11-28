@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>12 · parallax de rolagem</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: rolagem de landing page com ScrollTrigger (pin e parallax), simulada em função de t.
+   A "rolagem" é uma curva de tempo; quatro camadas andam em velocidades diferentes, o título fica
+   fixo (pin) enquanto os cards passam, o número da seção troca e uma barra lateral mostra o progresso. */
+const { p, lerp, clamp, outCubic, inOutCubic, outBack, mola, el, cores } = M;
+const PASSO = 900, MAX = 3600;
+const SECOES = [
+  ['01', 'Peça', 'Descreva o serviço e o endereço.'],
+  ['02', 'Escolha', 'Veja notas e preços e aceite um profissional.'],
+  ['03', 'Pague', 'Pix direto no app, com comprovante.'],
+  ['04', 'Avalie', 'Conte como foi e ajude o próximo cliente.']
+];
+const ICONES = [
+  `<svg viewBox="0 0 100 100" width="150" height="150"><rect x="22" y="14" width="56" height="72" rx="8" fill="none" stroke="${cores.azul}" stroke-width="7"/><path d="M34 40 H66 M34 56 H66 M34 72 H54" stroke="${cores.azul}" stroke-width="7" stroke-linecap="round"/></svg>`,
+  `<svg viewBox="0 0 100 100" width="150" height="150"><circle cx="50" cy="50" r="40" fill="${cores.verde}"/><path d="M30 52 L44 66 L72 36" fill="none" stroke="#000" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  `<svg viewBox="0 0 100 100" width="150" height="150"><rect x="24" y="24" width="52" height="52" rx="10" transform="rotate(45 50 50)" fill="${cores.azul}"/></svg>`,
+  `<svg viewBox="0 0 100 100" width="150" height="150"><polygon points="50,6 61,38 96,38 68,58 79,92 50,72 21,92 32,58 4,38 39,38" fill="${cores.verde}"/></svg>`
+];
+let blobs = [], grades = [], cards = [], chips = [], titulos = [], descs = [], nums = [], fill, conteudo = [], marca, simb, marcaL = [];
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#07080c';
+    const r = M.rnd(21);
+    for (let i = 0; i < 3; i++) blobs.push(el('div', `position:absolute;left:${(1100 + r() * 700).toFixed(0)}px;top:0;width:${620 + r() * 260}px;height:${620 + r() * 260}px;border-radius:50%;background:${i % 2 ? cores.azulEscuro : cores.azul};opacity:.22;filter:blur(110px)`, palco));
+    for (let i = 0; i < 12; i++) grades.push(el('div', 'position:absolute;left:0;width:1920px;height:1px;background:rgba(255,255,255,.07)', palco));
+    SECOES.forEach(([n, t, d], i) => {
+      cards.push(el('div', `position:absolute;left:1000px;top:0;width:520px;height:380px;border-radius:34px;background:#0f1118;border:1px solid #23263a;display:grid;place-items:center;align-content:center;gap:18px;text-align:center;overflow:hidden`, palco,
+        `${ICONES[i]}<div style="font-size:30px;font-weight:700">${t}</div><div style="font-size:22px;color:${cores.cinza};width:380px">${d}</div>`));
+    });
+    ['Eletricista', 'Encanador', 'Diarista', 'Pintor'].forEach(c => chips.push(el('div', `position:absolute;left:1560px;top:0;height:60px;padding:0 28px;line-height:60px;border-radius:30px;background:rgba(43,89,255,.18);border:1px solid ${cores.azul};font-size:24px;white-space:nowrap`, palco, c)));
+    SECOES.forEach(([n, t, d], i) => {
+      titulos.push(el('div', 'position:absolute;left:120px;top:380px;font-size:200px;font-weight:800;letter-spacing:-8px;white-space:nowrap', palco, t));
+      descs.push(el('div', `position:absolute;left:124px;top:640px;width:760px;font-size:40px;color:${cores.cinza};line-height:1.3`, palco, d));
+      nums.push(el('div', `position:absolute;left:124px;top:250px;font-size:40px;font-weight:700;letter-spacing:6px;color:${cores.azul}`, palco, n + ' / 04'));
+    });
+    el('div', 'position:absolute;left:1866px;top:120px;width:6px;height:840px;border-radius:3px;background:#1a1d2b', palco);
+    fill = el('div', `position:absolute;left:1866px;top:120px;width:6px;height:0px;border-radius:3px;background:${cores.azul}`, palco);
+    simb = el('img', 'position:absolute;left:860px;top:330px;width:200px;opacity:0', palco); simb.src = M.simbolo;
+    marca = el('div', 'position:absolute;left:0;width:100%;top:600px;text-align:center;font-size:130px;font-weight:700;letter-spacing:-4px;white-space:nowrap;opacity:0', palco);
+    'TaskGO'.split('').forEach((ch, i) => marcaL.push(el('span', `display:inline-block;color:${i > 3 ? cores.azul : '#fff'}`, marca, ch)));
+  },
+  quadro(t) {
+    /* rolagem linear entre 0.2 e 4.5 s (como scrub do ScrollTrigger) */
+    const S = MAX * p(t, 0.2, 4.5);
+    const dS = t > 0.2 && t < 4.5 ? MAX / 4.3 : 0; // velocidade constante da rolagem
+    const blur = Math.min(4, dS * 0.002).toFixed(2) + 'px';
+    const fx = 1 - p(t, 4.25, 4.6);      // conteúdo some no fim, dando lugar à marca
+    /* camadas: fundo lento (0.15), grade (0.4), cards (1.0), chips rápidos (1.4) */
+    blobs.forEach((b, i) => { b.style.top = (-200 + i * 380 - S * 0.15).toFixed(1) + 'px'; b.style.transform = `scale(${0.9 + 0.1 * Math.sin(t + i)})`; });
+    grades.forEach((g, i) => { const y = ((i * 180 - S * 0.4) % 2160 + 2160) % 2160 - 200; g.style.top = y.toFixed(1) + 'px'; g.style.opacity = fx; });
+    SECOES.forEach((_, i) => {
+      const y = 300 + i * PASSO - S;
+      const c = clamp(1 - Math.abs(y + 190 - 540) / 700);
+      const vis = clamp((1080 - y) / 200) * clamp((y + 380) / 200);
+      cards[i].style.transform = `translate(0px,${y.toFixed(1)}px) rotate(${lerp(-6, 0, c).toFixed(2)}deg) scale(${lerp(0.9, 1, c).toFixed(3)})`;
+      cards[i].style.opacity = vis * fx;
+      cards[i].style.filter = `blur(${blur})`;
+      cards[i].style.boxShadow = `0 0 ${(70 * c).toFixed(1)}px rgba(43,89,255,${(0.5 * c).toFixed(2)})`;
+    });
+    chips.forEach((ch, i) => {
+      const y = 200 + i * 700 - S * 1.4;
+      ch.style.transform = `translate(0px,${y.toFixed(1)}px)`;
+      ch.style.opacity = clamp((1080 - y) / 150) * clamp((y + 60) / 150) * 0.95 * fx;
+    });
+    /* título, número e descrição ficam fixos (pin) e trocam por posição da seção */
+    const pos = Math.min(3, S / PASSO); // o último título fica pinado até a marca
+    SECOES.forEach((_, i) => {
+      const off = i - pos, a = clamp(1 - Math.abs(off) * 1.4) * fx;
+      titulos[i].style.opacity = a;
+      titulos[i].style.transform = `translateY(${(off * 90).toFixed(1)}px)`;
+      titulos[i].style.filter = `blur(${(Math.abs(off) * 10).toFixed(1)}px)`;
+      descs[i].style.opacity = a;
+      descs[i].style.transform = `translateY(${(off * 90).toFixed(1)}px)`;
+      nums[i].style.opacity = a;
+      nums[i].style.transform = `translateY(${(off * 60).toFixed(1)}px)`;
+    });
+    fill.style.height = (840 * S / MAX).toFixed(1) + 'px';
+    /* 4.5–5 marca: símbolo e letras em cascata */
+    const bk = mola(t - 4.5, 2, 6);
+    simb.style.opacity = clamp(p(t, 4.5, 4.6));
+    simb.style.transform = `scale(${Math.max(0, bk).toFixed(3)}) rotate(${((1 - outCubic(p(t, 4.5, 5))) * -90).toFixed(1)}deg)`;
+    marca.style.opacity = 1;
+    marcaL.forEach((s, i) => {
+      const k = mola(t - (4.6 + i * 0.04), 2.2, 6);
+      s.style.transform = `translateY(${((1 - k) * 90).toFixed(1)}px)`;
+      s.style.opacity = clamp(k);
+      s.style.filter = `blur(${((1 - clamp(k)) * 14).toFixed(1)}px)`;
+    });
+  }
+};
+</script></body></html>

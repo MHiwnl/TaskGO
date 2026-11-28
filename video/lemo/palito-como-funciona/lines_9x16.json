@@ -1,0 +1,62 @@
+[
+ {
+  "id": "V01",
+  "text": "Pia vazando. Ninguém atende.",
+  "t": 0.2,
+  "dur": 1.99
+ },
+ {
+  "id": "V02",
+  "text": "Liga pro primo. Não atende.",
+  "t": 3.2,
+  "dur": 1.999
+ },
+ {
+  "id": "V03",
+  "text": "Grupo da família. Silêncio.",
+  "t": 6.2,
+  "dur": 2.255
+ },
+ {
+  "id": "V04",
+  "text": "Aí descobre a TaskGO.",
+  "t": 8.7,
+  "dur": 1.94
+ },
+ {
+  "id": "V05",
+  "text": "Escolhe um profissional perto, com nota e preço.",
+  "t": 11.3,
+  "dur": 2.708
+ },
+ {
+  "id": "V06",
+  "text": "Acompanha no mapa.",
+  "t": 15.2,
+  "dur": 1.039
+ },
+ {
+  "id": "V07",
+  "text": "Confere o código na porta.",
+  "t": 18.2,
+  "dur": 1.373
+ },
+ {
+  "id": "V08",
+  "text": "Paga o profissional quando terminar.",
+  "t": 21,
+  "dur": 1.925
+ },
+ {
+  "id": "V09",
+  "text": "E avalia com estrelas.",
+  "t": 23.5,
+  "dur": 1.414
+ },
+ {
+  "id": "V10",
+  "text": "Da próxima vez, você não precisa resolver sozinho.",
+  "t": 25.8,
+  "dur": 2.563
+ }
+]

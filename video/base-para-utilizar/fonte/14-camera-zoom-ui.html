@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>14 · câmera sobre a interface</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: camera move (klik-cam). Uma câmera virtual percorre um painel grande do profissional:
+   push-in com leve rotação até os ganhos, rack focus (o fundo desfoca e o foco vai para a agenda),
+   whip-pan com desfoque de movimento até a agenda e pull-out final até a marca. */
+const { p, lerp, clamp, outCubic, inOutCubic, outBack, mola, el, cores } = M;
+const MUNDO_W = 2600, MUNDO_H = 1500;
+/* keyframes da câmera: [tempo, centro x, centro y, zoom, rotação em graus] */
+const CAM = [[0, 1300, 750, 0.62, 0], [0.2, 1300, 750, 0.62, 0], [1.5, 680, 400, 1.3, -2], [2.2, 680, 400, 1.3, -2],
+  [2.9, 680, 400, 1.3, -2], [3.4, 1220, 1020, 1.1, 2], [4.1, 1220, 1020, 1.1, 2], [5, 1300, 760, 0.8, 0]];
+let mundo, cartoes = [], barras = [], ganhos, ui, cena, marca, simb, marcaL = [];
+const fmt = v => Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+function camera(t) {
+  if (t <= CAM[0][0]) return CAM[0].slice(1);
+  for (let i = 0; i < CAM.length - 1; i++) {
+    const a = CAM[i], b = CAM[i + 1];
+    if (t <= b[0]) {
+      const k = inOutCubic(p(t, a[0], b[0]));
+      return [lerp(a[1], b[1], k), lerp(a[2], b[2], k), lerp(a[3], b[3], k), lerp(a[4], b[4], k)];
+    }
+  }
+  return CAM[CAM.length - 1].slice(1);
+}
+const caixa = (pai, x, y, w, h, css, html) => el('div', `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${css || ''}`, pai, html);
+const CARD = `border-radius:34px;background:#0f1118;border:1px solid #23263a;padding:40px;box-sizing:border-box;overflow:hidden`;
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#07080c';
+    mundo = el('div', `position:absolute;left:0;top:0;width:${MUNDO_W}px;height:${MUNDO_H}px;transform-origin:0 0`, palco);
+    caixa(mundo, 0, 0, 300, MUNDO_H, 'background:#0b0d13;border-right:1px solid #1a1d2b;box-sizing:border-box;padding:120px 36px',
+      ['Início', 'Agenda', 'Pedidos', 'Ganhos', 'Perfil'].map((n, i) => `<div style="font-size:28px;margin-bottom:40px;color:${i ? cores.cinza : '#fff'}">${n}</div>`).join(''));
+    caixa(mundo, 360, 80, 1200, 100, '', `<div style="font-size:64px;font-weight:700">Bom dia, profissional</div><div style="font-size:26px;color:${cores.cinza};margin-top:8px">Você tem 3 pedidos novos</div>`);
+    /* 0 ganhos · 1 avaliação · 2 pedidos · 3 agenda: o rack focus passa de 0 a 3 */
+    cartoes.push(caixa(mundo, 360, 200, 640, 360, CARD, `<div style="font-size:30px;color:${cores.cinza}">Ganhos do mês</div><div id="g" style="font-size:96px;font-weight:700;margin-top:10px">R$ 0</div>`));
+    cartoes.push(caixa(mundo, 1080, 200, 520, 360, CARD, `<div style="font-size:30px;color:${cores.cinza}">Avaliação</div><div style="font-size:96px;font-weight:700;margin-top:10px;color:${cores.azul}">★ 5,0</div><div style="font-size:26px;color:${cores.cinza}">128 avaliações</div>`));
+    cartoes.push(caixa(mundo, 1680, 200, 560, 360, CARD, `<div style="font-size:30px;color:${cores.cinza};margin-bottom:24px">Novos pedidos</div>` +
+      ['Troca de chuveiro · 2 km', 'Montagem de estante · 5 km', 'Reparo de tomada · 1 km'].map(s => `<div style="display:flex;justify-content:space-between;align-items:center;height:72px;font-size:26px"><span>${s}</span><span style="background:${cores.verde};color:#000;border-radius:22px;padding:6px 18px;font-weight:700">Aceitar</span></div>`).join('')));
+    cartoes.push(caixa(mundo, 360, 660, 1880, 720, CARD, `<div style="font-size:30px;color:${cores.cinza};margin-bottom:20px">Agenda de hoje</div>` +
+      [['09:00', 'Troca de chuveiro', 'Ana'], ['11:30', 'Tomada na cozinha', 'Carlos'], ['14:00', 'Quadro de luz', 'João'], ['16:30', 'Ventilador de teto', 'Maria']]
+        .map(([h, s, c]) => `<div style="display:flex;gap:40px;align-items:center;height:120px;border-top:1px solid #1a1d2b"><span style="font-size:40px;font-weight:700;color:${cores.azul};width:180px">${h}</span><span style="font-size:32px">${s}</span><span style="font-size:26px;color:${cores.cinza}">${c}</span></div>`).join('')));
+    /* barras do gráfico de ganhos */
+    const gr = caixa(cartoes[0], 40, 230, 560, 110, 'display:flex;align-items:flex-end;gap:22px', '');
+    [40, 70, 55, 90, 75, 100].forEach(pct => barras.push(el('div', `width:60px;height:0;border-radius:14px 14px 0 0;background:${cores.azul};opacity:.9`, gr, '')));
+    ganhos = cartoes[0].querySelector('#g');
+    ui = mundo;
+    cena = palco;
+    marca = el('div', 'position:absolute;left:0;width:100%;top:600px;text-align:center;font-size:130px;font-weight:700;letter-spacing:-4px;white-space:nowrap;opacity:0', palco);
+    'TaskGO'.split('').forEach((ch, i) => marcaL.push(el('span', `display:inline-block;color:${i > 3 ? cores.azul : '#fff'}`, marca, ch)));
+    simb = el('img', 'position:absolute;left:860px;top:360px;width:200px;opacity:0', palco); simb.src = M.simbolo;
+  },
+  quadro(t) {
+    const [cx, cy, z, r] = camera(t);
+    const v = Math.abs(camera(t + 0.02)[0] - camera(t - 0.02)[0]) / 0.04;
+    mundo.style.transform = `translate(960px,540px) scale(${z.toFixed(4)}) rotate(${r.toFixed(3)}deg) translate(${(-cx).toFixed(1)}px,${(-cy).toFixed(1)}px)`;
+    mundo.style.filter = `blur(${Math.min(10, v * 0.008).toFixed(2)}px)`; // desfoque de movimento do whip-pan
+    mundo.style.opacity = 1 - p(t, 4.3, 4.6);
+    /* rack focus: o foco sai dos ganhos (0) e chega à agenda (3) entre 2.2 e 2.8 s */
+    const fi = lerp(0, 3, inOutCubic(p(t, 2.2, 2.8)));
+    cartoes.forEach((c, i) => {
+      c.style.filter = `blur(${(Math.abs(fi - i) * 6).toFixed(2)}px)`;
+    });
+    /* ganhos: valor sobe e barras crescem em cascata durante o push-in e a pausa */
+    ganhos.textContent = 'R$ ' + fmt(3240 * outCubic(p(t, 0.6, 1.8)));
+    [40, 70, 55, 90, 75, 100].forEach((pct, i) => {
+      barras[i].style.height = (110 * pct / 100 * outBack(p(t, 0.5 + i * 0.08, 1.2 + i * 0.08), 1.3)).toFixed(1) + 'px';
+    });
+    /* 4.5–5 marca */
+    simb.style.opacity = clamp(p(t, 4.5, 4.6));
+    simb.style.transform = `scale(${Math.max(0, mola(t - 4.5, 2, 6)).toFixed(3)})`;
+    marcaL.forEach((s, i) => {
+      const k = mola(t - (4.6 + i * 0.04), 2.2, 6);
+      s.style.transform = `translateY(${((1 - k) * 90).toFixed(1)}px)`;
+      s.style.opacity = clamp(k);
+      s.style.filter = `blur(${((1 - clamp(k)) * 14).toFixed(1)}px)`;
+    });
+    marca.style.opacity = 1;
+  }
+};
+</script></body></html>

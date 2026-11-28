@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>24 · kinetic type sweep</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: kinetic-type-sweep (awesome-ai-motion nº 096). Três linhas de serviços cruzam a tela em sentidos
+   e velocidades diferentes. A linha do meio para em "Pintura", que vai para o centro e fica azul; as outras
+   baixam para 13% de opacidade. Depois a marca entra. */
+const { p, lerp, el, cores } = M;
+const css = 'position:absolute;left:0;white-space:nowrap;font-size:200px;line-height:200px;font-weight:700;letter-spacing:-8px;color:#fff';
+const palavras = (lista) => lista.map(w => `<span style="margin-right:110px">${w}</span>`).join('');
+let r1, r2, r3, alvo, medidas = null, marca, tag, grade;
+const power2out = x => 1 - Math.pow(1 - x, 2);
+const power4out = x => 1 - Math.pow(1 - x, 4);
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    grade = el('div', 'position:absolute;inset:-120px;opacity:.1;background-image:linear-gradient(90deg,#2b59ff 2px,transparent 2px),linear-gradient(#2b59ff 2px,transparent 2px);background-size:120px 120px', palco);
+    r1 = el('div', css + ';top:140px', palco, palavras(['Jardinagem', 'Encanamento', 'Elétrica', 'Limpeza', 'Montagem']));
+    r2 = el('div', css + ';top:340px', palco, palavras(['Montagem', 'Elétrica', 'Limpeza', 'Pintura', 'Encanamento']));
+    r3 = el('div', css + ';top:540px', palco, palavras(['Limpeza', 'Pintura', 'Jardinagem', 'Elétrica', 'Montagem']));
+    alvo = r2.children[3];
+    marca = el('div', 'position:absolute;left:0;width:100%;top:400px;text-align:center;font-size:200px;font-weight:700;letter-spacing:-8px;opacity:0;white-space:nowrap', palco, 'Task<span style="color:#2b59ff">GO</span>');
+    tag = el('div', `position:absolute;left:0;width:100%;top:700px;text-align:center;font-size:48px;font-weight:500;color:${cores.cinza};opacity:0`, palco, 'Marketplace de serviços locais');
+  },
+  quadro(t) {
+    grade.style.transform = `translate(${-((t * 60) % 120)}px,${-((t * 30) % 120)}px)`;
+    /* medidas só depois da fonte carregar (base.js espera document.fonts.ready antes do primeiro quadro) */
+    if (!medidas) medidas = { larg: r2.offsetWidth, cx: alvo.offsetLeft + alvo.offsetWidth / 2 };
+    const xEnd = 960 - medidas.cx, xStart = -medidas.larg - 40, s = (xEnd - xStart) * 0.037;
+    /* linha do meio: 0.15–2.1 s velocidade constante; 2.1–2.4 s power4.out até parar no centro */
+    let x2;
+    if (t < 0.15) x2 = xStart;
+    else if (t < 2.1) x2 = lerp(xStart, xEnd - s, p(t, 0.15, 2.1));
+    else x2 = lerp(xEnd - s, xEnd, power4out(p(t, 2.1, 2.4)));
+    r2.style.transform = `translateX(${x2}px)`;
+    /* linhas de cima e de baixo: sentidos opostos, velocidades 1.6 e 0.5 */
+    r1.style.transform = `translateX(${lerp(1300, -1500, power2out(p(t, 0.1, 2.7)))}px)`;
+    r3.style.transform = `translateX(${lerp(1300, -60, power2out(p(t, 0.1, 2.7)))}px)`;
+    const fade = lerp(1, 0.13, p(t, 2.15, 2.65)) * (1 - p(t, 3.4, 3.9));
+    r1.style.opacity = fade;
+    r3.style.opacity = fade;
+    r2.style.opacity = 1 - p(t, 3.4, 3.9);
+    alvo.style.color = t >= 2.12 ? cores.azul : '#fff';
+    marca.style.opacity = p(t, 3.8, 4.1);
+    marca.style.transform = `scale(${lerp(1.2, 1, p(t, 3.8, 4.3))})`;
+    tag.style.opacity = p(t, 4.2, 4.6);
+  }
+};
+</script></body></html>

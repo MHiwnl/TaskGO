@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>03 · logo reveal</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: logo reveal. O símbolo se monta de 8 fatias que giram e convergem com mola;
+   um anel e um flash azul marcam o encaixe, faíscas saem do centro e o wordmark entra letra a letra. */
+const { p, lerp, outExpo, outBack, mola, inOutCubic, el, cores, rnd } = M;
+const N = 8, TAM = 440, CX = 960, CY = 400, RAIO = 420;
+let fatias = [], anel, flash, brilho, risco, faiscas = [], letras = [];
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(circle at 50% 40%, #0b1a4a 0%, #000 60%)';
+    brilho = el('div', `position:absolute;left:${CX - 600}px;top:${CY - 600}px;width:1200px;height:1200px;border-radius:50%;background:radial-gradient(circle,rgba(43,89,255,.6),transparent 55%);opacity:0`, palco);
+    const a = rnd(7), c = TAM / 2;
+    for (let i = 0; i < N; i++) {
+      /* fatia = cunha do símbolo (recorte por clip-path); cada uma gira e voa de uma direção própria */
+      const a1 = i * 2 * Math.PI / N - Math.PI / 2, a2 = a1 + 2 * Math.PI / N + 0.03, mid = (a1 + a2) / 2;
+      const pts = [[c, c], [c + RAIO * Math.cos(a1), c + RAIO * Math.sin(a1)], [c + RAIO * Math.cos(a2), c + RAIO * Math.sin(a2)]]
+        .map(([x, y]) => `${x.toFixed(1)}px ${y.toFixed(1)}px`);
+      const w = el('div', `position:absolute;left:${CX - c}px;top:${CY - c}px;width:${TAM}px;height:${TAM}px;clip-path:polygon(${pts.join(',')})`, palco);
+      el('img', `position:absolute;left:0;top:0;width:${TAM}px;height:${TAM}px`, w).src = M.simbolo;
+      fatias.push({ w, mid, giro: (a() > 0.5 ? 1 : -1) * (150 + a() * 120), dist: 700 + a() * 350 });
+    }
+    anel = el('div', 'position:absolute;inset:0', palco, `<svg viewBox="0 0 1920 1080" width="1920" height="1080"><circle cx="${CX}" cy="${CY}" r="30" fill="none" stroke="#8aa3ff" stroke-width="10"/></svg>`);
+    flash = el('div', `position:absolute;inset:0;opacity:0;background:radial-gradient(circle at ${CX}px ${CY}px,#fff 0%,#8aa3ff 18%,rgba(43,89,255,0) 60%)`, palco);
+    for (let i = 0; i < 28; i++) {
+      const tam = 6 + a() * 10;
+      const e = el('div', `position:absolute;left:0;top:0;width:${tam}px;height:${tam}px;border-radius:50%;background:${a() > 0.5 ? cores.azul : '#fff'};box-shadow:0 0 24px ${cores.azul}`, palco);
+      faiscas.push({ e, tam, ang: a() * 2 * Math.PI, dist: 380 + a() * 420 });
+    }
+    const marca = el('div', 'position:absolute;left:0;width:100%;top:690px;text-align:center;font-size:170px;font-weight:700;letter-spacing:-6px;line-height:1.1', palco);
+    [...'TaskGO'].forEach((ch, i) => letras.push(el('span', `display:inline-block;white-space:pre;${i > 3 ? 'color:' + cores.azul : ''}`, marca, ch)));
+    risco = el('div', 'position:absolute;left:0;top:760px;width:600px;height:4px;border-radius:4px;background:linear-gradient(90deg,transparent,#8aa3ff,#fff,transparent)', palco);
+  },
+  quadro(t) {
+    /* 0.25–1.5 peças convergem com mola · 1.9 flash e anel · 1.9–3.0 faíscas · 2.5–3.4 letras · 3.0–3.9 brilho passa */
+    fatias.forEach((f, i) => {
+      const k = mola(t - 0.25 - i * 0.04, 1.6, 5), d = f.dist * (1 - k);
+      const sc = 1 + 0.015 * Math.sin(t * 2.4) * p(t, 2.0, 2.6);
+      f.w.style.transform = `translate(${(Math.cos(f.mid) * d).toFixed(1)}px,${(Math.sin(f.mid) * d).toFixed(1)}px) rotate(${(f.giro * (1 - k)).toFixed(2)}deg) scale(${sc.toFixed(4)})`;
+      f.w.style.opacity = Math.min(1, p(t, 0.25 + i * 0.04, 0.5 + i * 0.04) * 2).toFixed(3);
+      f.w.style.filter = `blur(${(Math.max(0, 1 - k) * 14).toFixed(2)}px)`;
+    });
+    const rq = outExpo(p(t, 1.9, 2.8)), circ = anel.querySelector('circle');
+    circ.setAttribute('r', lerp(30, 780, rq).toFixed(1));
+    circ.setAttribute('stroke-width', (2 + 18 * (1 - rq)).toFixed(2));
+    circ.setAttribute('opacity', (t > 1.9 ? 1 - p(t, 2.2, 3.0) : 0).toFixed(3));
+    flash.style.opacity = (p(t, 1.85, 1.95) * (1 - p(t, 1.95, 2.7))).toFixed(3);
+    const g = outExpo(p(t, 1.4, 2.4));
+    brilho.style.transform = `scale(${(0.5 + 0.5 * g).toFixed(4)})`;
+    brilho.style.opacity = (0.2 + 0.4 * g + 0.08 * Math.sin(t * 3) * g).toFixed(3);
+    faiscas.forEach((s, i) => {
+      const q = p(t, 1.95 + (i % 4) * 0.02, 3.0), d = s.dist * outExpo(q);
+      s.e.style.transform = `translate(${(CX + Math.cos(s.ang) * d - s.tam / 2).toFixed(1)}px,${(CY + Math.sin(s.ang) * d - s.tam / 2).toFixed(1)}px)`;
+      s.e.style.opacity = q > 0 ? (1 - q).toFixed(3) : 0;
+    });
+    letras.forEach((s, i) => {
+      const kk = p(t, 2.5 + i * 0.07, 3.2 + i * 0.07);
+      s.style.transform = `translateY(${((1 - outExpo(kk)) * -120).toFixed(1)}px) scale(${lerp(1.5, 1, outBack(kk)).toFixed(4)})`;
+      s.style.opacity = Math.min(1, kk * 3).toFixed(3);
+      s.style.filter = `blur(${((1 - kk) * 16).toFixed(2)}px)`;
+    });
+    const sw = inOutCubic(p(t, 3.0, 3.9));
+    risco.style.transform = `translateX(${lerp(-700, 2100, sw).toFixed(1)}px) skewX(-20deg)`;
+    risco.style.opacity = (Math.sin(Math.PI * p(t, 3.0, 3.9)) * 0.9).toFixed(3);
+  }
+};
+</script></body></html>

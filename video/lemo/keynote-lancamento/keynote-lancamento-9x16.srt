@@ -1,0 +1,19 @@
+1
+00:00:02,600 --> 00:00:06,820
+Quando algo quebra em casa, o problema começa antes do conserto.
+
+2
+00:00:09,200 --> 00:00:13,450
+Perto de você, com nota e preço, antes de chamar.
+
+3
+00:00:16,600 --> 00:00:20,220
+Na chegada, você mostra o código de quatro dígitos.
+
+4
+00:00:23,400 --> 00:00:25,920
+Pague só quando terminar, por Pix.
+
+5
+00:00:26,200 --> 00:00:28,000
+TaskGO.

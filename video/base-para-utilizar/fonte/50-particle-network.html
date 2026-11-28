@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>50 · rede de clientes e profissionais no bairro</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: particle-network (pontos que se aproximam ligam-se por linhas que enfraquecem com a distância).
+   Aqui: clientes (brancos) e profissionais (azuis) derivam pelo bairro; as ligações aparecem onde se encontram,
+   depois todos se alinham num anel e o símbolo da TaskGO se forma no centro. Posição é função pura de t. */
+const { p, lerp, outExpo, inOutCubic, mola, el, cores } = M;
+const N_CLI = 50, N_PRO = 30, RAIO_LIGA = 150, ANEL = 340, C = { x: 960, y: 500 };
+const rnd = M.rnd(50);
+const nos = [];
+let cv, ctx, simbolo, marca;
+function posicao(n, t) {
+  const livreX = n.bx + 70 * Math.sin(t * n.w1 + n.f1), livreY = n.by + 55 * Math.cos(t * n.w2 + n.f2);
+  const u = inOutCubic(p(t, 3.2, 3.9));
+  const ax = C.x + Math.cos(n.ang) * ANEL, ay = C.y + Math.sin(n.ang) * ANEL;
+  return [lerp(livreX, ax, u), lerp(livreY, ay, u)];
+}
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 50% 50%, #0a1440 0%, #000 70%)';
+    cv = el('canvas', 'position:absolute;left:0;top:0', palco);
+    cv.width = M.W; cv.height = M.H; ctx = cv.getContext('2d');
+    for (let i = 0; i < N_CLI + N_PRO; i++) {
+      const pro = i >= N_CLI;
+      nos.push({
+        pro, bx: 160 + rnd() * 1600, by: 160 + rnd() * 680,
+        w1: 0.5 + rnd() * 0.7, w2: 0.5 + rnd() * 0.7, f1: rnd() * 6.28, f2: rnd() * 6.28,
+        ang: (i / (N_CLI + N_PRO)) * Math.PI * 2, entra: rnd() * 0.8
+      });
+    }
+    simbolo = el('img', 'position:absolute;left:960px;top:500px;width:180px;margin-left:-90px;margin-top:-90px;opacity:0', palco); simbolo.src = M.simbolo;
+    marca = el('div', 'position:absolute;left:0;width:100%;top:840px;text-align:center;font-size:110px;font-weight:700;letter-spacing:-4px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    ctx.clearRect(0, 0, M.W, M.H);
+    /* 0–0,8 os nós surgem · 0,8–3,2 derivam e se ligam quando ficam perto · 3,2–3,9 alinham-se no anel · 3,6–4,2 símbolo */
+    const pts = nos.map(n => {
+      const e = outExpo(p(t, n.entra, n.entra + 0.6));
+      const [x, y] = posicao(n, t);
+      return { x, y, e, pro: n.pro };
+    });
+    ctx.lineWidth = 2;
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+      const a = pts[i], b = pts[j];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d >= RAIO_LIGA) continue;
+      ctx.strokeStyle = a.pro || b.pro ? cores.azul : '#ffffff';
+      ctx.globalAlpha = 0.35 * (1 - d / RAIO_LIGA) * Math.min(a.e, b.e);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    for (const q of pts) {
+      ctx.globalAlpha = q.e;
+      ctx.fillStyle = q.pro ? cores.azul : '#ffffff';
+      ctx.beginPath(); ctx.arc(q.x, q.y, q.pro ? 9 : 4, 0, Math.PI * 2); ctx.fill();
+      if (q.pro) { ctx.strokeStyle = cores.azulClaro; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(q.x, q.y, 16, 0, Math.PI * 2); ctx.stroke(); }
+    }
+    ctx.globalAlpha = 1;
+    simbolo.style.opacity = p(t, 3.6, 4.0);
+    simbolo.style.transform = `scale(${lerp(0.4, 1, mola(t - 3.6, 2.2, 5))})`;
+    marca.style.opacity = p(t, 4.2, 4.7);
+    marca.style.transform = `translateY(${(1 - outExpo(p(t, 4.2, 4.9))) * 40}px)`;
+  }
+};
+</script></body></html>

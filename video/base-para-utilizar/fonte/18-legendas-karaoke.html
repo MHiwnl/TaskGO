@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>18 · legendas karaokê</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: legenda com destaque palavra a palavra sobre um vídeo simulado (gradiente em movimento
+   e silhueta de app). A palavra ativa ganha pílula azul com escala por mola. */
+const { p, lerp, outExpo, outBack, mola, el, cores } = M;
+let fundo, fone, palavras = [], legenda, marca;
+const FRASE = 'Achei um eletricista em dois minutos pelo TaskGO'.split(' ');
+const INI = 0.3, PASSO = 0.49;
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#000';
+    fundo = el('div', 'position:absolute;inset:-120px;filter:blur(40px)', palco);
+    luz = el('div', 'position:absolute;left:0;top:0;width:100%;height:100%;opacity:.9', fundo);
+    /* silhueta de app: moldura do celular com cartões */
+    fone = el('div', 'position:absolute;left:50%;top:150px;width:520px;height:900px;margin-left:-260px;border-radius:72px;background:#0b0c12;border:10px solid #1c1f2e;box-shadow:0 40px 120px rgba(0,0,0,.6);overflow:hidden', palco,
+      `<div style="margin:70px 36px 0;height:70px;border-radius:20px;background:${cores.azul}"></div>
+       <div style="margin:28px 36px 0;height:150px;border-radius:24px;background:#151826"></div>
+       <div style="margin:24px 36px 0;height:150px;border-radius:24px;background:#151826"></div>
+       <div style="margin:24px 36px 0;height:150px;border-radius:24px;background:#151826"></div>`);
+    legenda = el('div', 'position:absolute;left:50%;bottom:110px;width:1500px;margin-left:-750px;display:flex;flex-wrap:wrap;justify-content:center;gap:18px 26px;font-size:96px;font-weight:700;letter-spacing:-3px;line-height:1.25;text-align:center', palco);
+    palavras = FRASE.map(w => el('span', 'display:inline-block;padding:0 22px;border-radius:999px;color:#fff;opacity:0', legenda, w));
+    marca = el('div', 'position:absolute;left:0;width:100%;bottom:300px;text-align:center;font-size:150px;font-weight:700;letter-spacing:-5px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    /* fundo: manchas de cor que se movem devagar */
+    const a = t * 0.9;
+    fundo.style.background = `radial-gradient(circle at ${50 + 25 * Math.sin(a)}% ${45 + 20 * Math.cos(a * 0.7)}%, rgba(43,89,255,.85), transparent 45%), radial-gradient(circle at ${30 + 20 * Math.cos(a * 0.6)}% ${70 + 15 * Math.sin(a)}%, rgba(53,208,143,.55), transparent 42%), linear-gradient(160deg, #0d1640, #050608)`;
+    fone.style.transform = `translateY(${Math.sin(t * 1.6) * 14}px) rotate(${Math.sin(t * 0.8) * 2}deg) scale(${lerp(0.94, 1, outExpo(p(t, 0, 1)))})`;
+    fone.style.opacity = p(t, 0, 0.5);
+    /* palavras: cada uma acende no seu intervalo; já ditas ficam brancas; as seguintes, apagadas */
+    palavras.forEach((s, k) => {
+      const ini = INI + k * PASSO, u = t - ini;
+      const ativa = u >= 0 && u < PASSO;
+      const dita = t >= ini + PASSO;
+      s.style.opacity = t < ini - 0.05 ? 0 : (ativa || dita ? 1 : 0.35);
+      s.style.color = ativa ? '#fff' : (dita ? '#fff' : '#9a9aa6');
+      s.style.background = ativa ? cores.azul : 'transparent';
+      s.style.boxShadow = ativa ? '0 0 60px rgba(43,89,255,.7)' : 'none';
+      s.style.transform = ativa ? `translateY(${(1 - outBack(Math.min(1, u / 0.18))) * 30}px) scale(${Math.max(0.9, mola(u, 2.4, 6) * 1.12)})` : 'scale(1)';
+    });
+    legenda.style.opacity = p(t, 0.2, 0.5) * (1 - p(t, 4.3, 4.6));
+    /* final: a marca entra no lugar da legenda */
+    marca.style.opacity = p(t, 4.5, 4.8);
+    marca.style.transform = `scale(${lerp(1.2, 1, outBack(p(t, 4.5, 4.95)))})`;
+  }
+};
+</script></body></html>

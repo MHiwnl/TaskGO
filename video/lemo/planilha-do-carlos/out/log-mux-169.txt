@@ -1,0 +1,5 @@
+/c/Users/Mendes/Documents/Inter-atualizado/video/lemo/planilha-do-carlos/planilha-do-carlos-16x9.mp4
+mux.sh: note: true peak -0.8 dB after encoding; encoding the audio again with the limiter at -2.10 dBFS (picture copied)
+    I:         -14.2 LUFS
+    LRA:         4.2 LU
+    Peak:       -1.6 dBFS

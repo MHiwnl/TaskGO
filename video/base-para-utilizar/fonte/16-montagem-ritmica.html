@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>16 · montagem rítmica</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: motion reel no tempo de 128 BPM. Cada batida (0,46875 s) troca o quadro com corte seco;
+   o tempo forte (a cada 4 batidas) dá flash e tremor. Termina na marca TaskGO. */
+const { p, lerp, outExpo, outCubic, outBack, mola, el, cores } = M;
+const BPM = 128, BEAT = 60 / BPM;
+let stage, flash;
+const cenas = [];
+
+function cena(bg) { const n = el('div', `position:absolute;inset:0;opacity:0;overflow:hidden;background:${bg}`, stage); return n; }
+function texto(pai, css, html) { return el('div', 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;white-space:nowrap;' + css, pai, html); }
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    stage = el('div', 'position:absolute;inset:0', palco);
+    flash = el('div', 'position:absolute;inset:0;background:#fff;opacity:0', palco);
+
+    /* 0 · palavra gigante em azul */
+    let a = cena(cores.azul), c = texto(a, 'font-size:400px;font-weight:700;letter-spacing:-14px;color:#fff', 'PEDIU.');
+    cenas.push({ n: a, f: u => { c.style.transform = `translateY(${(1 - outExpo(p(u, 0, 0.2))) * 400}px) scale(${lerp(1.2, 1, outExpo(p(u, 0, 0.25)))})`; } });
+
+    /* 1 · ícone: bola azul estourando e o símbolo girando */
+    a = cena('#000');
+    const bola = el('div', 'position:absolute;left:50%;top:50%;width:900px;height:900px;margin:-450px;border-radius:50%;background:radial-gradient(circle,#2b59ff,#1a3fd6 70%)', a);
+    const simb = el('img', 'position:absolute;left:50%;top:50%;width:520px;margin:-260px', a); simb.src = M.simbolo;
+    cenas.push({ n: a, f: u => { const s = outBack(p(u, 0, 0.25)); bola.style.transform = `scale(${s})`; simb.style.transform = `rotate(${outExpo(p(u, 0, 0.4)) * 360}deg) scale(${s})`; } });
+
+    /* 2 · cor cheia verde com a palavra esticada */
+    a = cena(cores.verde);
+    c = texto(a, 'font-size:330px;font-weight:700;letter-spacing:-10px;color:#000', 'ACEITO');
+    cenas.push({ n: a, f: u => { const k = outExpo(p(u, 0, 0.22)); c.style.transform = `scale(${lerp(1.8, 1, k)}, ${lerp(0.5, 1, k)})`; } });
+
+    /* 3 · check desenhando com zoom */
+    a = cena('#000');
+    const chk = el('div', 'position:absolute;left:50%;top:50%;width:700px;height:700px;margin:-350px', a,
+      `<svg viewBox="0 0 64 64" width="700" height="700"><circle cx="32" cy="32" r="30" fill="none" stroke="${cores.verde}" stroke-width="3"/><path d="M18 33 L28 43 L47 22" fill="none" stroke="${cores.verde}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>`);
+    const traco = chk.querySelector('path');
+    cenas.push({ n: a, f: u => { traco.style.strokeDashoffset = 1 - outCubic(p(u, 0, 0.2)); chk.style.transform = `scale(${lerp(1.5, 1, outExpo(p(u, 0, 0.2)))})`; } });
+
+    /* 4 · branco com PIX. entrando por trás com desfoque de movimento */
+    a = cena('#fff');
+    c = texto(a, 'font-size:460px;font-weight:700;letter-spacing:-16px;color:#000', 'PIX.');
+    cenas.push({ n: a, f: u => { const k = outExpo(p(u, 0, 0.2)); c.style.transform = `translateX(${(1 - k) * -900}px)`; c.style.filter = `blur(${(1 - p(u, 0, 0.15)) * 20}px)`; } });
+
+    /* 5 · cinco estrelas com mola em cascata */
+    a = cena('#000');
+    const estrelas = texto(a, '', Array(5).fill('<span style="font-size:230px;color:#2b59ff;display:inline-block">★</span>').join(''));
+    const sts = [...estrelas.children];
+    cenas.push({ n: a, f: u => sts.forEach((s, k) => { s.style.transform = `scale(${Math.max(0, mola(u - k * 0.05, 2.5, 5))}) rotate(${(1 - p(u, k * 0.05, k * 0.05 + 0.3)) * -120}deg)`; }) });
+
+    /* 6 · CHEGOU. vindo de perto, com foco */
+    a = cena(cores.azulEscuro);
+    c = texto(a, 'font-size:300px;font-weight:700;letter-spacing:-10px;color:#fff', 'CHEGOU.');
+    cenas.push({ n: a, f: u => { const k = outExpo(p(u, 0, 0.25)); c.style.transform = `scale(${lerp(2.2, 1, k)})`; c.style.filter = `blur(${(1 - k) * 16}px)`; } });
+
+    /* 7 · AVALIE. subindo com overshoot */
+    a = cena('#000');
+    c = texto(a, 'font-size:340px;font-weight:700;letter-spacing:-10px;color:#2b59ff', 'AVALIE.');
+    cenas.push({ n: a, f: u => { c.style.transform = `translateY(${(1 - outBack(p(u, 0, 0.3))) * 300}px)`; } });
+
+    /* 8 · símbolo girando sobre o branco */
+    a = cena('#fff');
+    const simb2 = el('img', 'position:absolute;left:50%;top:50%;width:560px;margin:-280px', a); simb2.src = M.simbolo;
+    cenas.push({ n: a, f: u => { simb2.style.transform = `rotate(${outExpo(p(u, 0, 0.4)) * -720}deg) scale(${outBack(p(u, 0, 0.3))})`; } });
+
+    /* 9 · PRONTO. com a palavra azul trocando de peso */
+    a = cena('#000');
+    c = texto(a, 'font-size:300px;font-weight:700;letter-spacing:-10px;color:#fff', 'PRONTO.');
+    cenas.push({ n: a, f: u => { const k = outCubic(p(u, 0, 0.2)); c.style.transform = `translateY(${(1 - k) * 200}px)`; c.style.opacity = k; } });
+
+    /* 10 · marca no último corte (4,6875 s até o fim) */
+    a = cena('#000');
+    c = texto(a, 'font-size:260px;font-weight:700;letter-spacing:-8px;color:#fff', 'Task<span style="color:#2b59ff">GO</span>');
+    cenas.push({ n: a, f: u => { const k = outBack(p(u, 0, 0.25)); c.style.transform = `scale(${lerp(1.4, 1, k)})`; c.style.opacity = p(u, 0, 0.12); } });
+  },
+  quadro(t) {
+    const i = Math.min(cenas.length - 1, Math.floor(t / BEAT + 1e-9));
+    const u = t - i * BEAT;
+    cenas.forEach((c, k) => { c.n.style.opacity = k === i ? 1 : 0; });
+    cenas[i].f(u);
+    const forte = i % 4 === 0 || i === cenas.length - 1;
+    const sh = (forte ? 16 : 5) * Math.exp(-u * 9) * Math.sin(u * 140 + i * 3);
+    stage.style.transform = `scale(1.03) translate(${sh}px,${sh * 0.5}px)`;
+    flash.style.opacity = 0.75 * Math.exp(-u * 12) * (forte ? 1 : 0.6);
+  }
+};
+</script></body></html>

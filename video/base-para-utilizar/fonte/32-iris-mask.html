@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>32 · iris mask</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: iris-mask (círculo que fecha e abre entre cenas). A íris fecha no botão "Enviar pedido",
+   abre o perfil do profissional, fecha no centro e abre a marca. Raio 1800 cobre a tela a partir dos dois centros. */
+const { p, inOutCubic, el, cores } = M;
+const RMAX = 1800, C1 = [383, 736], C2 = [960, 540];
+let telaA, telaB, telaC, cartaoB, marca, anel;
+const iris = (r, [x, y]) => `circle(${Math.max(0, r).toFixed(1)}px at ${x}px ${y}px)`;
+
+const pedido = `
+<div style="position:absolute;left:160px;top:200px;font-size:30px;letter-spacing:6px;font-weight:700;color:${cores.azul}">NOVO PEDIDO</div>
+<div style="position:absolute;left:160px;top:260px;width:1500px;font-size:120px;font-weight:700;letter-spacing:-4px;line-height:1.05">Preciso de um eletricista</div>
+<div style="position:absolute;left:160px;top:560px;width:1000px;height:320px;border-radius:28px;background:#0e0f14;border:1px solid #23263a;box-sizing:border-box;padding:44px 48px">
+  <div style="font-size:44px;font-weight:600">Troca de chuveiro</div>
+  <div style="font-size:30px;color:${cores.cinza};margin-top:12px">Hoje, 16h · Vila Mariana</div>
+  <div style="position:absolute;left:48px;bottom:44px;height:80px;line-height:80px;padding:0 40px;border-radius:999px;background:${cores.azul};font-size:32px;font-weight:700">Enviar pedido</div>
+</div>`;
+
+const aceito = `
+<div style="position:absolute;left:160px;top:200px;font-size:30px;letter-spacing:6px;font-weight:700;color:${cores.azul}">PEDIDO ACEITO</div>
+<div style="position:absolute;left:160px;top:260px;width:1500px;font-size:120px;font-weight:700;letter-spacing:-4px;color:#000">Carlos aceitou</div>
+<div class="cartao" style="position:absolute;left:160px;top:560px;width:1000px;height:320px;border-radius:28px;background:#fff;border:1px solid #d9dce6;box-shadow:0 30px 60px rgba(0,0,0,.12);box-sizing:border-box;padding:44px 48px;color:#000">
+  <div style="display:flex;gap:28px;align-items:center">
+    <div style="width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,${cores.azul},${cores.azulClaro});display:grid;place-items:center;font-size:52px;font-weight:700;color:#fff">C</div>
+    <div><div style="font-size:44px;font-weight:700">Carlos · Eletricista</div><div style="font-size:30px;color:#555;margin-top:8px">★ 4,9 · 128 serviços</div></div>
+  </div>
+  <div style="position:absolute;right:48px;bottom:44px;height:80px;line-height:80px;padding:0 40px;border-radius:999px;background:${cores.azul};font-size:32px;font-weight:700;color:#fff">Pagar por Pix</div>
+</div>`;
+
+const marcaHtml = `<div class="marca" style="position:absolute;left:0;top:380px;width:100%;text-align:center;font-size:260px;font-weight:700;letter-spacing:-10px;line-height:1">Task<span style="color:${cores.azul}">GO</span></div>`;
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#000';
+    telaC = el('div', 'position:absolute;inset:0;background:#000;overflow:hidden', palco, marcaHtml);
+    telaB = el('div', 'position:absolute;inset:0;background:#f4f5f8;overflow:hidden', palco, aceito);
+    const telaAEl = el('div', 'position:absolute;inset:0;background:#08080a;overflow:hidden', palco, pedido);
+    telaA = telaAEl;
+    cartaoB = telaB.querySelector('.cartao'); marca = telaC.querySelector('.marca');
+    /* anel que pulsa a partir do botão, enquanto a cena do pedido está aberta */
+    anel = el('div', `position:absolute;left:${C1[0] - 60}px;top:${C1[1] - 60}px;width:120px;height:120px;border-radius:50%;border:4px solid ${cores.azul};box-sizing:border-box`, telaA);
+  },
+  quadro(t) {
+    /* 0.7–1.3 íris do pedido fecha · 1.3–2.0 perfil abre · 3.0–3.6 perfil fecha no centro · 3.6–4.2 marca abre */
+    telaA.style.clipPath = iris(RMAX * (1 - inOutCubic(p(t, 0.7, 1.3))), C1);
+    const rb = RMAX * inOutCubic(p(t, 1.3, 2.0)) * (1 - inOutCubic(p(t, 3.0, 3.6)));
+    telaB.style.clipPath = iris(rb, t < 2.5 ? C1 : C2);
+    telaC.style.clipPath = iris(RMAX * inOutCubic(p(t, 3.6, 4.2)), C2);
+    const f = (t * 1.25) % 1;
+    anel.style.transform = `scale(${(1 + 2 * f).toFixed(4)})`;
+    anel.style.opacity = (1 - f).toFixed(4);
+    cartaoB.style.transform = `translateY(${Math.sin(t * 1.6 + 1) * 8}px)`;
+    marca.style.transform = `scale(${(1 + 0.03 * p(t, 3.6, 5)).toFixed(4)})`;
+  }
+};
+</script></body></html>

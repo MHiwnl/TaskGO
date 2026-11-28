@@ -1,0 +1,67 @@
+1
+00:00:00,500 --> 00:00:02,300
+Sua pia está vazando.
+
+2
+00:00:02,600 --> 00:00:04,715
+Você tenta resolver sozinho.
+
+3
+00:00:05,200 --> 00:00:07,468
+Liga pro primo que entende de cano.
+
+4
+00:00:07,600 --> 00:00:09,400
+Ele não atende.
+
+5
+00:00:10,400 --> 00:00:12,339
+Procura no grupo da família.
+
+6
+00:00:12,600 --> 00:00:14,200
+Ninguém responde.
+
+7
+00:00:14,200 --> 00:00:16,748
+Todo mundo acha que outro vai responder.
+
+8
+00:00:18,000 --> 00:00:20,003
+A pia continua vazando.
+
+9
+00:00:22,800 --> 00:00:25,000
+Aí descobre a TaskGO.
+
+10
+00:00:25,000 --> 00:00:26,800
+Descreve o problema.
+
+11
+00:00:27,900 --> 00:00:30,974
+Vê profissionais perto, com nota e preço.
+
+12
+00:00:31,000 --> 00:00:32,800
+Escolhe um.
+
+13
+00:00:35,400 --> 00:00:37,643
+Acompanha a chegada no mapa.
+
+14
+00:00:40,400 --> 00:00:43,139
+Confere o código de segurança na porta.
+
+15
+00:00:43,600 --> 00:00:45,900
+Paga o profissional quando terminar.
+
+16
+00:00:45,900 --> 00:00:47,914
+E avalia com estrelas.
+
+17
+00:00:48,600 --> 00:00:51,763
+Da próxima vez, você não precisa resolver sozinho.

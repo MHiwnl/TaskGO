@@ -1,0 +1,62 @@
+[
+ {
+  "t0": 5.9,
+  "t1": 10.6,
+  "text": "Numa noite de chuva, no Recife, a luz da casa da dona Socorro se apagou.",
+  "id": "l01"
+ },
+ {
+  "t0": 12.0,
+  "t1": 13.91,
+  "text": "Ela pediu um eletricista pelo celular.",
+  "id": "l02"
+ },
+ {
+  "t0": 16.6,
+  "t1": 20.075,
+  "text": "O Carlos saiu de casa de capa azul, com a caixa de ferramentas.",
+  "id": "l03"
+ },
+ {
+  "t0": 21.9,
+  "t1": 26.403,
+  "text": "Atravessou a ponte, passou pela Casa Amarela, e a chuva não deu trégua.",
+  "id": "l04"
+ },
+ {
+  "t0": 28.9,
+  "t1": 33.293,
+  "text": "Chegou, e mostrou o código de quatro dígitos para ela confirmar que era ele.",
+  "id": "l05"
+ },
+ {
+  "t0": 34.6,
+  "t1": 37.682,
+  "text": "Confere no seu app: 4719.",
+  "id": "f01"
+ },
+ {
+  "t0": 37.9,
+  "t1": 41.07,
+  "text": "Ele achou o defeito no chuveiro e religou o disjuntor.",
+  "id": "l06"
+ },
+ {
+  "t0": 43.2,
+  "t1": 46.495,
+  "text": "A luz voltou, e com ela o vapor do banho quente.",
+  "id": "l07"
+ },
+ {
+  "t0": 47.7,
+  "t1": 50.709,
+  "text": "Ela pagou pelo Pix e deu cinco estrelas.",
+  "id": "l08"
+ },
+ {
+  "t0": 52.6,
+  "t1": 54.72,
+  "text": "A mesma janela, acesa de novo.",
+  "id": "l09"
+ }
+]

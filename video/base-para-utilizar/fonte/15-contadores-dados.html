@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>15 · contadores e dados</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: data viz. Contadores em odômetro, barras com mola, linha de tendência desenhada,
+   anéis de progresso e, no fim, a marca. Os números são ilustrativos. */
+const { p, lerp, outExpo, outCubic, outBack, mola, el, cores } = M;
+let P, cabecalho, grupo, sheen, marca;
+const CONT = [
+  { txt: '12.480', rotulo: 'serviços concluídos', cx: 360 },
+  { txt: '4,9', rotulo: 'nota média ★', cx: 960 },
+  { txt: '3.200', rotulo: 'profissionais ativos', cx: 1560 }
+];
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun'];
+const VALS = [40, 58, 72, 65, 88, 100];
+const BASE = 930, ALT = 280, BW = 110, PASSO = 150, X0 = 160;
+const ANEL = [
+  { pct: 96, cor: cores.azul, rot: 'pedidos aceitos' },
+  { pct: 98, cor: cores.verde, rot: 'avaliações 4 ou 5 ★' },
+  { pct: 87, cor: cores.azulClaro, rot: 'voltam a pedir' }
+];
+const px = i => X0 + i * PASSO + BW / 2;
+const py = v => BASE - ALT * v / 100;
+const q = id => document.getElementById(id);
+
+/* odômetro: cada dígito é uma fita 0..9 repetida 4 vezes; sobe até o dígito final com voltas extras */
+function odometro(pai, txt) {
+  const caixa = el('div', 'display:flex;align-items:flex-start;height:200px', pai);
+  const total = [...txt].filter(c => /\d/.test(c)).length;
+  let i = 0;
+  return [...txt].flatMap(ch => {
+    if (!/\d/.test(ch)) { el('div', 'font-size:180px;line-height:200px;font-weight:700;letter-spacing:-6px', caixa, ch); return []; }
+    const r = total - 1 - i++;
+    const col = el('div', 'position:relative;width:118px;height:200px;overflow:hidden', caixa);
+    const fita = el('div', 'position:absolute;left:0;top:0;width:100%', col);
+    for (let k = 0; k < 40; k++) el('div', 'height:200px;line-height:200px;text-align:center;font-size:180px;font-weight:700;letter-spacing:-6px', fita, String(k % 10));
+    return [{ fita, d: +ch, voltas: Math.max(1, 3 - r) }];
+  });
+}
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    P = palco;
+    palco.style.backgroundImage = 'linear-gradient(rgba(43,89,255,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(43,89,255,.09) 1px,transparent 1px)';
+    palco.style.backgroundSize = '80px 80px';
+    cabecalho = el('div', 'position:absolute;left:0;width:100%;top:90px;text-align:center;font-size:44px;font-weight:600;letter-spacing:6px;color:#8aa3ff;text-transform:uppercase', palco, 'TaskGO em números');
+    grupo = el('div', 'position:absolute;left:0;top:0;width:1920px;height:1080px', palco);
+    CONT.forEach(c => {
+      const bloco = el('div', `position:absolute;left:${c.cx - 300}px;top:200px;width:600px;display:flex;flex-direction:column;align-items:center`, grupo);
+      c.odo = odometro(bloco, c.txt);
+      c.rot = el('div', 'font-size:34px;color:#9a9aa6;margin-top:14px;opacity:0', bloco, c.rotulo);
+    });
+    const dots = VALS.map((v, i) => `<circle id="d${i}" cx="${px(i)}" cy="${py(v)}" r="0" fill="#fff" stroke="#2b59ff" stroke-width="5"/>`).join('');
+    const pts = VALS.map((v, i) => `${i ? 'L' : 'M'}${px(i)} ${py(v)}`).join(' ');
+    const bars = VALS.map((v, i) => `<rect id="b${i}" x="${X0 + i * PASSO}" y="${BASE}" width="${BW}" height="0" rx="14" fill="url(#gA)"/><text x="${px(i)}" y="${BASE + 50}" text-anchor="middle" font-size="28" fill="#9a9aa6">${MESES[i]}</text>`).join('');
+    const aneis = ANEL.map((a, i) => { const cx = 1230 + i * 260; return `<g id="g${i}" opacity="0"><circle cx="${cx}" cy="720" r="95" fill="none" stroke="#1b1e2b" stroke-width="22"/><circle id="r${i}" cx="${cx}" cy="720" r="95" fill="none" stroke="${a.cor}" stroke-width="22" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" transform="rotate(-90 ${cx} 720)"/><text id="rt${i}" x="${cx}" y="734" text-anchor="middle" font-size="54" font-weight="700" fill="#fff">0%</text><text x="${cx}" y="880" text-anchor="middle" font-size="26" fill="#9a9aa6">${a.rot}</text></g>`; }).join('');
+    el('div', 'position:absolute;left:0;top:0;width:1920px;height:1080px', grupo, `<svg viewBox="0 0 1920 1080" width="1920" height="1080" style="position:absolute;left:0;top:0">
+<defs><linearGradient id="gA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8aa3ff"/><stop offset="1" stop-color="#2b59ff"/></linearGradient></defs>
+<g id="grafico" opacity="0"><text x="${X0}" y="600" font-size="44" font-weight="700" fill="#fff">Serviços por mês</text>
+<line x1="${X0 - 20}" y1="${BASE}" x2="${X0 + 5 * PASSO + BW + 20}" y2="${BASE}" stroke="#23263a" stroke-width="3"/>
+${bars}
+<path id="tend" d="${pts}" pathLength="1" fill="none" stroke="#8aa3ff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1" stroke-dashoffset="1"/>
+${dots}</g>
+${aneis}</svg>`);
+    sheen = el('div', 'position:absolute;left:0;top:0;width:360px;height:1080px;background:linear-gradient(90deg,transparent,rgba(138,163,255,.16),transparent);pointer-events:none', palco);
+    marca = el('div', 'position:absolute;left:0;width:100%;top:440px;text-align:center;font-size:170px;font-weight:700;letter-spacing:-6px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    P.style.backgroundPosition = `${(t * 40) % 80}px ${(t * 40) % 80}px`;
+    cabecalho.style.opacity = p(t, 0.1, 0.5);
+    cabecalho.style.transform = `translateY(${(1 - outExpo(p(t, 0.1, 0.7))) * 30}px)`;
+    grupo.style.transform = `translateY(${Math.sin(t * 2.2) * 4}px) scale(${lerp(1, 0.92, p(t, 4.2, 4.7))})`;
+    grupo.style.opacity = 1 - p(t, 4.2, 4.6);
+    sheen.style.transform = `translateX(${lerp(-400, 2300, p(t, 1.0, 4.4))}px)`;
+    /* contadores: a fita sobe de 0 até o dígito final, com voltas extras nas casas da direita */
+    CONT.forEach((c, k) => {
+      const e = outExpo(p(t, 0.2 + k * 0.15, 2.0 + k * 0.15));
+      c.odo.forEach(o => { o.fita.style.transform = `translateY(${-e * (o.d + 10 * o.voltas) * 200}px)`; });
+      c.rot.style.opacity = p(t, 0.9 + k * 0.1, 1.3 + k * 0.1);
+    });
+    q('grafico').setAttribute('opacity', p(t, 0.9, 1.3));
+    /* barras crescem com mola em cascata; a linha se desenha depois e os pontos saltam sobre ela */
+    VALS.forEach((v, i) => {
+      const s = Math.max(0, mola(t - (1.2 + i * 0.09), 2.2, 5));
+      const h = ALT * v / 100 * s;
+      q('b' + i).setAttribute('y', BASE - h);
+      q('b' + i).setAttribute('height', h);
+      const k = p(t, 2.0 + i * 0.2, 2.35 + i * 0.2);
+      q('d' + i).setAttribute('r', 13 * Math.max(0, outBack(k)));
+    });
+    q('tend').setAttribute('stroke-dashoffset', 1 - outCubic(p(t, 2.0, 3.0)));
+    ANEL.forEach((a, i) => {
+      const e = outCubic(p(t, 2.6 + i * 0.2, 3.9 + i * 0.2));
+      q('g' + i).setAttribute('opacity', p(t, 2.5 + i * 0.2, 2.9 + i * 0.2));
+      q('r' + i).setAttribute('stroke-dashoffset', 1 - a.pct / 100 * e);
+      q('rt' + i).textContent = Math.round(a.pct * e) + '%';
+    });
+    /* 4.2–4.7 o painel recua e a marca entra com overshoot */
+    marca.style.opacity = p(t, 4.35, 4.7);
+    marca.style.transform = `scale(${lerp(1.25, 1, outBack(p(t, 4.35, 4.85)))})`;
+  }
+};
+</script></body></html>

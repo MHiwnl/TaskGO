@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>02 · tipografia cinética</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: kinetic type (claude-motion-design / motion-doctrine). Letras entram em cascata com desfoque,
+   a profissão gira numa janela com máscara e a frase final ganha o sublinhado azul. */
+const { p, lerp, outExpo, inOutCubic, outBack, el, cores } = M;
+let linha1, janela, rolo, final, sub, flash;
+const profs = ['eletricista?', 'encanador?', 'diarista?', 'pintor?', 'montador?'];
+function letras(pai, txt, css) { return [...txt].map(ch => el('span', 'display:inline-block;white-space:pre;' + (css || ''), pai, ch === ' ' ? '&nbsp;' : ch)); }
+let l1 = [], fl = [];
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    flash = el('div', `position:absolute;inset:0;background:${cores.azul};opacity:0`, palco);
+    linha1 = el('div', 'position:absolute;left:0;width:100%;top:300px;text-align:center;font-size:150px;font-weight:700;letter-spacing:-6px', palco);
+    l1 = letras(linha1, 'Precisa de um');
+    janela = el('div', 'position:absolute;left:0;width:100%;top:470px;height:200px;overflow:hidden;text-align:center;-webkit-mask:linear-gradient(transparent,#000 22%,#000 78%,transparent)', palco);
+    rolo = el('div', 'position:absolute;left:0;width:100%;top:0', janela);
+    profs.forEach(t => el('div', `height:200px;line-height:200px;font-size:170px;font-weight:700;letter-spacing:-7px;color:${cores.azul}`, rolo, t));
+    final = el('div', 'position:absolute;left:0;width:100%;top:380px;text-align:center;font-size:190px;font-weight:700;letter-spacing:-8px', palco);
+    fl = letras(final, 'TaskGO resolve.');
+    fl.slice(4, 6).forEach(s => s.style.color = cores.azul);
+    sub = el('div', `position:absolute;left:50%;top:640px;height:16px;width:1100px;margin-left:-550px;background:${cores.azul};transform-origin:0 50%;border-radius:8px`, palco);
+  },
+  quadro(t) {
+    /* 0–0.8 "Precisa de um" entra letra a letra */
+    l1.forEach((s, i) => {
+      const k = outExpo(p(t, 0.05 + i * 0.035, 0.6 + i * 0.035));
+      const sai = inOutCubic(p(t, 3.0, 3.35));
+      s.style.transform = `translateY(${(1 - k) * 120 - sai * 160}px) rotate(${(1 - k) * 12}deg)`;
+      s.style.opacity = k * (1 - sai);
+      s.style.filter = `blur(${(1 - k) * 18 + sai * 14}px)`;
+    });
+    /* 0.7–3.0 a profissão gira: cada troca com aceleração e pausa (passos com inOutCubic) */
+    const passos = 4, ini = 0.8, dura = 0.5;
+    let pos = 0;
+    for (let k = 0; k < passos; k++) pos += inOutCubic(p(t, ini + 0.35 + k * dura, ini + 0.35 + k * dura + 0.32));
+    const entra = outExpo(p(t, 0.7, 1.1)), sai = inOutCubic(p(t, 3.0, 3.35));
+    rolo.style.transform = `translateY(${-pos * 200 + (1 - entra) * 200 - sai * 200}px)`;
+    janela.style.opacity = 1 - sai;
+    rolo.style.filter = `blur(${Math.abs(Math.sin(pos * Math.PI)) * 6}px)`;
+    /* 3.25 flash azul curto, 3.3–4.2 "TaskGO resolve." entra com mola, 4.0–4.5 sublinhado */
+    flash.style.opacity = 0.9 * (1 - p(t, 3.25, 3.6)) * (t > 3.25 ? 1 : 0);
+    fl.forEach((s, i) => {
+      const k = p(t, 3.3 + i * 0.03, 3.75 + i * 0.03);
+      s.style.transform = `translateY(${(1 - outExpo(k)) * -140}px) scale(${lerp(1.6, 1, outBack(k))})`;
+      s.style.opacity = Math.min(1, k * 3);
+      s.style.filter = `blur(${(1 - k) * 20}px)`;
+    });
+    sub.style.transform = `scaleX(${outExpo(p(t, 4.0, 4.5))})`;
+    final.style.transform = `scale(${1 + 0.03 * p(t, 3.8, 5)})`;
+  }
+};
+</script></body></html>

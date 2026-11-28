@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pia vazando: como a TaskGO funciona</title>
+<style>
+@font-face{font-family:Jost;src:url(fonts/Jost-latin-variable.woff2) format('woff2');font-weight:100 900}
+html,body{margin:0;height:100%;background:#F2EFE8;overflow:hidden}
+canvas{display:block;width:100vw;height:100vh}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+import { clamp, lerp, seg, ss, eo, back, mulberry } from '/core/lib.js';
+
+// Palito: como a TaskGO funciona. Um só arquivo, linha do tempo em segundos.
+// Horizontal 1920×1080 (54,5 s) ou vertical 1080×1920 (31,5 s), pelo tamanho do viewport.
+// Cada cena tem: t0/t1 (absolutos), draw(u, D), cam(u, D) -> [x, y, z], labels, ev (sons) e mus (música).
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+const W = cv.width = innerWidth, H = cv.height = innerHeight, V = H > W;
+const M = V ? 70 : 124, GY = 880, SH = 380, TAU = Math.PI * 2;
+const C = { paper: '#F2EFE8', ink: '#25252C', mute: '#8F8A80', tint: '#E0DBCF', acc: '#E2552F' };
+const EN = 'Jost, Arial, sans-serif';
+const X = V
+  ? { cli: 300, cliC: 300, pros: [700, 920, 1140], stop: 520, sinkDx: -560, fam: 200, doorDx: -230, tagFs: 26, pCli: 300, pPri: 900, LG: 2.0 }
+  : { cli: 640, cliC: 420, pros: [1000, 1260, 1520], stop: 620, sinkDx: 0, fam: 1800, doorDx: -210, tagFs: 30, pCli: 560, pPri: 1480, LG: 4.0 };
+const TAGS = ['★ 4,7 · R$ 180', '★ 4,9 · R$ 120', '★ 5,0 · R$ 380'];
+const LINES = await fetch(V ? 'lines_9x16.json' : 'lines.json').then(r => { if (!r.ok) throw new Error('roteiro ' + r.status); return r.json(); });
+await document.fonts.load('600 88px Jost').catch(() => {});
+
+// —— helpers de desenho ——
+const mixC = (a, b, t) => { const A = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16)), B = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16)); return `rgb(${A.map((v, i) => Math.round(lerp(v, B[i], clamp(t)))).join(',')})`; };
+const dirv = a => [Math.sin(a), Math.cos(a)];
+const GEO = { thigh: .215, shin: .215, hipH: .42, spine: .285, sh: .065, upper: .18, fore: .155, headR: .112, stance: .09 };
+const ctrl = (A, B, E, k = .8) => { const m = [(A[0] + E[0]) / 2, (A[1] + E[1]) / 2]; return [B[0] + (B[0] - m[0]) * k, B[1] + (B[1] - m[1]) * k]; };
+const qpt = (A, Q, E, t) => { const s = 1 - t; return [s * s * A[0] + 2 * s * t * Q[0] + t * t * E[0], s * s * A[1] + 2 * s * t * Q[1] + t * t * E[1]]; };
+function bones(H0, F, L1, L2) {
+  let dx = F[0] - H0[0], dy = F[1] - H0[1], d = Math.max(Math.hypot(dx, dy), 1e-6);
+  const m = (L1 + L2) * .9995;
+  if (d > m) { dx *= m / d; dy *= m / d; d = m; }
+  const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+  const px = H0[0] + a * dx / d, py = H0[1] + a * dy / d, nx = -dy / d * h, ny = dx / d * h;
+  return { end: [H0[0] + dx, H0[1] + dy], e: [[px + nx, py + ny], [px - nx, py - ny]] };
+}
+// Esqueleto: f = {x, gy, S, lean, bend, head, hx, hy, hL, hR (mão em relação ao ombro, em S), aimL, aimR (mão em px), fL, fR (pé em px), pref}
+function solve(f) {
+  const S = f.S, bx = f.x, gy = f.gy, lean = f.lean || 0;
+  const Hp = [bx + (f.hx || 0) * S, gy - (GEO.hipH - (f.hy || 0)) * S];
+  const sd = dirv(Math.PI - lean), N = [Hp[0] + sd[0] * GEO.spine * S, Hp[1] + sd[1] * GEO.spine * S];
+  const pe = [-sd[1], sd[0]], bend = (f.bend || 0) * S;
+  const Cc = [(Hp[0] + N[0]) / 2 + pe[0] * bend, (Hp[1] + N[1]) / 2 + pe[1] * bend];
+  const u = 1 - GEO.sh / GEO.spine, v = 1 - u;
+  const Sh = [v * v * Hp[0] + 2 * v * u * Cc[0] + u * u * N[0], v * v * Hp[1] + 2 * v * u * Cc[1] + u * u * N[1]];
+  const hd = dirv(Math.PI - (lean + (f.head || 0)));
+  const Hd = [N[0] + hd[0] * GEO.headR * S, N[1] + hd[1] * GEO.headR * S];
+  const st = f.prof ? .04 : GEO.stance;
+  const knee = (F, side) => { const r = bones(Hp, F, GEO.thigh * S, GEO.shin * S); return { K: (r.e[0][0] - Hp[0]) * side > 0 ? r.e[0] : r.e[1], F }; };
+  const arm = (side, key) => {
+    const aim = f['aim' + key], rel = f['h' + key] || [side * .12, .31];
+    const T = aim || [Sh[0] + rel[0] * S, Sh[1] + rel[1] * S];
+    const r = bones(Sh, T, GEO.upper * S, GEO.fore * S);
+    const E = (f.pref || 'out') === 'down' ? (r.e[0][1] > r.e[1][1] ? r.e[0] : r.e[1])
+      : (Math.abs(r.e[0][0] - bx) > Math.abs(r.e[1][0] - bx) ? r.e[0] : r.e[1]);
+    return { Sh, E, H: r.end, Q: ctrl(Sh, E, r.end) };
+  };
+  return { S, Hp, N, Cc, Sh, Hd, legs: [knee(f.fL || [bx - st * S, gy], -1), knee(f.fR || [bx + st * S, gy], 1)], arms: { L: arm(-1, 'L'), R: arm(1, 'R') } };
+}
+function paint(j) {
+  const sc = clamp(Math.sqrt(j.S / 380), .6, 1.05);
+  g.save(); g.strokeStyle = C.ink; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 8 * sc; g.beginPath();
+  g.moveTo(j.Hp[0], j.Hp[1]); g.quadraticCurveTo(j.Cc[0], j.Cc[1], j.N[0], j.N[1]);
+  for (const l of j.legs) { const Q = ctrl(j.Hp, l.K, l.F); g.moveTo(j.Hp[0], j.Hp[1]); g.quadraticCurveTo(Q[0], Q[1], l.F[0], l.F[1]); }
+  for (const a of [j.arms.L, j.arms.R]) { g.moveTo(a.Sh[0], a.Sh[1]); g.quadraticCurveTo(a.Q[0], a.Q[1], a.H[0], a.H[1]); }
+  g.stroke();
+  g.beginPath(); g.arc(j.Hd[0], j.Hd[1], GEO.headR * j.S, 0, TAU); g.fillStyle = C.paper; g.fill();
+  g.lineWidth = 7.5 * sc; g.stroke(); g.restore();
+}
+const person = f => { const j = solve(f); paint(j); return j; };
+// Tangente contínua: os controles dos dois braços ficam na mesma reta que passa pelo aperto.
+function fixPair(a, b, c) {
+  const d = [c[0] - a.Q[0], c[1] - a.Q[1]], dl = Math.hypot(d[0], d[1]) || 1, len = Math.hypot(b.Q[0] - c[0], b.Q[1] - c[1]);
+  b.Q = [c[0] + d[0] / dl * len, c[1] + d[1] / dl * len];
+}
+// Aperto entre A (mão direita) e B (mão esquerda). e = 0 mãos soltas, e = 1 unidas. A mão viaja do repouso até o ponto.
+function clasp2(A, B, e) {
+  const a0 = solve(A), b0 = solve(B), S = A.S;
+  const Sa = a0.arms.R.Sh, Sb = b0.arms.L.Sh, c = [(Sa[0] + Sb[0]) / 2, (Sa[1] + Sb[1]) / 2 + .08 * S];
+  const ra = [Sa[0] + .12 * S, Sa[1] + .31 * S], rb = [Sb[0] - .12 * S, Sb[1] + .31 * S];
+  const ja = solve({ ...A, aimR: [lerp(ra[0], c[0], e), lerp(ra[1], c[1], e)], pref: 'down' });
+  const jb = solve({ ...B, aimL: [lerp(rb[0], c[0], e), lerp(rb[1], c[1], e)], pref: 'down' });
+  fixPair(ja.arms.R, jb.arms.L, c);
+  return { ja, jb };
+}
+// Linha de acento que corre pelos braços unidos (frac = quanto já correu; a frente é arredondada).
+function runPts(pts, frac, S) {
+  const n = Math.max(2, Math.round(clamp(frac) * (pts.length - 1)) + 1);
+  g.save(); g.strokeStyle = C.acc; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 8 * clamp(Math.sqrt(S / 380), .6, 1.05);
+  g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < n; i++) g.lineTo(pts[i][0], pts[i][1]); g.stroke(); g.restore();
+}
+const armPts = (a, b) => { const p = []; for (let i = 0; i <= 40; i++) p.push(qpt(a.Sh, a.Q, a.H, i / 40)); for (let i = 1; i <= 40; i++) p.push(qpt(b.H, b.Q, b.Sh, i / 40)); return p; };
+function run(a, b, frac, S) { runPts(armPts(a, b), frac, S); }
+function cam(x, y, z) { g.setTransform(z, 0, 0, z, W / 2 - x * z, H / 2 - y * z); }
+function scr() { g.setTransform(1, 0, 0, 1, 0, 0); }
+// Papel: cor C.paper com grão fino (±3 níveis), gerado uma vez e desenhado em cada quadro.
+const grainC = document.createElement('canvas'); grainC.width = W; grainC.height = H;
+{ const x = grainC.getContext('2d'), id = x.createImageData(W, H), d = id.data, r = mulberry(11), base = [242, 239, 232];
+  for (let i = 0; i < d.length; i += 4) { const n = (r() + r() - 1) * 3; for (let c = 0; c < 3; c++) d[i + c] = base[c] + n; d[i + 3] = 255; }
+  x.putImageData(id, 0, 0); }
+function paper() { scr(); g.drawImage(grainC, 0, 0); }
+
+// —— elementos ——
+function ground(x0, x1) { g.save(); g.beginPath(); g.moveTo(x0, GY); g.lineTo(x1, GY); g.strokeStyle = C.tint; g.lineWidth = 4; g.stroke(); g.restore(); }
+function drop(x, y, r, col) {
+  g.beginPath(); g.moveTo(x, y - 2.2 * r); g.quadraticCurveTo(x + r * 1.1, y - r * .2, x + r, y);
+  g.arc(x, y, r, 0, Math.PI); g.quadraticCurveTo(x - r * 1.1, y - r * .2, x, y - 2.2 * r); g.fillStyle = col; g.fill();
+}
+function sink(dx) {
+  g.save(); g.translate(dx, 0); g.strokeStyle = C.ink; g.lineWidth = 6; g.lineJoin = 'round';
+  g.beginPath(); g.roundRect(1320, 700, 320, 60, [0, 0, 30, 30]); g.fillStyle = C.paper; g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(1420, 760); g.lineTo(1420, GY); g.moveTo(1540, 760); g.lineTo(1540, GY); g.stroke();
+  g.beginPath(); g.moveTo(1480, 700); g.lineTo(1480, 628); g.lineTo(1528, 628); g.stroke(); g.restore();
+}
+function puddle(p, dx) { if (p <= 0) return; g.beginPath(); g.ellipse(1480 + dx, GY - 2, 210 * p, 11 * p, 0, 0, TAU); g.fillStyle = C.tint; g.fill(); }
+// gotas caindo do bico: uma a cada 1,25 s; cada uma cai em .3 s até ylim
+const DRIP = 1.25, FALL = .3;
+function drips(u, dx, ylim, until = Infinity) {
+  for (let k = 0; ; k++) { const tk = k * DRIP; if (tk > u || tk > until) break; const p = (u - tk) / FALL; if (p < 1) drop(1528 + dx, 664 + (ylim - 664) * p * p, 9, C.mute); }
+}
+function bucketAt(cx, top, w, h) {
+  g.save(); g.beginPath(); g.moveTo(cx - w / 2, top); g.lineTo(cx + w / 2, top); g.lineTo(cx + w * .36, top + h); g.lineTo(cx - w * .36, top + h); g.closePath();
+  g.fillStyle = C.tint; g.fill(); g.strokeStyle = C.ink; g.lineWidth = 5; g.stroke(); g.restore();
+}
+function phoneAt(p, col) {
+  g.save(); g.beginPath(); g.roundRect(p[0] - 17, p[1] - 29, 34, 58, 6); g.fillStyle = C.tint; g.fill(); g.strokeStyle = col; g.lineWidth = 4; g.stroke(); g.restore();
+}
+function doorAt(x0) {
+  g.save(); g.beginPath(); g.rect(x0, GY - 300, 120, 300); g.fillStyle = C.paper; g.fill(); g.strokeStyle = C.ink; g.lineWidth = 6; g.stroke();
+  g.beginPath(); g.arc(x0 + 100, GY - 150, 6, 0, TAU); g.fillStyle = C.ink; g.fill(); g.restore();
+}
+function note(x, y) {
+  g.save(); g.beginPath(); g.roundRect(x - 42, y - 24, 84, 48, 6); g.fillStyle = C.tint; g.fill(); g.strokeStyle = C.ink; g.lineWidth = 4; g.stroke();
+  g.beginPath(); g.arc(x, y, 9, 0, TAU); g.strokeStyle = C.ink; g.lineWidth = 3; g.stroke(); g.restore();
+}
+function star(cx, cy, r) {
+  g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .42 : r; g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
+  g.closePath(); g.fillStyle = C.ink; g.fill();
+}
+const ease01 = (u, a, b) => ss(seg(u, a, b));
+const pop = (p) => Math.max(2, SH * back(clamp(p)));
+
+// —— cenas ——
+// Sumidouro: a pia com a gota; "sad" é o bonequinho de cabeça baixa.
+function sinkScene(u, D, sad, dx) {
+  sink(dx); puddle(sad ? ss(seg(u, 0, D)) * .55 : 0, dx);
+  drips(u, dx, 700);
+  person({ x: X.cli, gy: GY, S: SH, lean: sad ? .16 + .06 * ss(seg(u, D * .4, D * .7)) : .16, head: sad ? .42 : .3, hR: [.04, -.2] });
+}
+function hookDraw(u, D) { sinkScene(u, D, false, X.sinkDx); }
+function sinkDraw(u, D) { sinkScene(u, D, true, 0); }
+// Primo: a ligação falha. LG = instante em que a mão cai (let go); o telefone cai e fica cinza.
+function primoDraw(u) {
+  const LG = X.LG, e = eo(seg(u, 0, .6));
+  const cj = person({ x: X.pCli, gy: GY, S: SH, lean: .05, hR: [lerp(.12, .07, e), lerp(.31, -.2, e)] });
+  const k = ss(seg(u, LG, LG + .5));
+  const pj = person({ x: X.pPri, gy: GY, S: SH, lean: -.03, hL: [lerp(-.07, -.12, k), lerp(-.2, .31, k)] });
+  const la = ss(seg(u, .8, 1.2)) * (1 - ss(seg(u, LG - .4, LG + .2)));
+  if (la > 0) { g.save(); g.globalAlpha = la; g.setLineDash([14, 12]); g.strokeStyle = C.mute; g.lineWidth = 4; g.beginPath();
+    g.moveTo(cj.arms.R.H[0], cj.arms.R.H[1]); g.lineTo(pj.Hd[0], pj.Hd[1]); g.stroke(); g.restore(); }
+  const hand = pj.arms.L.H;
+  if (u < LG + .5) phoneAt(hand, C.ink);
+  else { const f = u - LG - .5; phoneAt([hand[0], Math.min(GY - 8, hand[1] + f * f * 900)], mixC(C.ink, C.mute, ss(seg(u, LG + .5, LG + 1.2)))); }
+}
+// Pull back: o telefone do primo está no chão, o cliente toca o peito; a família aparece ao fundo.
+function pullDraw(u) {
+  person({ x: X.pCli, gy: GY, S: SH, lean: .05, hR: [.1, 0] });
+  person({ x: X.pPri, gy: GY, S: SH, lean: -.03, hL: [-.12, .31] });
+  phoneAt([X.pPri - .12 * SH, GY - 8], C.mute);
+  familyDraw(u);
+}
+// Família: cinco pessoas de mãos dadas, paradas. Só a respiração, sem coro.
+function familyDraw(u) {
+  const xs = [0, 1, 2, 3, 4].map(i => X.fam + i * 130), S = 340;
+  const sway = i => .012 * Math.sin(TAU * u / 3 + i * 1.3);
+  const base = xs.map((x, i) => solve({ x, gy: GY, S, lean: sway(i) }));
+  const cs = [];
+  for (let i = 0; i < xs.length - 1; i++) cs.push([(base[i].arms.R.Sh[0] + base[i + 1].arms.L.Sh[0]) / 2, (base[i].arms.R.Sh[1] + base[i + 1].arms.L.Sh[1]) / 2 + .08 * S]);
+  const js = xs.map((x, i) => solve({ x, gy: GY, S, lean: sway(i), aimR: cs[i], aimL: cs[i - 1], pref: 'down' }));
+  for (let i = 0; i < cs.length; i++) fixPair(js[i].arms.R, js[i + 1].arms.L, cs[i]);
+  js.forEach(paint);
+}
+// Escolha: o cliente aponta; três profissionais surgem (pop-in) com nota e preço.
+function chooseDraw(u, D) {
+  const e = eo(seg(u, D * .6, D * .72));
+  person({ x: X.cliC, gy: GY, S: SH, lean: .04, hR: [lerp(.14, .36, e), lerp(0, -.02, e)] });
+  X.pros.forEach((x, i) => {
+    const p = seg(u, .4 + .6 * i, .8 + .6 * i), s = pop(p), j = person({ x, gy: GY, S: s, lean: 0, hR: [.12, .31] });
+    g.save(); g.globalAlpha = clamp(p * 2); g.font = `500 ${X.tagFs}px ${EN}`; g.fillStyle = C.ink; g.textAlign = 'center';
+    g.fillText(TAGS[i], x, GY - .93 * SH - 60); g.restore();
+  });
+}
+// Ligação escolhida: o caminho de acento sai da mão do cliente até o profissional; os outros dois vão embora.
+function linkDraw(u, D) {
+  const e = eo(seg(u, D * .3, D * .3 + 1.0));
+  const cj = person({ x: X.cliC, gy: GY, S: SH, lean: .04, hR: [.36, -.02] });
+  [0, 2].forEach(i => { const s = SH * (1 - ss(seg(u, 0, .6))); if (s > 2) person({ x: X.pros[i], gy: GY, S: s }); });
+  const pj = person({ x: X.pros[1], gy: GY, S: SH, lean: 0, hR: [.12, .31] });
+  const A = cj.arms.R.H, B = [X.pros[1], GY - .93 * SH], Q = [(A[0] + B[0]) / 2, Math.min(A[1], B[1]) - 240];
+  const pts = []; for (let i = 0; i <= 60; i++) pts.push(qpt(A, Q, B, i / 60));
+  runPts(pts, e, SH);
+}
+// Caminhada: o profissional anda pela linha de chão até a casa; o rastro em acento fica para trás.
+function walkDraw(u, Dw) {
+  const k = ss(seg(u, 0, Dw * .8)), x = lerp(X.pros[1], X.stop, k), walking = u < Dw * .8;
+  const ph = TAU * (X.pros[1] - x) / (.5 * SH), A = walking ? .12 * SH : 0, lift = walking ? .05 * SH : 0, sw = walking ? .08 * Math.sin(ph) : 0;
+  if (x < X.pros[1] - 1) { g.save(); g.beginPath(); g.moveTo(X.pros[1], GY + 2); g.lineTo(x, GY + 2); g.strokeStyle = C.acc; g.lineWidth = 6; g.lineCap = 'round'; g.stroke(); g.restore(); }
+  const j = person({ x, gy: GY, S: SH, lean: walking ? -.05 : 0, hL: [-.12 + sw, .31], hR: [.12 - sw, .31],
+    fL: [x - .09 * SH + A * Math.sin(ph), GY - lift * Math.max(0, Math.cos(ph))], fR: [x + .09 * SH + A * Math.sin(ph + Math.PI), GY - lift * Math.max(0, Math.cos(ph + Math.PI))] });
+  bucketAt(j.arms.R.H[0], j.arms.R.H[1] - 6, 64, 54);
+}
+// Porta: o aperto (um só) e o código; o pagamento passa de mão em mão, direto ao profissional.
+function doorDraw(u) {
+  doorAt(X.cliC + X.doorDx - 70);
+  const e = ss(seg(u, .9, 1.6)), { ja, jb } = clasp2({ x: X.cliC, gy: GY, S: SH }, { x: X.stop, gy: GY, S: SH }, e);
+  paint(ja); paint(jb);
+  bucketAt(jb.arms.R.H[0], jb.arms.R.H[1] - 6, 64, 54);
+  if (e > .8) run(ja.arms.R, jb.arms.L, .55 * ss(seg(u, 1.2, 2.2)), SH);
+}
+function payDraw(u) {
+  doorAt(X.cliC + X.doorDx - 70);
+  const e = 1 - ss(seg(u, .2, .9)), { ja, jb } = clasp2({ x: X.cliC, gy: GY, S: SH }, { x: X.stop, gy: GY, S: SH }, e);
+  paint(ja); paint(jb);
+  bucketAt(jb.arms.R.H[0], jb.arms.R.H[1] - 6, 64, 54);
+  const A = ja.arms.R.H, B = jb.arms.L.H, p = ss(seg(u, .3, 1.4));
+  if (u > .3) note(lerp(A[0], B[0], p), lerp(A[1], B[1], p) - 40 * Math.sin(Math.PI * p));
+}
+// Avaliação: o cliente de pé; cinco estrelas aparecem em tinta.
+function starsDraw(u, D) {
+  person({ x: X.cli, gy: GY, S: SH, lean: .05 });
+  const st = D < 2 ? .15 : .25;
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  for (let i = 0; i < 5; i++) { const p = seg(u, .4 + st * i, .8 + st * i); if (p > 0) star(M + 60 + i * 120, H * (V ? .55 : .62), 52 * Math.max(.01, back(p))); }
+  g.restore();
+}
+// Telefone: o bonequinho mostra o app; a câmera aproxima e o texto é digitado.
+function phoneDraw(u) {
+  const j = person({ x: X.cli, gy: GY, S: SH, lean: .05, head: .35, hR: [.14, 0] });
+  const p = j.arms.R.H, x = p[0] - 60, y = p[1] - 100;
+  g.save(); g.beginPath(); g.roundRect(x, y, 120, 200, 14); g.fillStyle = C.paper; g.fill(); g.strokeStyle = C.ink; g.lineWidth = 5; g.stroke(); g.restore();
+  g.save(); g.font = `500 17px ${EN}`; g.fillStyle = C.mute; g.fillText('Descreva o', x + 14, y + 42); g.fillText('que precisa', x + 14, y + 62); g.restore();
+  const typed = 'pia vazando'.slice(0, clamp(Math.floor((u - 1.5) / .09), 0, 11));
+  g.save(); g.font = `600 20px ${EN}`; g.fillStyle = C.ink; g.fillText(typed, x + 14, y + 110); g.restore();
+}
+
+const H_SCENES = [
+  { t0: 0, t1: 5, draw: hookDraw, cam: (u, D) => [960, 540, 1 + .08 * ss(seg(u, 2.5, 5))],
+    labels: (u, D) => [{ id: 'titulo', text: 'Pia vazando', x: M, y: 190 + 16 * (1 - eo(seg(u, .3, .7))), size: 88, w: 600, track: -2, a: seg(u, .3, .7) * (1 - seg(u, 4.6, 5)) }],
+    ev: D => dripEv(0, D, 700), mus: () => [[0, 'pz', 38, 1.6, .5], [2.5, 'pz', 41, 1.6, .5]] },
+  { t0: 5, t1: 10, draw: primoDraw, cam: () => [960, 540, 1],
+    labels: u => [{ id: 'lig', text: 'LIGAÇÃO', x: M, y: 190, size: 22, col: C.mute, track: 3, a: seg(u, .2, .6) }],
+    ev: () => [[.9, { type: 'ring' }], [1.5, { type: 'ring' }], [2.1, { type: 'ring' }], [2.7, { type: 'ring' }], [4.0, { type: 'letgo' }], [4.6, { type: 'clatter' }]],
+    mus: () => [[0, 'pz', 33, 1.6, .5], [2.5, 'pz', 36, 1.6, .5]] },
+  { t0: 10, t1: 12.5, draw: pullDraw, cam: (u, D) => [960 + 190 * ss(seg(u, 0, D)), 540, 1 - .38 * ss(seg(u, 0, D))], ev: () => [], mus: () => [] },
+  { t0: 12.5, t1: 17.5, draw: u => familyDraw(u), cam: () => [2080, 540, .95],
+    labels: u => [{ id: 'fam', text: 'GRUPO DA FAMÍLIA', x: M, y: 190, size: 22, col: C.mute, track: 3, a: seg(u, .2, .6) }], ev: () => [],
+    mus: () => [[1.7, 'drone', 33, 3.6, .3], [1.7, 'drone', 45, 3.6, .2]] },
+  { t0: 17.5, t1: 22.5, draw: sinkDraw, cam: () => [960, 540, 1], ev: D => dripEv(0, D, 700), mus: () => [[0, 'pz', 38, 1.6, .5], [2.5, 'pz', 41, 1.6, .5], [4, 'mar', 69, 1, .35]] },
+  { t0: 22.5, t1: 27.5, draw: phoneDraw, cam: (u, D) => { const j = solve({ x: X.cli, gy: GY, S: SH, lean: .05, head: .35, hR: [.14, 0] }), p = j.arms.R.H, k = ss(seg(u, .2, 1.2)); return [lerp(960, p[0], k), lerp(540, p[1], k), 1 + 1.1 * k]; },
+    ev: () => [1.5, 1.59, 1.68, 1.77, 1.86, 1.95, 2.04, 2.13, 2.22, 2.31, 2.4].map(s => [s, { type: 'tick' }]),
+    mus: () => [[0, 'mar', 74, 1, .35], [1.2, 'mar', 69, 1, .35], [2.5, 'kal', 81, 1.2, .3]] },
+  { t0: 27.5, t1: 32.5, draw: chooseDraw, cam: () => [860, 540, 1], labels: () => [],
+    ev: () => [[.4, { type: 'pop' }], [1.0, { type: 'pop' }], [1.6, { type: 'pop' }]],
+    mus: () => [[.4, 'kal', 69, 1.2, .4], [1.0, 'kal', 72, 1.2, .4], [1.6, 'kal', 76, 1.2, .4]] },
+  { t0: 32.5, t1: 35, draw: (u) => { linkDraw(u, 2.5); }, cam: () => [860, 540, 1], ev: () => [[.3, { type: 'whoosh' }]],
+    mus: () => [[0, 'kal', 74, 1, .4], [.3, 'kal', 77, 1, .4], [.6, 'kal', 81, 1, .4], [1.2, 'mar', 86, 1.4, .35]] },
+  { t0: 35, t1: 40, draw: u => { person({ x: X.cliC, gy: GY, S: SH, lean: .04 }); walkDraw(u, 4.4); }, cam: () => [900, 540, 1],
+    labels: () => [{ id: 'mapa', text: 'CASA AMARELA', x: M, y: 190, size: 22, col: C.mute, track: 3, a: 1 }],
+    ev: () => [0, .4, .8, 1.2, 1.6, 2.0, 2.4, 2.8, 3.2, 3.6, 4.0].map(s => [s, { type: 'step' }]),
+    mus: () => [50, 53, 57, 62, 65, 69, 74, 77, 81].map((m, i) => [i * .4, 'harp', m, 1.4, .3]) },
+  { t0: 40, t1: 42.5, draw: doorDraw, cam: () => [520, 540, 1],
+    labels: u => [{ id: 'cod', text: 'CÓDIGO', x: M, y: 190, size: 22, col: C.mute, track: 3, a: 1 },
+      ...[0, 1, 2, 3].map(i => ({ id: 'd' + i, text: ['4', '7', '1', '9'][i], x: M + i * 230, y: 340, size: 150, w: 600, a: seg(u, .5 + .12 * i, .8 + .12 * i) }))],
+    ev: () => [[.2, { type: 'knock' }], [.5, { type: 'knock' }], [.5, { type: 'code' }], [.62, { type: 'code' }], [.74, { type: 'code' }], [.86, { type: 'code' }], [1.6, { type: 'clasp' }]],
+    mus: () => [[.2, 'vib', 62, 2.8, .35], [.2, 'vib', 65, 2.8, .35], [.2, 'vib', 69, 2.8, .35], [1.2, 'kal', 74, 1.2, .3]] },
+  { t0: 42.5, t1: 45.5, draw: payDraw, cam: () => [520, 540, 1],
+    labels: u => [{ id: 'valor', text: 'R$ 120', x: M, y: 230, size: 110, w: 600, track: -2, a: seg(u, .5, .9) },
+      { id: 'pago', text: 'Pago ao profissional', x: M, y: 310, size: 30, w: 400, col: C.mute, a: 1 }],
+    ev: () => [[.3, { type: 'paper' }]], mus: () => [[0, 'pz', 38, 1.6, .4]] },
+  { t0: 45.5, t1: 47.5, draw: starsDraw, cam: () => [640, 540, 1], ev: () => [.4, .65, .9, 1.15, 1.4].map((s, i) => [s, { type: 'star' }]), mus: () => [] },
+  { t0: 47.5, t1: 52.5, draw: echoDraw, cam: () => [960, 540, 1.08], ev: D => [...dripEv(0, 3.0, 790, true)], mus: () => [[1.5, 'drone', 50, 4, .25], [1.5, 'drone', 53, 4, .2], [1.1, 'vib', 74, 3, .35]] },
+  { t0: 52.5, t1: 54.5, draw: () => {}, cam: () => [W / 2, H / 2, 1], noSub: true,
+    labels: u => [{ id: 'taskgo', text: 'TaskGO', x: M, y: H / 2 + 40, size: V ? 110 : 120, w: 600, track: -3, a: seg(u, 0, .3) }],
+    ev: () => [], mus: () => [[0, 'vib', 62, 2, .35], [0, 'vib', 69, 2, .35]] },
+];
+// Versão vertical: mesmas cenas, enquadradas para 1080×1920 e tempos próprios.
+const V_SCENES = [
+  { t0: 0, t1: 3, draw: hookDraw, cam: () => [600, 760, 1],
+    labels: u => [{ id: 't1', text: 'Pia vazando.', x: M, y: 330, size: 96, w: 600, track: -2, a: seg(u, .2, .5) },
+      { id: 't2', text: 'Ninguém atende.', x: M, y: 430, size: 96, w: 600, track: -2, a: seg(u, .3, .6) }],
+    ev: D => dripEv(0, D, 700), mus: () => [[0, 'pz', 38, 1.6, .5], [1.5, 'pz', 41, 1.2, .5]] },
+  { t0: 3, t1: 6, draw: primoDraw, cam: () => [600, 760, 1], labels: u => [{ id: 'lig', text: 'LIGAÇÃO', x: M, y: 300, size: 22, col: C.mute, track: 3, a: seg(u, .2, .6) }],
+    ev: () => [[.6, { type: 'ring' }], [1.1, { type: 'ring' }], [X.LG, { type: 'letgo' }], [X.LG + .6, { type: 'clatter' }]], mus: () => [[0, 'pz', 33, 1.2, .5]] },
+  { t0: 6, t1: 8.5, draw: u => familyDraw(u), cam: () => [X.fam + 260, 760, 1], labels: () => [{ id: 'fam', text: 'GRUPO DA FAMÍLIA', x: M, y: 300, size: 22, col: C.mute, track: 3, a: 1 }],
+    ev: () => [], mus: () => [[0, 'drone', 33, 2.5, .3]] },
+  { t0: 8.5, t1: 11, draw: phoneDraw, cam: (u, D) => { const j = solve({ x: X.cli, gy: GY, S: SH, lean: .05, head: .35, hR: [.14, 0] }), p = j.arms.R.H, k = ss(seg(u, .2, 1.2)); return [lerp(540, p[0], k), lerp(760, p[1], k), 1 + .6 * k]; },
+    ev: () => [1.5, 1.59, 1.68, 1.77, 1.86, 1.95, 2.04, 2.13, 2.22, 2.31, 2.4].map(s => [s, { type: 'tick' }]), mus: () => [[0, 'mar', 74, 1, .35]] },
+  { t0: 11, t1: 15, draw: chooseDraw, cam: () => [620, 760, 1], labels: () => [], ev: () => [[.4, { type: 'pop' }], [1.0, { type: 'pop' }], [1.6, { type: 'pop' }]],
+    mus: () => [[.4, 'kal', 69, 1.2, .4], [1.0, 'kal', 72, 1.2, .4], [1.6, 'kal', 76, 1.2, .4]] },
+  { t0: 15, t1: 18, draw: u => { if (u < 1) linkDraw(u, 1); else { person({ x: X.cliC, gy: GY, S: SH, lean: .04 }); walkDraw(u - 1, 2); } }, cam: () => [740, 760, 1],
+    labels: () => [{ id: 'mapa', text: 'CASA AMARELA', x: M, y: 300, size: 22, col: C.mute, track: 3, a: 1 }],
+    ev: () => [[.3, { type: 'whoosh' }], [1.2, { type: 'step' }], [1.6, { type: 'step' }], [2.0, { type: 'step' }], [2.4, { type: 'step' }], [2.8, { type: 'step' }]],
+    mus: () => [50, 57, 65, 74].map((m, i) => [i * .4, 'harp', m, 1.4, .3]) },
+  { t0: 18, t1: 21, draw: doorDraw, cam: () => [480, 760, 1],
+    labels: u => [{ id: 'cod', text: 'CÓDIGO DE SEGURANÇA', x: M, y: 300, size: 22, col: C.mute, track: 3, a: 1 },
+      ...[0, 1, 2, 3].map(i => ({ id: 'd' + i, text: ['4', '7', '1', '9'][i], x: M + i * 190, y: 440, size: 150, w: 600, a: seg(u, .5 + .12 * i, .8 + .12 * i) }))],
+    ev: () => [[.2, { type: 'knock' }], [.5, { type: 'knock' }], [.5, { type: 'code' }], [.62, { type: 'code' }], [.74, { type: 'code' }], [.86, { type: 'code' }], [1.6, { type: 'clasp' }]],
+    mus: () => [[.2, 'vib', 62, 2.8, .35], [.2, 'vib', 65, 2.8, .35], [.2, 'vib', 69, 2.8, .35]] },
+  { t0: 21, t1: 23.9, draw: payDraw, cam: () => [480, 760, 1],
+    labels: u => [{ id: 'valor', text: 'R$ 120', x: M, y: 330, size: 110, w: 600, track: -2, a: seg(u, .5, .9) },
+      { id: 'pago', text: 'Pago ao profissional', x: M, y: 410, size: 30, w: 400, col: C.mute, a: 1 }],
+    ev: () => [[.3, { type: 'paper' }]], mus: () => [[0, 'pz', 38, 1.6, .4]] },
+  { t0: 23.9, t1: 25.5, draw: starsDraw, cam: () => [X.cli, 760, 1], ev: () => [.4, .55, .7, .85, 1.0].map(s => [s, { type: 'star' }]), mus: () => [] },
+  { t0: 25.5, t1: 29.5, draw: echoDraw, cam: () => [600, 760, 1], ev: D => dripEv(0, 3.0, 790, true), mus: () => [[1.5, 'drone', 50, 4, .25], [1.1, 'vib', 74, 3, .35]] },
+  { t0: 29.5, t1: 31.5, draw: () => {}, cam: () => [W / 2, H / 2, 1], noSub: true,
+    labels: u => [{ id: 'taskgo', text: 'TaskGO', x: M, y: H / 2 + 40, size: 110, w: 600, track: -3, a: seg(u, 0, .3) }],
+    ev: () => [], mus: () => [[0, 'vib', 62, 2, .35], [0, 'vib', 69, 2, .35]] },
+];
+// Eco: a mesma pia e o mesmo bonequinho do começo, relaxado; a gota agora cai na caçamba.
+function echoDraw(u) {
+  sink(X.sinkDx);
+  const bx = 1528 + X.sinkDx;
+  drips(u, X.sinkDx, GY - 86, 3.0);
+  person({ x: X.cli, gy: GY, S: SH, lean: 0, head: 0 });
+  bucketAt(bx, GY - 86, 92, 86);
+}
+// Eventos de gota: uma por queda (em .3 s), em [u0, u1]; bucket = cai na caçamba
+function dripEv(u0, u1, ylim, bucket) {
+  const out = []; for (let k = 0; ; k++) { const tk = k * DRIP + FALL; if (tk > u1) break; if (tk >= u0) out.push([tk, { type: bucket ? 'bucket' : 'drip' }]); } return out;
+}
+const SCENES = V ? V_SCENES : H_SCENES;
+
+// —— rótulos de tela (também alimentam TEXTS para o readcheck) ——
+function labelsAt(t) {
+  const out = [], s = SCENES.find(s => t >= s.t0 && t < s.t1);
+  if (s && s.labels) for (const it of s.labels(t - s.t0, s.t1 - s.t0)) out.push(it);
+  if (!(s && s.noSub)) LINES.forEach((L, i) => { const next = LINES[i + 1] ? LINES[i + 1].t : Infinity, end = Math.min(L.t + Math.max(1.8, L.dur + .6), next); if (t >= L.t && t < end) out.push({ id: 'sub-' + L.id, text: L.text, x: M + 24, y: H - 110, size: 36, w: 400, a: 1, sub: true }); });
+  return out;
+}
+function drawLabels(t) {
+  scr();
+  for (const it of labelsAt(t)) {
+    if (!(it.a > 0)) continue;
+    g.save(); g.globalAlpha = clamp(it.a); g.font = `${it.w || 500} ${it.size}px ${EN}`; g.fillStyle = it.col || C.ink;
+    g.textAlign = it.align || 'left'; g.letterSpacing = (it.track || 0) + 'px'; g.fillText(it.text, it.x, it.y);
+    if (it.sub) { g.globalAlpha = 1; g.fillStyle = C.acc; g.fillRect(M, H - 146, 4, 42); }
+    g.restore();
+  }
+}
+
+window.TEXTS = t => labelsAt(t).filter(i => !i.sub && i.a > 0).map(i => {
+  g.save(); g.font = `${i.w || 500} ${i.size}px ${EN}`; g.letterSpacing = (i.track || 0) + 'px';
+  const m = g.measureText(i.text); g.restore();
+  return { id: i.id, text: i.text, x0: i.x, y0: i.y - i.size * .8, x1: i.x + m.width, y1: i.y + i.size * .2 };
+});
+
+// —— quadro ——
+function render(t) {
+  paper();
+  const s = SCENES.find(s => t >= s.t0 && t < s.t1) || SCENES[SCENES.length - 1];
+  const u = t - s.t0, D = s.t1 - s.t0;
+  const [x, y, z] = s.cam(u, D);
+  cam(x, y, z);
+  if (!s.noSub) ground(-1500, 4000);
+  s.draw(u, D);
+  drawLabels(t);
+}
+
+// —— eventos (sons) e música: um só lugar, em segundos absolutos ——
+function buildEvents() {
+  const ev = [];
+  for (const s of SCENES) {
+    if (s.t0 > 0) ev.push({ t: s.t0, type: 'cut' });
+    const D = s.t1 - s.t0;
+    for (const [u, o] of (s.ev ? s.ev(D) : [])) ev.push({ t: +(s.t0 + u).toFixed(3), ...o });
+    for (const [u, inst, midi, dur, vel] of (s.mus ? s.mus(D) : [])) ev.push({ t: +(s.t0 + u).toFixed(3), type: 'mus', inst, midi, dur, vel });
+  }
+  return ev.sort((a, b) => a.t - b.t);
+}
+window.render = render;
+window.DUR = V ? 31.5 : 54.5;
+window.EV = buildEvents();
+window.READY = true;
+render(0);
+</script>
+</body>
+</html>

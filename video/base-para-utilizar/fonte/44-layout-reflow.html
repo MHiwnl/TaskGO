@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>44 · grade se reorganiza ao filtrar</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: layout-reflow (cada item mantém a identidade e vai para a nova caixa; o espaço dos que saem se fecha).
+   Aqui: grade de 12 serviços; ao filtrar "Elétrica", os outros saem, os quatro restantes se reorganizam em fileira maior. */
+const { p, lerp, outExpo, outBack, inOutCubic, el, cores } = M;
+const servicos = [
+  ['Troca de chuveiro', 'Elétrica', 'R$ 120'], ['Limpeza pós-obra', 'Limpeza', 'R$ 240'], ['Pintura de sala', 'Pintura', 'R$ 480'], ['Montagem de guarda-roupa', 'Montagem', 'R$ 180'],
+  ['Instalação de tomada', 'Elétrica', 'R$ 90'], ['Faxina residencial', 'Limpeza', 'R$ 160'], ['Reparo de torneira', 'Encanamento', 'R$ 110'], ['Pintura de portão', 'Pintura', 'R$ 200'],
+  ['Quadro de luz', 'Elétrica', 'R$ 380'], ['Montagem de estante', 'Montagem', 'R$ 150'], ['Desentupimento', 'Encanamento', 'R$ 130'], ['Ventilador de teto', 'Elétrica', 'R$ 140']
+];
+const A = [], B = [], itens = [];
+/* grade A: 4 colunas × 3 linhas · grade B: fileira única com 4 colunas maiores para os de Elétrica */
+const colA = i => 180 + (i % 4) * 400, linA = i => 240 + Math.floor(i / 4) * 280;
+let filtro, titulo, marca, simbolo;
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 50% 30%, #0a1440 0%, #000 70%)';
+    titulo = el('div', 'position:absolute;left:180px;top:90px;font-size:56px;font-weight:700;letter-spacing:-2px', palco, 'Serviços em Recife');
+    filtro = el('div', `position:absolute;right:180px;top:100px;height:70px;line-height:70px;padding:0 36px;border-radius:40px;background:${cores.azul};font-size:34px;font-weight:700;opacity:0`, palco, 'Elétrica ✕');
+    servicos.forEach(([nome, cat, preco], i) => {
+      const c = el('div', 'position:absolute;left:0;top:0;width:360px;height:240px;border-radius:28px;background:#0e0f14;border:2px solid #23263a;padding:30px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden', palco,
+        `<div style="font-size:24px;color:${cores.azulClaro};font-weight:600;letter-spacing:1px">${cat.toUpperCase()}</div>
+         <div><div style="font-size:36px;font-weight:700;line-height:1.1">${nome}</div><div style="font-size:30px;color:${cores.cinza};margin-top:10px">a partir de ${preco}</div></div>`);
+      itens.push({ c, cat, i });
+    });
+    simbolo = el('img', 'position:absolute;left:960px;top:400px;width:160px;margin-left:-80px;opacity:0', palco); simbolo.src = M.simbolo;
+    marca = el('div', 'position:absolute;left:0;width:100%;top:600px;text-align:center;font-size:130px;font-weight:700;letter-spacing:-5px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    /* 0–0,8 os 12 cards entram em cascata (mola) · 1,3–1,6 o filtro aparece · 1,8–2,1 os que não são Elétrica encolhem e somem
+       2,1–2,8 os quatro restantes deslizam para a fileira nova (inOutCubic) e crescem */
+    const entra = itens.map(({ c, i }) => outBack(p(t, 0.05 + i * 0.05, 0.05 + i * 0.05 + 0.4)));
+    const eletrica = servicos.map(s => s[1] === 'Elétrica');
+    const saiK = inOutCubic(p(t, 1.8, 2.1));
+    const reflow = inOutCubic(p(t, 2.1, 2.8));
+    const idxEl = []; eletrica.forEach((e, i) => { if (e) idxEl.push(i); });
+    itens.forEach(({ c, i }) => {
+      const e = eletrica[i];
+      let x, y, w, h, op = entra[i];
+      if (e) {
+        const k = idxEl.indexOf(i);
+        const xa = colA(i), ya = linA(i);
+        const xb = 180 + k * 440, yb = 480, wb = 400, hb = 300;
+        x = lerp(xa, xb, reflow); y = lerp(ya, yb, reflow);
+        w = lerp(360, wb, reflow); h = lerp(240, hb, reflow);
+      } else {
+        /* encolhe no centro da própria caixa enquanto some */
+        w = 360 * (1 - saiK); h = 240 * (1 - saiK);
+        x = colA(i) + 180 * saiK; y = linA(i) + 120 * saiK; op *= (1 - saiK);
+      }
+      c.style.left = x + 'px'; c.style.top = y + 'px';
+      c.style.width = w + 'px'; c.style.height = h + 'px';
+      c.style.opacity = op;
+      c.style.transform = `scale(${lerp(0.8, 1, entra[i])})`;
+      c.style.borderColor = e && reflow > 0.5 ? cores.azul : '#23263a';
+    });
+    filtro.style.opacity = p(t, 1.3, 1.6) * (1 - p(t, 3.4, 3.7));
+    filtro.style.transform = `translateY(${(1 - outExpo(p(t, 1.3, 1.7))) * -30}px)`;
+    /* 3,3–3,8 os restantes somem, 3,8–4,3 símbolo, 4,2–4,8 marca */
+    const fim = 1 - inOutCubic(p(t, 3.3, 3.8));
+    itens.forEach(({ c, i }) => { if (eletrica[i]) c.style.opacity = fim; });
+    titulo.style.opacity = 1 - inOutCubic(p(t, 3.3, 3.8));
+    simbolo.style.opacity = p(t, 3.8, 4.2);
+    simbolo.style.transform = `scale(${lerp(0.5, 1, outBack(p(t, 3.8, 4.4)))})`;
+    marca.style.opacity = p(t, 4.2, 4.7);
+    marca.style.transform = `translateY(${(1 - outExpo(p(t, 4.2, 4.9))) * 50}px)`;
+  }
+};
+</script></body></html>

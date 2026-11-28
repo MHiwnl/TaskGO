@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>30 · kinetic beats</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: kinetic-beats (awesome-ai-motion nº 090) em 120 BPM (uma batida a cada 0.5 s, a partir de 0.3 s).
+   Cada palavra cai na batida com escala 1.4 → 1 (power3.out em 0.25 s) e alterna de lado; a anterior some na
+   hora. Um anel azul pulsa em cada batida. A última batida é a marca TaskGO. */
+const { p, lerp, outCubic, outExpo, el, cores } = M;
+const PALAVRAS = ['Peça', 'Aceite', 'Chega', 'Pague', 'Avalie', 'Rápido', 'Fácil'];
+const BATIDA = k => 0.3 + 0.5 * k;
+const TOTAL = PALAVRAS.length + 1;
+let grade, anel, itens = [];
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    grade = el('div', 'position:absolute;inset:-120px;opacity:.1;background-image:linear-gradient(90deg,#2b59ff 2px,transparent 2px),linear-gradient(#2b59ff 2px,transparent 2px);background-size:120px 120px', palco);
+    anel = el('div', `position:absolute;left:960px;top:540px;width:300px;height:300px;margin:-150px;border-radius:50%;border:6px solid ${cores.azul};opacity:0`, palco);
+    PALAVRAS.forEach(w => itens.push(el('div', 'position:absolute;left:0;width:100%;top:390px;text-align:center;font-size:230px;font-weight:800;letter-spacing:-8px;white-space:nowrap;opacity:0', palco, w)));
+    itens.push(el('div', 'position:absolute;left:0;width:100%;top:390px;text-align:center;font-size:230px;font-weight:800;letter-spacing:-8px;white-space:nowrap;opacity:0', palco,
+      `Task<span style="color:${cores.azul}">GO</span>`));
+  },
+  quadro(t) {
+    grade.style.transform = `translate(${-((t * 60) % 120)}px,${-((t * 30) % 120)}px)`;
+    /* anel: pulsa em cada batida (a última batida é a marca) */
+    let k = Math.floor((t - 0.3) / 0.5);
+    k = Math.max(0, Math.min(TOTAL - 1, k));
+    const q = p(t, BATIDA(k), BATIDA(k) + 0.45);
+    anel.style.transform = `scale(${1 + 2.2 * outExpo(q)})`;
+    anel.style.opacity = t < 0.3 ? 0 : 0.7 * (1 - q);
+    itens.forEach((el_, i) => {
+      const b = BATIDA(i);
+      const ativo = i === TOTAL - 1 ? t >= b : t >= b && t < b + 0.5;
+      const k2 = outCubic(p(t, b, b + 0.25));
+      const lado = i % 2 ? 160 : -160;
+      const x = i === TOTAL - 1 ? 0 : lerp(lado * 1.4, lado, k2);
+      el_.style.opacity = ativo ? 1 : 0;
+      el_.style.transform = `translateX(${x}px) scale(${i === TOTAL - 1 ? lerp(1.2, 1, k2) : lerp(1.4, 1, k2)})`;
+    });
+  }
+};
+</script></body></html>

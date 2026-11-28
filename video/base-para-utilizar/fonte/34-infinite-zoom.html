@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>34 · infinite zoom</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: infinite-zoom (zoom contínuo entre níveis aninhados). Cada nível é irmão no palco; o nível j
+   tem escala K^(p-j) e recorte circular de raio 1101 (metade da diagonal), então o círculo do nível j-1 é
+   exatamente o espaço do nível j. Cidade → casa → celular → botão → cidade com a marca. */
+const { p, inOutCubic, el, cores, rnd } = M;
+const K = 6, N = 4, RC = 1101;
+const niveis = [];
+const r = rnd(34);
+
+/* ruas e quarteirões da cidade, gerados com semente (mesmo desenho em todo quadro) */
+function cidadeFundo() {
+  let blocos = '';
+  for (let i = 0; i < 26; i++) {
+    const x = Math.floor(r() * 16) * 120 + 20, y = Math.floor(r() * 9) * 120 + 20;
+    blocos += `<div style="position:absolute;left:${x}px;top:${y}px;width:80px;height:80px;border-radius:12px;background:#151b30"></div>`;
+  }
+  return `<div style="position:absolute;inset:0;background:#0b0d14;background-image:linear-gradient(#1c2238 4px,transparent 4px),linear-gradient(90deg,#1c2238 4px,transparent 4px);background-size:120px 120px">${blocos}</div>`;
+}
+const cidade = `${cidadeFundo()}<div style="position:absolute;left:900px;top:480px;width:120px;height:120px;border-radius:50%;background:${cores.azul};box-shadow:0 0 80px ${cores.azul}"></div>`;
+
+const casa = `<div style="position:absolute;inset:0;background:#f4f5f8">
+  <svg width="1920" height="1080" style="position:absolute;left:0;top:0">
+    <polygon points="960,260 1180,460 740,460" fill="${cores.azul}"/>
+    <rect x="800" y="460" width="320" height="260" fill="#000"/>
+  </svg>
+  <div style="position:absolute;left:0;width:100%;top:790px;text-align:center;font-size:72px;font-weight:700;color:#000">Rua das Flores, 120</div></div>`;
+
+const celular = `<div style="position:absolute;inset:0;background:#08080a">
+  <div style="position:absolute;left:660px;top:40px;width:600px;height:1000px;border-radius:70px;background:#fff;overflow:hidden">
+    <div style="position:absolute;left:0;width:100%;top:150px;text-align:center;font-size:58px;font-weight:700;color:#000;line-height:1.1">Preciso de um<br>eletricista</div>
+    <div style="position:absolute;left:100px;top:600px;width:400px;height:110px;line-height:110px;text-align:center;border-radius:999px;background:${cores.azul};font-size:44px;font-weight:700;color:#fff">Enviar pedido</div>
+  </div></div>`;
+
+const botao = `<div style="position:absolute;inset:0;background:${cores.azul};display:grid;place-items:center">
+  <div style="text-align:center;color:#fff;font-size:120px;font-weight:700;letter-spacing:-4px">Pedido enviado</div></div>`;
+
+const cidadeMarca = `${cidadeFundo()}<div style="position:absolute;inset:0;background:rgba(0,0,0,.55)"></div>
+  <div style="position:absolute;left:0;width:100%;top:400px;text-align:center;font-size:240px;font-weight:700;letter-spacing:-10px;line-height:1;color:#fff">Task<span style="color:${cores.azul}">GO</span></div>`;
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#000';
+    [cidade, casa, celular, botao, cidadeMarca].forEach(h => niveis.push(
+      el('div', `position:absolute;inset:0;overflow:hidden;transform-origin:960px 540px;clip-path:circle(${RC}px at 960px 540px);visibility:hidden`, palco, h)));
+    niveis[0].style.clipPath = 'none';
+  },
+  quadro(t) {
+    /* p vai de 0 a 4 (um nível por unidade); o último nível ganha um leve avanço no fim */
+    const pp = N * inOutCubic(p(t, 0.4, 4.4));
+    const k = Math.floor(pp);
+    niveis.forEach((L, j) => {
+      const extra = j === N ? 1 + 0.03 * p(t, 4.4, 5) : 1;
+      L.style.visibility = j < k ? 'hidden' : 'visible';
+      L.style.transform = `scale(${(Math.pow(K, pp - j) * extra).toFixed(5)})`;
+    });
+  }
+};
+</script></body></html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>04 · desenho de linha</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: SVG line-draw (stroke-dashoffset com pathLength=1). Cinco ícones de serviço são desenhados
+   em linha azul em fileira, preenchem com um disco, depois se alinham em grade com guias e nomes; o wordmark fecha. */
+const { p, lerp, outExpo, outCubic, outBack, mola, el, cores } = M;
+const ICONES = [
+  { nome: 'Montagem', d: ['M26 96 L64 58', 'M106 36 A22 22 0 1 0 62 36 A22 22 0 1 0 106 36'] },
+  { nome: 'Pintura', d: ['M26 96 L62 60', 'M62 60 L74 48 L86 60 L74 72 Z', 'M74 48 C82 36 92 24 106 14 C98 28 90 42 86 60'] },
+  { nome: 'Limpeza', d: ['M22 58 L60 22 L98 58', 'M36 52 L36 98 L84 98 L84 52', 'M52 98 L52 74 L68 74 L68 98'] },
+  { nome: 'Elétrica', d: ['M70 12 L34 66 L58 66 L48 108 L86 50 L62 50 Z'] },
+  { nome: 'Encanador', d: ['M60 14 C60 14 30 54 30 76 A30 30 0 0 0 90 76 C90 54 60 14 60 14 Z'] }
+];
+const PASSO = 330, Y_GRADE = 430;
+let itens = [], guias = [], marca;
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 50% 45%, #0a1440 0%, #000 65%)';
+    const linhas = ICONES.map((_, i) => { const x = 960 + (i - 2) * PASSO; return `<path d="M${x} 140 L${x} 940" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" fill="none" stroke="${cores.azul}" stroke-width="2"/>`; }).join('');
+    el('div', 'position:absolute;inset:0', palco, `<svg viewBox="0 0 1920 1080" width="1920" height="1080">${linhas}</svg>`);
+    guias = [...palco.querySelectorAll('path')];
+    ICONES.forEach((ic, i) => {
+      const caixa = el('div', 'position:absolute;left:0;top:0;width:260px;height:260px', palco);
+      const bola = el('div', `position:absolute;left:30px;top:30px;width:200px;height:200px;border-radius:50%;background:${cores.azul};box-shadow:0 0 70px rgba(43,89,255,.7);transform:scale(0)`, caixa);
+      const ico = el('div', 'position:absolute;left:30px;top:30px;width:200px;height:200px', caixa,
+        `<svg viewBox="0 0 120 120" width="200" height="200" fill="none" stroke="${cores.azul}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">${ic.d.map(d => `<path d="${d}" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>`).join('')}</svg>`);
+      const rot = el('div', 'position:absolute;left:0;top:240px;width:260px;text-align:center;font-size:40px;font-weight:600;opacity:0', caixa, ic.nome);
+      itens.push({ caixa, bola, svg: ico.querySelector('svg'), paths: [...ico.querySelectorAll('path')], rot, ini: [960 + (i - 2) * 300, 470 + (i % 2 ? 70 : -50)], i });
+    });
+    marca = el('div', 'position:absolute;left:0;width:100%;top:800px;text-align:center;font-size:96px;font-weight:700;letter-spacing:-3px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    /* 0.3–2.1 desenho em fileira · 2.1–2.9 disco azul preenche · 2.9–3.7 ícones se alinham em grade e guias se desenham
+       · 3.8–4.2 nomes · 4.1–5 wordmark; depois os ícones flutuam de leve */
+    itens.forEach(it => {
+      const ini = 0.3 + it.i * 0.2;
+      const q = outCubic(p(t, ini, ini + 1.0));
+      it.paths.forEach(pt => pt.style.strokeDashoffset = (1 - q).toFixed(4));
+      const f = outBack(p(t, 2.1 + it.i * 0.08, 2.6 + it.i * 0.08));
+      it.bola.style.transform = `scale(${Math.max(0, f).toFixed(4)})`;
+      it.svg.style.stroke = f > 0.5 ? '#fff' : cores.azul;
+      const mv = outBack(p(t, 2.9 + it.i * 0.05, 3.7 + it.i * 0.05));
+      const x = lerp(it.ini[0], 960 + (it.i - 2) * PASSO, mv), y = lerp(it.ini[1], Y_GRADE, mv) + 6 * Math.sin(t * 2 + it.i) * p(t, 3.7, 4.2);
+      it.caixa.style.transform = `translate(${(x - 130).toFixed(1)}px,${(y - 130).toFixed(1)}px)`;
+      it.rot.style.opacity = p(t, 3.8 + it.i * 0.06, 4.2 + it.i * 0.06).toFixed(3);
+    });
+    guias.forEach((pt, i) => {
+      pt.style.strokeDashoffset = (1 - outCubic(p(t, 3.0 + i * 0.05, 3.6 + i * 0.05))).toFixed(4);
+      pt.style.opacity = (0.35 * (1 - 0.6 * p(t, 4.4, 5))).toFixed(3);
+    });
+    marca.style.opacity = p(t, 4.1, 4.3).toFixed(3);
+    marca.style.transform = `translateY(${((1 - mola(t - 4.1, 2, 6)) * 60).toFixed(1)}px)`;
+  }
+};
+</script></body></html>

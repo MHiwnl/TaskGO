@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Planilha do Carlos</title>
+<style>
+@font-face { font-family: 'InterTG'; src: url('fonts/Inter-Regular.ttf'); font-weight: 400; }
+@font-face { font-family: 'InterTG'; src: url('fonts/Inter-Medium.ttf'); font-weight: 500; }
+@font-face { font-family: 'InterTG'; src: url('fonts/Inter-Bold.ttf'); font-weight: 700; }
+html, body { margin: 0; background: #000; overflow: hidden; }
+canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="dados.js"></script>
+<script src="tl.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // Duas composições da mesma história: ?v=916 é o 9:16 (1080×1920), sem ?v é o 16:9 (1920×1080).
+  var V = /[?&]v=916(&|$)/.test(location.search);
+  var W = V ? 1080 : 1920, H = V ? 1920 : 1080;
+  var c = document.getElementById('c');
+  c.width = W; c.height = H;
+  var ctx = c.getContext('2d');
+
+  var RH = 34, NR = 33, NMAX = 80, NCOLS = 60;          // célula ~2,9:1 (STYLE §1)
+  var COLS = 'ABCDEFGHIJKL';
+  var CW = [84, 120, 104, 124, 84, 96, 96, 84, 76, 30, 170, 116];
+  var AX0 = 46, AY0 = 128, AX1 = W, AY1 = H - 60;
+  var SX = (AX0 + AX1) / 2, SY = (AY0 + AY1) / 2;
+  var FONT = '"InterTG", "Segoe UI", Arial, sans-serif';
+  var INK = '#17120a', RED = '#e8382d', INDIGO = '#2a2f6c', AMBER = '#ffb21f', BRAND = '#2b59ff';
+  var SHELL = '#dcdbd5', SHELL2 = '#f1f0eb';
+  var REFCOR = { E: INDIGO, F: RED, G: AMBER, I: INK };
+  var SUBPX = V ? 22 : 26;
+
+  function colName(i) { return (i >= 26 ? String.fromCharCode(65 + Math.floor(i / 26) - 1) : '') + String.fromCharCode(65 + i % 26); }
+  function cwOf(i) { return i < 12 ? CW[i] : 96; }
+  function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+  function sstep(x) { x = clamp01(x); return x * x * (3 - 2 * x); }
+  function easeOut(x) { x = clamp01(x); return 1 - Math.pow(1 - x, 3); }
+
+  // Dados da planilha (dados.js) e células.
+  var CELL = {};
+  ['Data', 'Cliente', 'Bairro', 'Serviço', 'Valor', 'Pagou?', 'Deslocamento', 'Horário', 'Nota']
+    .forEach(function (h, i) { CELL[COLS[i] + '1'] = h; });
+  window.DADOS.forEach(function (row, i) {
+    row.forEach(function (v, k) { if (v !== '') CELL[COLS[k] + (i + 2)] = v; });
+  });
+  CELL.K2 = 'Pagou? em branco'; CELL.K3 = 'A receber'; CELL.K4 = 'Total de março'; CELL.K5 = 'Notas 5 estrelas';
+
+  // Linhas de narração (tl.js) com início e duração reais.
+  var LINES = V ? window.TLV.ver : window.TLV.lan;
+  function S(id) { for (var i = 0; i < LINES.length; i++) if (LINES[i].id === id) return LINES[i].t; throw new Error('sem ' + id); }
+  function E(id) { for (var i = 0; i < LINES.length; i++) if (LINES[i].id === id) return LINES[i].t + LINES[i].dur; throw new Error('sem ' + id); }
+
+  // Roteiro de tempos: 16:9 e 9:16 têm marcos próprios, ancorados nas falas.
+  var B, FORM, SEL, CAMK, DUR, LAST = LINES[LINES.length - 1];
+  if (!V) {
+    B = {
+      sweep0: 2.0, sweepStep: 0.09,
+      u0: S('l05') + 0.4, hora: S('l07'),
+      land0: S('l08') + 0.2, sort0: S('l09') + 0.2, sort1: S('l09') + 2.5,
+      card: S('l11') + 0.2
+    };
+    FORM = {
+      L2: { f: '=CONTAR.VAZIO(F2:F25)', typeT: 0.3, typeDur: 1.2, v: '7', popT: 1.5 },
+      L3: { f: '=SOMASE(F2:F25;"";E2:E25)', typeT: S('l03') - 0.6, typeDur: 1.2, v: '2.450', popT: S('l03') + 0.5 },
+      L4: { f: '=SOMA(E2:E25)', typeT: S('l04') - 0.9, typeDur: 0.9, v: '6.210', popT: S('l04') + 0.1,
+            f2: '=SOMA(E2:E25)-SOMA(G2:G25)', type2T: S('l05') + 1.2, type2Dur: 1.0, v2: '5.266', pop2T: S('l05') + 2.3 },
+      L5: { f: '=CONT.SE(I2:I25;5)', typeT: S('l10') - 0.5, typeDur: 0.5, v: '13', popT: S('l10') + 0.2,
+            f2: '=CONT.SE(I2:I33;5)', type2T: S('l10') + 1.8, type2Dur: 0.8, v2: '21', pop2T: S('l10') + 2.6 }
+    };
+    SEL = [{ t: 0, c: 'L', r: 2 }, { t: S('l03') - 0.7, c: 'L', r: 3 }, { t: S('l04') - 1.0, c: 'L', r: 4 },
+           { t: S('l10') - 0.6, c: 'L', r: 5 }, { t: B.card, c: 'K', r: 8, card: true }];
+    CAMK = [
+      { t: 0, m: 'cell', c: 'L', r: 2, z: 3.2 },
+      { t: 1.2, m: 'cell', c: 'L', r: 2, z: 3.2 },
+      { t: 4.6, m: 'mid', z: 0.72 },
+      { t: 999, m: 'mid', z: 0.72 }
+    ];
+    DUR = Math.ceil(E('l11') + 1.7);
+  } else {
+    B = {
+      sweep0: 1.4, sweepStep: 0.09,
+      u0: S('v03') + 0.2, hora: null,
+      land0: S('v04') + 0.2, sort0: S('v04') + 2.4, sort1: S('v04') + 4.2,
+      card: S('v06') + 0.2
+    };
+    FORM = {
+      L2: { f: '=CONTAR.VAZIO(F2:F25)', typeT: S('v01'), typeDur: 0.9, v: '7', popT: S('v01') + 1.0 },
+      L3: { f: '=SOMASE(F2:F25;"";E2:E25)', typeT: S('v02') - 0.1, typeDur: 1.0, v: '2.450', popT: S('v02') + 1.1 },
+      L4: { f: '=SOMA(E2:E25)-SOMA(G2:G25)', typeT: S('v03') + 1.2, typeDur: 0.9, v: '5.266', popT: S('v03') + 2.1 },
+      L5: { f: '=CONT.SE(I2:I25;5)', typeT: S('v05') - 0.4, typeDur: 0.4, v: '13', popT: S('v05') + 0.1,
+            f2: '=CONT.SE(I2:I33;5)', type2T: S('v05') + 1.6, type2Dur: 0.7, v2: '21', pop2T: S('v05') + 2.3 }
+    };
+    SEL = [{ t: 0, c: 'L', r: 2 }, { t: S('v02') - 0.3, c: 'L', r: 3 }, { t: S('v03') + 0.8, c: 'L', r: 4 },
+           { t: S('v05') - 0.6, c: 'L', r: 5 }, { t: B.card, c: 'K', r: 8, card: true }];
+    CAMK = [
+      { t: 0, m: 'cell', c: 'L', r: 2, z: 2.4 },
+      { t: 1.7, m: 'cell', c: 'L', r: 2, z: 2.4 },
+      { t: 2.4, m: 'mid', z: 1.1 },
+      { t: S('v02') + 0.5, m: 'cell', c: 'L', r: 3, z: 2.2 },
+      { t: S('v02') + 1.6, m: 'cell', c: 'L', r: 3, z: 2.2 },
+      { t: S('v02') + 2.4, m: 'mid', z: 1.1 },
+      { t: S('v03') + 1.0, m: 'cell', c: 'L', r: 4, z: 2.2 },
+      { t: S('v03') + 2.6, m: 'cell', c: 'L', r: 4, z: 2.2 },
+      { t: S('v04') - 0.2, m: 'mid', z: 1.1 },
+      { t: S('v05') - 1.4, m: 'mid', z: 1.1 },
+      { t: S('v05') - 0.6, m: 'cell', c: 'L', r: 5, z: 2.2 },
+      { t: S('v05') + 1.5, m: 'cell', c: 'L', r: 5, z: 2.2 },
+      { t: S('v05') + 2.5, m: 'mid', z: 1.1 },
+      { t: S('v06') - 0.3, m: 'card', z: 1.5 },
+      { t: 999, m: 'card', z: 1.5 }
+    ];
+    DUR = Math.ceil(E('v06') + 3.4);
+  }
+
+  // Sem colunas além da L no 9:16 não há o que mostrar à direita: a mesa cabe em A–I.
+  var TABLE_W_KEY = V ? 9 : 12;
+
+  var SUBS = LINES.map(function (l) { return { t0: l.t, t1: l.t + l.dur + 0.6, text: l.text }; });
+
+  // Largura de coluna: G (Deslocamento) oculta até u0; reabrir mostra ## e depois os valores.
+  function wOf(i, t) {
+    if (i !== 6) return cwOf(i);
+    var u = B.u0;
+    if (t < u) return 0;
+    if (t < u + 0.4) return 16 * (t - u) / 0.4;
+    if (t < u + 1.4) return 16 + 80 * sstep((t - u - 0.4) / 1.0);
+    return 96;
+  }
+  function layout(t) {
+    var X = [0];
+    for (var i = 0; i < NCOLS; i++) X.push(X[i] + wOf(i, t));
+    return X;
+  }
+
+  // Ordem da ordenação por distância (Deslocamento crescente); só A–I se move, como numa ordenação real.
+  var NP = {};
+  (function () {
+    var idx = [];
+    for (var d = 2; d <= 33; d++) idx.push(d);
+    idx.sort(function (a, b) { return (+CELL['G' + a] - +CELL['G' + b]) || (a - b); });
+    idx.forEach(function (d, i) { NP[d] = 2 + i; });
+  })();
+  function rowPos(d, t) {
+    if (d < 2 || t < B.sort0) return d;
+    if (t >= B.sort1) return NP[d];
+    var e = sstep((t - B.sort0) / (B.sort1 - B.sort0));
+    return Math.round(d + (NP[d] - d) * e);
+  }
+
+  function paintT(r) { return B.sweep0 + (r - 2) * B.sweepStep; }
+  function landT(r) { return B.land0 + (r - 26) * 0.25; }
+  var LAND_DUR = 0.5;
+
+  function keyC(k, X) {
+    if (k.m === 'cell') {
+      var i = COLS.indexOf(k.c);
+      return { x: X[i] + (X[i + 1] - X[i]) / 2, y: (k.r - 1) * RH + RH / 2 };
+    }
+    if (k.m === 'card') return { x: (X[10] + X[16]) / 2, y: 9.5 * RH };
+    // Planilha inteira; no 16:9 inclui K–L, no 9:16 fica em A–I. Um pouco abaixo do centro.
+    return { x: X[TABLE_W_KEY] / 2, y: NR * RH / 2 + 56 };
+  }
+  // Não rola acima da linha 1 nem à esquerda da coluna A; sem limite à direita e embaixo.
+  function clampC(c, half, size) {
+    var lo = half, hi = size - half;
+    if (lo > hi) return c;
+    return Math.min(Math.max(c, lo), hi);
+  }
+  function camAt(t, X) {
+    var a = CAMK[0], b = CAMK[CAMK.length - 1];
+    for (var i = 0; i < CAMK.length - 1; i++) {
+      if (t >= CAMK[i].t && t < CAMK[i + 1].t) { a = CAMK[i]; b = CAMK[i + 1]; break; }
+    }
+    var e = b.t === a.t ? 1 : sstep((t - a.t) / (b.t - a.t));
+    var pa = keyC(a, X), pb = keyC(b, X);
+    var z = Math.exp(Math.log(a.z) + (Math.log(b.z) - Math.log(a.z)) * e);
+    var cx = pa.x + (pb.x - pa.x) * e, cy = pa.y + (pb.y - pa.y) * e;
+    return {
+      z: z,
+      cx: clampC(cx, (AX1 - AX0) / 2 / z, Infinity),
+      cy: clampC(cy, (AY1 - AY0) / 2 / z, Infinity)
+    };
+  }
+  function sxOf(x, cam) { return (x - cam.cx) * cam.z + SX; }
+  function syOf(y, cam) { return (y - cam.cy) * cam.z + SY; }
+
+  function selAt(t) {
+    var s = SEL[0];
+    for (var i = 0; i < SEL.length; i++) if (t >= SEL[i].t) s = SEL[i];
+    return s;
+  }
+  function typed(t, txt, t0, d) {
+    if (t < t0) return '';
+    if (t >= t0 + d) return txt;
+    return txt.slice(0, Math.floor((t - t0) / d * txt.length));
+  }
+  function formulaBar(key, t) {
+    var s = FORM[key];
+    var use2 = s.f2 !== undefined && t >= s.type2T;
+    var txt = use2 ? s.f2 : s.f;
+    var t0 = use2 ? s.type2T : s.typeT, d = use2 ? s.type2Dur : s.typeDur;
+    return { text: typed(t, txt, t0, d), full: t >= t0 + d, typing: t >= t0 && t < t0 + d };
+  }
+  function formValue(key, t) {
+    var s = FORM[key], v = null, pt = null;
+    if (t >= s.popT) { v = s.v; pt = s.popT; }
+    if (s.v2 !== undefined && t >= s.pop2T) { v = s.v2; pt = s.pop2T; }
+    if (v === null) return null;
+    var dt = t - pt;
+    return { v: v, s: dt < 0.3 ? 1 + 0.3 * (1 - dt / 0.3) : 1 };
+  }
+
+  function drawGrid(cam) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(AX0, AY0, AX1 - AX0, AY1 - AY0);
+    var X = curX;
+    for (var r = 1; r <= NMAX; r++) {
+      for (var c = 0; c < NCOLS; c++) {
+        var w = X[c + 1] - X[c];
+        if (w <= 0) continue;
+        var x0 = sxOf(X[c], cam), y0 = syOf((r - 1) * RH, cam), cw = w * cam.z, ch = RH * cam.z;
+        if (x0 > AX1 || x0 + cw < AX0 || y0 > AY1 || y0 + ch < AY0) continue;
+        ctx.fillStyle = r === 1 ? SHELL2 : '#fff';
+        ctx.fillRect(x0, y0, cw, ch);
+        ctx.strokeStyle = '#dad9d3'; ctx.lineWidth = 1;
+        ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(cw) - 1, Math.round(ch) - 1);
+      }
+    }
+  }
+
+  var curX = null;
+
+  function drawData(t, X, cam) {
+    for (var d = 1; d <= 33; d++) {
+      for (var c = 0; c < 12; c++) {
+        var w = X[c + 1] - X[c];
+        if (w <= 0) continue;
+        var p = (c < 9 && d >= 2) ? rowPos(d, t) : d;
+        var key = COLS[c] + d, dy = 0, fill = null, flash = false;
+        if (d === 1) fill = SHELL2;
+        if (d >= 26 && d <= 33) {
+          var st = landT(d);
+          if (t < st) continue;
+          if (t < st + LAND_DUR) dy = 620 * (1 - easeOut((t - st) / LAND_DUR));
+          else if (c < 9) fill = INDIGO;
+        }
+        if (d >= 2 && d <= 25 && c === 5 && CELL[key] === undefined) {
+          var pt = paintT(d);
+          if (t >= pt) { fill = RED; flash = t - pt < 0.12; }
+        }
+        if (c === 7 && (d === 11 || d === 12) && B.hora !== null && t >= B.hora && fill === null) fill = AMBER;
+        var q = { x: sxOf(X[c], cam), y: syOf((p - 1) * RH + dy, cam), w: w * cam.z, h: RH * cam.z };
+        if (q.x > AX1 || q.x + q.w < AX0 || q.y > AY1 || q.y + q.h < AY0) continue;
+        ctx.fillStyle = fill || '#fff';
+        ctx.fillRect(q.x, q.y, q.w, q.h);
+        if (flash) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(q.x, q.y, q.w, q.h); }
+        ctx.strokeStyle = fill && fill !== SHELL2 ? 'rgba(6,4,18,0.42)' : '#dad9d3';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(Math.round(q.x) + 0.5, Math.round(q.y) + 0.5, Math.round(q.w) - 1, Math.round(q.h) - 1);
+
+        var txt = CELL[key], big = false, sc = 1, fs = 11 * cam.z;
+        if (c === 10 && txt !== undefined) fs = 14 * cam.z;
+        if (c === 11 && FORM[key]) {
+          var fv = formValue(key, t);
+          if (!fv) continue;
+          txt = fv.v; sc = fv.s; big = true; fs = 36 * cam.z * sc;
+        }
+        if (txt === undefined || txt === '' || fs < 6.5) continue;
+        ctx.save();
+        ctx.font = (d === 1 ? '700 ' : '400 ') + fs + 'px ' + FONT;
+        var numeric = big || /^[\d.]+$/.test(txt);
+        var hashed = false;
+        if (!big && numeric && ctx.measureText(txt).width > q.w - 6 * cam.z) { txt = '##'; hashed = true; }
+        ctx.beginPath(); ctx.rect(q.x, q.y, q.w, q.h); ctx.clip();
+        ctx.fillStyle = fill === INDIGO ? '#fff' : INK;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = hashed ? 'center' : numeric ? 'right' : 'left';
+        var tx = hashed ? q.x + q.w / 2 : numeric ? q.x + q.w - 4 * cam.z : q.x + 4 * cam.z;
+        ctx.fillText(txt, tx, q.y + q.h / 2);
+        ctx.restore();
+      }
+    }
+  }
+
+  // Cartão final: célula mesclada K8:P12, cresce a partir do centro.
+  function drawCard(t, X, cam) {
+    if (t < B.card) return;
+    var e = sstep((t - B.card) / 0.6), k = 0.2 + 0.8 * e;
+    var x0 = sxOf(X[10], cam), x1 = sxOf(X[16], cam), y0 = syOf(7 * RH, cam), y1 = syOf(12 * RH, cam);
+    var mx = (x0 + x1) / 2, my = (y0 + y1) / 2, hw = (x1 - x0) / 2 * k, hh = (y1 - y0) / 2 * k;
+    var rx = mx - hw, ry = my - hh, rw = hw * 2, rh = hh * 2;
+    ctx.fillStyle = '#fff'; ctx.fillRect(rx, ry, rw, rh);
+    ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.strokeRect(rx + 1.5, ry + 1.5, rw - 3, rh - 3);
+    if (e < 0.9) return;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+    var fs = 46 * cam.z;
+    ctx.font = '700 ' + fs + 'px ' + FONT;
+    var wT = ctx.measureText('Task').width, wG = ctx.measureText('GO').width;
+    var x = mx - (wT + wG) / 2;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = INK; ctx.fillText('Task', x, my - 14 * cam.z);
+    ctx.fillStyle = BRAND; ctx.fillText('GO', x + wT, my - 14 * cam.z);
+    ctx.fillStyle = INK; ctx.font = '400 ' + (22 * cam.z) + 'px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillText('Serviço perto de casa, com preço combinado.', mx, my + 40 * cam.z);
+    ctx.restore();
+  }
+
+  // Referências coloridas: cada intervalo da fórmula completa ganha a cor da sua coluna.
+  function drawRefs(X, cam, bar) {
+    if (!bar.full || bar.text.charAt(0) !== '=') return;
+    var re = /([A-L])(\d+):([A-L])(\d+)/g, m;
+    while ((m = re.exec(bar.text))) {
+      var a = COLS.indexOf(m[1]), b = COLS.indexOf(m[3]);
+      if (X[a + 1] - X[a] <= 0) continue;
+      var r1 = +m[2], r2 = +m[4];
+      var x0 = sxOf(X[a], cam), y0 = syOf((r1 - 1) * RH, cam);
+      var x1 = sxOf(X[b + 1], cam), y1 = syOf(r2 * RH, cam);
+      ctx.strokeStyle = REFCOR[m[1]] || INK; ctx.lineWidth = 2;
+      ctx.strokeRect(x0 + 1, y0 + 1, x1 - x0 - 2, y1 - y0 - 2);
+    }
+  }
+
+  function drawSelection(t, X, cam, s) {
+    var c = COLS.indexOf(s.c), q;
+    if (s.card) {
+      q = { x: sxOf(X[10], cam), y: syOf(7 * RH, cam), w: (X[16] - X[10]) * cam.z, h: 5 * RH * cam.z };
+      if (t < B.card + 0.6) return;
+    } else {
+      if (X[c + 1] - X[c] <= 0) return;
+      q = { x: sxOf(X[c], cam), y: syOf((s.r - 1) * RH, cam), w: (X[c + 1] - X[c]) * cam.z, h: RH * cam.z };
+    }
+    ctx.save();
+    ctx.strokeStyle = INK; ctx.lineWidth = 3;
+    ctx.strokeRect(q.x + 1.5, q.y + 1.5, q.w - 3, q.h - 3);
+    if (!s.card) {
+      ctx.setLineDash([6, 4]); ctx.lineDashOffset = -(t * 20); ctx.lineWidth = 1;
+      ctx.strokeRect(q.x - 2.5, q.y - 2.5, q.w + 5, q.h + 5);
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#fff'; ctx.lineWidth = 1;
+      ctx.fillRect(q.x + q.w - 5, q.y + q.h - 5, 9, 9);
+      ctx.strokeRect(q.x + q.w - 5.5, q.y + q.h - 5.5, 10, 10);
+    }
+    ctx.restore();
+  }
+
+  function drawHeaders(X, cam) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(AX0, 104, AX1 - AX0, 24); ctx.clip();
+    ctx.fillStyle = SHELL2; ctx.fillRect(AX0, 104, AX1 - AX0, 24);
+    ctx.font = '500 12px ' + FONT; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (var i = 0; i < NCOLS; i++) {
+      var w = X[i + 1] - X[i];
+      if (w <= 0) continue;
+      var x0 = sxOf(X[i], cam), cw = w * cam.z;
+      if (x0 > AX1 || x0 + cw < AX0) continue;
+      ctx.strokeStyle = '#b9b8b0'; ctx.lineWidth = 1;
+      ctx.strokeRect(Math.round(x0) + 0.5, 104.5, Math.round(cw) - 1, 23);
+      ctx.fillText(colName(i), x0 + cw / 2, 116);
+    }
+    ctx.restore();
+    if (X[7] - X[6] <= 0.5) {
+      var fx = sxOf(X[6], cam);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(AX0, 104, AX1 - AX0, AY1 - 104); ctx.clip();
+      ctx.strokeStyle = INK; ctx.lineWidth = 1;
+      [fx - 2.5, fx + 2.5].forEach(function (x) {
+        ctx.beginPath(); ctx.moveTo(x + 0.5, 104); ctx.lineTo(x + 0.5, AY1); ctx.stroke();
+      });
+      ctx.restore();
+    }
+  }
+
+  function drawRowHeaders(cam) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, AY0, AX0, AY1 - AY0); ctx.clip();
+    ctx.fillStyle = SHELL2; ctx.fillRect(0, AY0, AX0, AY1 - AY0);
+    ctx.font = '500 12px ' + FONT; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (var r = 1; r <= NMAX; r++) {
+      var y0 = syOf((r - 1) * RH, cam), h = RH * cam.z;
+      if (y0 > AY1 || y0 + h < AY0) continue;
+      ctx.strokeStyle = '#b9b8b0'; ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, Math.round(y0) + 0.5, AX0 - 1, Math.round(h) - 1);
+      ctx.fillText(String(r), AX0 / 2, y0 + h / 2);
+    }
+    ctx.restore();
+    ctx.fillStyle = SHELL; ctx.fillRect(0, 104, AX0, 24);
+  }
+
+  function drawShell(t, s, bar, selKey) {
+    ctx.fillStyle = SHELL; ctx.fillRect(0, 0, W, 30);
+    ctx.fillStyle = INK; ctx.font = '400 12px ' + FONT; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillText('Controle 2026 - Planilha', 12, 15);
+    ctx.fillStyle = SHELL2; ctx.fillRect(0, 30, W, 36);
+    ['Arquivo', 'Início', 'Inserir', 'Fórmulas', 'Dados', 'Exibir'].forEach(function (lab, i) {
+      ctx.fillText(lab, 16 + i * 96, 48);
+    });
+    ctx.fillStyle = SHELL2; ctx.fillRect(0, 66, W, 38);
+    ctx.fillStyle = '#fff'; ctx.fillRect(6, 72, 120, 26);
+    ctx.strokeStyle = '#b9b8b0'; ctx.strokeRect(6.5, 72.5, 119, 25);
+    ctx.fillStyle = INK; ctx.fillText(selKey, 14, 85);
+    ctx.fillText('fx', 140, 85);
+    ctx.fillStyle = '#fff'; ctx.fillRect(170, 72, W - 180, 26);
+    ctx.strokeRect(170.5, 72.5, W - 181, 25);
+    ctx.font = '400 26px ' + FONT;
+    var parts = bar.text.split(/([A-L]\d+:[A-L]\d+)/), x = 178;
+    parts.forEach(function (p) {
+      if (!p) return;
+      var m = /^([A-L])\d+:/.exec(p);
+      ctx.fillStyle = m && bar.full ? (REFCOR[m[1]] || INK) : INK;
+      ctx.fillText(p, x, 86);
+      x += ctx.measureText(p).width;
+    });
+    if (bar.typing && Math.floor(t * 4) % 2 === 0) { ctx.fillStyle = INK; ctx.fillRect(x + 1, 76, 2, 22); }
+
+    ctx.fillStyle = SHELL; ctx.fillRect(0, AY1, W, 24);
+    ctx.font = '400 12px ' + FONT; ctx.fillStyle = '#fff';
+    ctx.fillRect(40, AY1 + 2, 130, 22);
+    ctx.fillStyle = INK; ctx.fillText('Controle 2026', 52, AY1 + 13);
+    ctx.fillStyle = SHELL2; ctx.fillRect(172, AY1 + 2, 80, 22); ctx.fillStyle = INK; ctx.fillText('Resumo', 184, AY1 + 13);
+    ctx.fillStyle = SHELL; ctx.fillRect(0, AY1 + 24, W, H - AY1 - 24);
+    ctx.fillStyle = INK;
+    var status = 'Pronto';
+    if (t >= B.land0) {
+      var n = 0;
+      for (var r = 26; r <= 33; r++) if (t >= landT(r) + LAND_DUR) n++;
+      status = 'Linhas novas: ' + n;
+    } else if (t >= B.sweep0) {
+      var k = 0;
+      for (var r2 = 2; r2 <= 25; r2++) if (CELL['F' + r2] === undefined && t >= paintT(r2)) k++;
+      status = 'Contagem: ' + k;
+    }
+    ctx.fillText(status, 14, H - 18);
+  }
+
+  function drawSub(t) {
+    for (var i = 0; i < SUBS.length; i++) {
+      var s = SUBS[i];
+      if (t < s.t0 || t > s.t1) continue;
+      ctx.font = '400 ' + SUBPX + 'px ' + FONT;
+      var w = ctx.measureText(s.text).width + 36, x = V ? 40 : 64, h = SUBPX + 20, y = AY1 - h - 12;
+      ctx.fillStyle = '#fff6b0'; ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.fillStyle = RED;
+      ctx.beginPath(); ctx.moveTo(x + 2, y + h - 2); ctx.lineTo(x + 16, y + h - 2); ctx.lineTo(x + 2, y + h - 16); ctx.fill();
+      ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(s.text, x + 18, y + h / 2);
+      return;
+    }
+  }
+
+  function render(t) {
+    t = Math.max(0, Math.min(DUR, +t || 0));
+    ctx.fillStyle = SHELL; ctx.fillRect(0, 0, W, H);
+    var X = layout(t);
+    curX = X;
+    var cam = camAt(t, X);
+    var s = selAt(t);
+    var selKey = s.card ? 'K8' : COLS[COLS.indexOf(s.c)] + s.r;
+    var bar = FORM[selKey] ? formulaBar(selKey, t) : { text: s.card ? '' : (CELL[selKey] || ''), full: true, typing: false };
+    ctx.save();
+    ctx.beginPath(); ctx.rect(AX0, AY0, AX1 - AX0, AY1 - AY0); ctx.clip();
+    drawGrid(cam);
+    drawData(t, X, cam);
+    drawCard(t, X, cam);
+    drawRefs(X, cam, bar);
+    drawSelection(t, X, cam, s);
+    ctx.restore();
+    drawHeaders(X, cam);
+    drawRowHeaders(cam);
+    drawShell(t, s, bar, selKey);
+    drawSub(t);
+  }
+
+  // Eventos de som e de legenda, a partir dos mesmos instantes que desenham a tela (events.mjs exporta window.EV).
+  function addTyped(ev, k, txt, t0, d) {
+    for (var i = 0; i < txt.length; i++) ev.push({ t: +(t0 + i * d / txt.length).toFixed(3), type: 'key', cell: k, ch: txt.charAt(i) });
+    ev.push({ t: +(t0 + d).toFixed(3), type: 'enter', cell: k });
+  }
+  function buildEV() {
+    var ev = [];
+    LINES.forEach(function (l) {
+      ev.push({ t: +l.t.toFixed(3), type: 'voice', id: l.id, dur: l.dur });
+      ev.push({ t: +l.t.toFixed(3), t1: +(l.t + l.dur + 0.6).toFixed(3), type: 'sub', text: l.text });
+    });
+    Object.keys(FORM).forEach(function (k) {
+      var s = FORM[k];
+      addTyped(ev, k, s.f, s.typeT, s.typeDur);
+      if (s.f2 !== undefined) addTyped(ev, k, s.f2, s.type2T, s.type2Dur);
+      ev.push({ t: +s.popT.toFixed(3), type: 'pop', cell: k, v: s.v });
+      if (s.v2 !== undefined) {
+        ev.push({ t: +s.pop2T.toFixed(3), type: 'pop', cell: k, v: s.v2 });
+        ev.push({ t: +s.pop2T.toFixed(3), type: 'ding' });
+      }
+    });
+    SEL.forEach(function (s, i) { if (i > 0) ev.push({ t: +s.t.toFixed(3), type: 'hop' }); });
+    for (var d = 2; d <= 25; d++) if (CELL['F' + d] === undefined) ev.push({ t: +paintT(d).toFixed(3), type: 'blip' });
+    for (var k2 = 0; k2 < 20; k2++) ev.push({ t: +(B.u0 + k2 * 0.07).toFixed(3), type: 'ratchet' });
+    for (var r = 26; r <= 33; r++) {
+      ev.push({ t: +landT(r).toFixed(3), type: 'fly' });
+      ev.push({ t: +(landT(r) + LAND_DUR).toFixed(3), type: 'land' });
+    }
+    if (B.hora !== null) ev.push({ t: +B.hora.toFixed(3), type: 'hora' });
+    var last = {};
+    for (var tt = B.sort0; tt <= B.sort1 + 1e-6; tt += 1 / 24) {
+      for (var dd = 2; dd <= 33; dd++) {
+        var p = rowPos(dd, tt);
+        if (last[dd] !== undefined && last[dd] !== p) ev.push({ t: +tt.toFixed(3), type: 'slide' });
+        last[dd] = p;
+      }
+    }
+    ev.push({ t: +(B.land0 - 0.45).toFixed(3), type: 'cut' });
+    ev.push({ t: +B.land0.toFixed(3), type: 'musicon' });
+    ev.push({ t: +B.card.toFixed(3), type: 'whoosh' });
+    ev.push({ t: +(B.card + 0.6).toFixed(3), type: 'cardpop' });
+    ev.sort(function (a, b) { return a.t - b.t; });
+    return ev;
+  }
+
+  window.render = render;
+  window.DUR = DUR;
+  window.EV = buildEV();
+  window.SUBS = SUBS;
+  render(0);
+  Promise.all([
+    document.fonts.load('400 26px InterTG'),
+    document.fonts.load('500 12px InterTG'),
+    document.fonts.load('700 46px InterTG')
+  ]).then(function () { window.READY = true; }, function () { window.READY = true; });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>filme 1 · pedido completo (22 s)</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Filme 1 · um take de 22 s. O celular digita, escolhe e chama; a câmera sai do celular, mergulha no mapa
+   (o pin do Carlos percorre a rota), volta ao celular para o Pix e as estrelas; tudo recolhe num ponto azul
+   que vira o símbolo e a marca. Mundo = wrapper com translate/scale; a câmera é função de t. */
+const { p, lerp, outExpo, outCubic, inOutCubic, mola, el, cores, clamp } = M;
+const lin = x => x, sine = x => -(Math.cos(Math.PI * x) - 1) / 2;
+const AZ = cores.azul, VD = cores.verde, CZ = cores.cinza;
+const MAPA_X = 2100;                     // o mapa fica à direita do celular, no mesmo mundo
+const ROTA = 'M720 640 L720 520 L1040 520 L1040 300 L1380 300';   // em unidades do mapa
+const CAM = [
+  { t: 0, x: 960, y: 540, s: 1 },
+  { t: 3.2, x: 960, y: 420, s: 1.08, e: sine },
+  { t: 5.0, x: 960, y: 520, s: 1.12, e: inOutCubic },
+  { t: 7.0, x: 960, y: 560, s: 1, e: inOutCubic },
+  { t: 8.2, x: 1600, y: 540, s: 0.5, e: inOutCubic },    // sai do celular
+  { t: 9.2, x: 2820, y: 640, s: 2.3, e: inOutCubic },    // mergulha no mapa, no pin do Carlos
+  { t: 16.0, x: 3480, y: 300, s: 2.3, e: lin },          // segue o pin até a casa
+  { t: 16.9, x: 1600, y: 540, s: 0.5, e: inOutCubic },   // volta ao celular
+  { t: 17.8, x: 960, y: 540, s: 1, e: inOutCubic },
+  { t: 22, x: 960, y: 540, s: 1, e: lin }
+];
+const DEDO = [[0.6, 1000, 1100], [1.1, 962, 238], [4.1, 962, 238], [4.6, 962, 451], [4.9, 962, 451], [6.2, 962, 904], [6.9, 962, 904], [7.1, 962, 904]];
+const TOQUES = [1.1, 4.9, 6.9];
+const QR_CHECK = `<svg viewBox="0 0 64 64" width="120" height="120"><circle cx="32" cy="32" r="32" fill="${VD}"/><path d="M18 33 L28 43 L47 22" fill="none" stroke="#000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>`;
+let mundo, tel, tela, busca, txtBusca, cards, resumo0, detalhe0, botao, acomp, barra, contagem, pix, qr, chk, aprov, avalia, estrelas = [];
+let dedo, anel, hud, pinC, rota, rotaL = 1, dot, simb, marca;
+
+function caixa(x, y, w, h, css, pai, html) { return el('div', `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${css || ''}`, pai, html); }
+const alvo = (x, y, ox, oy) => { const dx = x - ox, dy = y - oy; return dx >= 0 && dy >= 0 && dx < 7 && dy < 7 && (dx === 0 || dy === 0 || dx === 6 || dy === 6 || (dx > 1 && dx < 5 && dy > 1 && dy < 5)); };
+function qrSvg() {
+  const r = M.rnd(9); let s = '<svg width="200" height="200" viewBox="0 0 25 25" shape-rendering="crispEdges">';
+  for (let y = 0; y < 25; y++) for (let x = 0; x < 25; x++) {
+    const esp = (x < 8 && y < 8) || (x > 16 && y < 8) || (x < 8 && y > 16);
+    if (alvo(x, y, 0, 0) || alvo(x, y, 18, 0) || alvo(x, y, 0, 18) || (!esp && r() < 0.45)) s += `<rect x="${x}" y="${y}" width="1" height="1" fill="#000"/>`;
+  }
+  return s + '</svg>';
+}
+function dedoPos(t) {
+  if (t <= DEDO[0][0]) return [DEDO[0][1], DEDO[0][2]];
+  let i = 1; while (i < DEDO.length - 1 && t > DEDO[i][0]) i++;
+  const a = DEDO[i - 1], b = DEDO[i], k = inOutCubic(p(t, a[0], b[0]));
+  return [lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
+}
+function pinoRota(t) {
+  const pp = inOutCubic(p(t, 9.8, 15.6)), q = rota.getPointAtLength(rotaL * pp);
+  return { x: MAPA_X + q.x, y: q.y, pp };
+}
+function camera(t) {
+  const n = CAM.length;
+  let a = CAM[n - 1], b = CAM[n - 1], k = 0;
+  if (t < CAM[n - 1].t) { let i = 1; while (t > CAM[i].t) i++; a = CAM[i - 1]; b = CAM[i]; k = (b.e || lin)(p(t, a.t, b.t)); }
+  let x = lerp(a.x, b.x, k), y = lerp(a.y, b.y, k);
+  const s = Math.exp(lerp(Math.log(a.s), Math.log(b.s), k));
+  // seguimento: entre 9.6 e 15.9 a câmera vai no carro (o pin), com entrada e saída suaves
+  const w = clamp(p(t, 9.6, 10.2)) * (1 - clamp(p(t, 15.9, 16.5)));
+  if (w > 0) { const q = pinoRota(t); x = lerp(x, q.x, w); y = lerp(y, q.y, w); }
+  return { x, y, s };
+}
+
+window.CLIPE = {
+  dur: 22,
+  eventos: [
+    { t: 0, kind: 'rise', x: 960 }, { t: 1.1, kind: 'tap', x: 962 }, { t: 1.5, kind: 'type', x: 962, dur: 1.5 },
+    { t: 3.3, kind: 'land', x: 962 }, { t: 3.45, kind: 'land', x: 962 }, { t: 3.6, kind: 'land', x: 962 },
+    { t: 4.9, kind: 'tap', x: 962 }, { t: 5.0, kind: 'open', x: 962 }, { t: 6.9, kind: 'tap', x: 962 },
+    { t: 7.1, kind: 'whip', x: 1100 }, { t: 9.2, kind: 'dive', x: 960 }, { t: 15.6, kind: 'land', x: 960 },
+    { t: 16.6, kind: 'whip', x: 960 }, { t: 17.5, kind: 'open', x: 960 }, { t: 18.3, kind: 'qr', x: 960 },
+    { t: 19.2, kind: 'paid', x: 960 }, { t: 19.8, kind: 'rise', x: 960 },
+    { t: 20.3, kind: 'word', x: 960 }, { t: 20.5, kind: 'word', x: 960 }, { t: 20.7, kind: 'word', x: 960 },
+    { t: 20.9, kind: 'word', x: 960 }, { t: 21.1, kind: 'word', x: 960 },
+    { t: 21.3, kind: 'close', x: 960 }, { t: 21.6, kind: 'hit', x: 960 }
+  ],
+  montar(palco) {
+    mundo = caixa(0, 0, 1920, 1080, 'transform-origin:0 0', palco);
+
+    // mapa visto de cima, à direita do celular (unidades do mapa)
+    const mapa = caixa(MAPA_X, 0, 1920, 1080, 'background:#1a2748;overflow:hidden', mundo);
+    const r = M.rnd(21);
+    let s = '<svg width="1920" height="1080" style="position:absolute;left:0;top:0">';
+    for (let i = 0; i < 13; i++) for (let j = 0; j < 9; j++) if (r() > 0.08) s += `<rect x="${i * 150 + 13}" y="${j * 120 + 13}" width="124" height="94" rx="6" fill="${r() < 0.12 ? '#0f2a22' : '#0b1222'}"/>`;
+    s += '<rect x="1640" y="0" width="280" height="1080" fill="#0a2550"/>';
+    s += `<path d="${ROTA}" fill="none" stroke="#2a3a62" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>`;
+    s += `<path class="rota" d="${ROTA}" fill="none" stroke="${AZ}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    mapa.insertAdjacentHTML('beforeend', s);
+    rota = mapa.querySelector('.rota'); rotaL = rota.getTotalLength();
+    rota.style.strokeDasharray = rotaL;
+    caixa(60, 50, 600, 60, 'font-size:44px;font-weight:700;color:#8aa3ff', mapa, 'Boa Viagem');
+    pinC = caixa(0, 0, 44, 44, `border-radius:50%;background:${AZ};color:#fff;text-align:center;line-height:44px;font-size:24px;font-weight:700;box-shadow:0 0 40px rgba(43,89,255,.9)`, mapa, 'C');
+    caixa(1360, 280, 40, 40, `border-radius:50%;background:${VD};box-shadow:0 0 40px rgba(53,208,143,.8)`, mapa);
+    caixa(1310, 326, 140, 44, 'font-size:30px;font-weight:600;text-align:center', mapa, 'Você');
+
+    // celular (coordenadas da tela: origem em 756,76 do mundo)
+    tel = caixa(740, 60, 440, 960, `background:#0a0b10;border:2px solid #23263a;border-radius:64px;box-sizing:border-box;transform-origin:50% 50%`, mundo);
+    tela = caixa(14, 14, 412, 932, 'border-radius:52px;overflow:hidden;background:#0e0f14', tel);
+
+    busca = caixa(0, 0, 412, 932, '', tela);
+    caixa(28, 62, 360, 50, 'font-size:40px;font-weight:700', busca, 'Buscar');
+    caixa(24, 120, 364, 84, 'border-radius:42px;background:#14161f;border:1px solid #23263a;box-sizing:border-box', busca);
+    txtBusca = caixa(52, 120, 330, 84, 'font-size:34px;line-height:84px;white-space:nowrap', busca);
+    caixa(28, 236, 360, 36, `font-size:24px;color:${CZ}`, busca, '3 profissionais encontrados');
+    const DADOS = [['CA', 'Carlos Andrade', 'Eletricista · ★ 4,9'], ['AB', 'Ana Beatriz', 'Eletricista · ★ 5,0'], ['RF', 'Roberto Farias', 'Eletricista · ★ 4,8']];
+    cards = DADOS.map(([ini, nome, sub], i) => {
+      const c = caixa(24, 300 + i * 170, 364, 150, 'border-radius:28px;background:#0e0f14;border:1px solid #23263a;box-sizing:border-box;overflow:hidden', i === 0 ? tela : busca);
+      const res = caixa(0, 0, 364, 150, '', c);
+      if (i === 0) resumo0 = res;
+      caixa(20, 33, 84, 84, `border-radius:50%;background:linear-gradient(135deg,${AZ},${cores.azulClaro});text-align:center;line-height:84px;font-size:38px;font-weight:700`, res, ini);
+      caixa(128, 34, 230, 44, 'font-size:30px;font-weight:600;white-space:nowrap', res, nome);
+      caixa(128, 82, 230, 34, `font-size:22px;color:${CZ};white-space:nowrap`, res, sub);
+      return c;
+    });
+    // perfil: o próprio card do Carlos se expande até a tela inteira
+    detalhe0 = caixa(0, 0, 412, 932, 'opacity:0', cards[0]);
+    caixa(24, 56, 60, 60, 'font-size:44px', detalhe0, '←');
+    caixa(116, 150, 180, 180, `border-radius:50%;background:linear-gradient(135deg,${AZ},${cores.azulClaro});text-align:center;line-height:180px;font-size:96px;font-weight:700`, detalhe0, 'C');
+    caixa(0, 350, 412, 50, 'text-align:center;font-size:40px;font-weight:700', detalhe0, 'Carlos Andrade');
+    caixa(0, 406, 412, 36, `text-align:center;font-size:26px;color:${CZ}`, detalhe0, 'Eletricista · ★ 4,9');
+    caixa(0, 520, 412, 36, `text-align:center;font-size:24px;color:${CZ}`, detalhe0, 'Atende em Boa Viagem');
+    caixa(0, 600, 412, 70, 'text-align:center;font-size:60px;font-weight:700', detalhe0, 'R$ 180,00');
+    caixa(0, 676, 412, 30, `text-align:center;font-size:22px;color:${CZ}`, detalhe0, 'por serviço');
+    botao = caixa(24, 780, 364, 96, `border-radius:48px;background:${AZ};text-align:center;line-height:96px;font-size:34px;font-weight:700`, detalhe0, 'Chamar agora');
+
+    // acompanhando o pedido
+    acomp = caixa(0, 0, 412, 932, 'opacity:0', tela);
+    caixa(146, 150, 120, 120, `border-radius:50%;background:linear-gradient(135deg,${AZ},${cores.azulClaro});text-align:center;line-height:120px;font-size:58px;font-weight:700`, acomp, 'C');
+    caixa(0, 300, 412, 44, 'text-align:center;font-size:36px;font-weight:700', acomp, 'Carlos Andrade');
+    caixa(0, 352, 412, 34, `text-align:center;font-size:26px;color:${CZ}`, acomp, 'está a caminho');
+    caixa(24, 440, 364, 12, 'border-radius:6px;background:#1c1f2c', acomp);
+    barra = caixa(24, 440, 364, 12, `border-radius:6px;background:${AZ};transform-origin:0 50%`, acomp);
+    contagem = caixa(0, 490, 412, 60, 'text-align:center;font-size:44px;font-weight:700', acomp);
+
+    // pagamento Pix
+    pix = caixa(0, 0, 412, 932, 'opacity:0', tela);
+    caixa(28, 62, 360, 50, 'font-size:40px;font-weight:700', pix, 'Pagamento Pix');
+    caixa(28, 118, 360, 34, `font-size:26px;color:${CZ}`, pix, 'Carlos Andrade · Eletricista');
+    caixa(28, 160, 360, 70, 'font-size:60px;font-weight:700', pix, 'R$ 180,00');
+    qr = caixa(106, 262, 200, 200, 'background:#fff;border-radius:16px', pix, qrSvg());
+    chk = caixa(146, 300, 120, 120, 'opacity:0', pix, QR_CHECK);
+    aprov = caixa(0, 420, 412, 50, `text-align:center;font-size:40px;font-weight:700;color:${VD};opacity:0`, pix, 'Pix aprovado');
+
+    // avaliação: painel sobe de baixo
+    avalia = caixa(0, 640, 412, 292, 'border-radius:36px 36px 0 0;background:#14161f;border-top:1px solid #23263a;box-sizing:border-box;opacity:0', tela);
+    caixa(0, 20, 412, 44, 'text-align:center;font-size:36px;font-weight:700', avalia, 'Avalie o Carlos');
+    for (let i = 0; i < 5; i++) estrelas.push(caixa(28 + i * 72, 110, 64, 90, 'text-align:center;font-size:64px;line-height:90px;color:#2a2d3d', avalia, '★'));
+
+    dedo = caixa(0, 0, 46, 46, 'border-radius:50%;background:rgba(255,255,255,.9);box-shadow:0 0 0 8px rgba(43,89,255,.45);opacity:0', mundo);
+    anel = caixa(0, 0, 46, 46, 'border-radius:50%;border:4px solid #fff;opacity:0', mundo);
+
+    // sobreposições de tela (fora da câmera)
+    hud = caixa(760, 60, 400, 64, 'border-radius:32px;background:rgba(14,15,20,.92);border:1px solid #23263a;box-sizing:border-box;text-align:center;line-height:62px;font-size:34px;font-weight:600;opacity:0', palco);
+    dot = caixa(940, 520, 40, 40, `border-radius:50%;background:${AZ};box-shadow:0 0 60px rgba(43,89,255,.8);opacity:0`, palco);
+    simb = el('img', 'position:absolute;left:960px;top:500px;width:180px;margin-left:-90px;margin-top:-90px;opacity:0', palco); simb.src = M.simbolo;
+    marca = caixa(0, 640, 1920, 120, 'text-align:center;font-size:96px;font-weight:700;letter-spacing:-3px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    const c = camera(t);
+    mundo.style.transform = `translate(960px,540px) scale(${c.s}) translate(${-c.x}px,${-c.y}px)`;
+
+    // celular: sobe ao abrir, recolhe no fim
+    const sobe = mola(t - 0.1, 2.2, 5), recolhe = inOutCubic(p(t, 21.3, 21.6));
+    tel.style.opacity = p(t, 0, 0.25) * (1 - p(t, 21.5, 21.6));
+    tel.style.transform = `translateY(${(1 - sobe) * 160}px) scale(${(0.92 + 0.08 * sobe) * (1 - recolhe)})`;
+
+    // busca: digita, cards em cascata, o Carlos se expande
+    const frase = 'eletricista', n = Math.floor(frase.length * p(t, 1.5, 3.0));
+    txtBusca.textContent = frase.slice(0, n) + (t > 1.5 && t < 4.9 && Math.floor(t * 3) % 2 ? '|' : '');
+    busca.style.opacity = 1 - p(t, 4.95, 5.25);
+    cards.slice(1).forEach((cd, j) => { const k = clamp(mola(t - 3.45 - j * 0.15, 2.4, 6)); cd.style.transform = `translateY(${(1 - k) * 200}px)`; cd.style.opacity = k; });
+    const c0 = cards[0], ek = outExpo(p(t, 5.0, 5.6)), k0 = clamp(mola(t - 3.3, 2.4, 6));
+    c0.style.left = lerp(24, 0, ek) + 'px'; c0.style.top = lerp(300, 0, ek) + 'px';
+    c0.style.width = lerp(364, 412, ek) + 'px'; c0.style.height = lerp(150, 932, ek) + 'px';
+    c0.style.borderRadius = lerp(28, 52, ek) + 'px';
+    c0.style.transform = `translateY(${(1 - k0) * 200 * (1 - ek)}px)`;
+    c0.style.opacity = k0 * (1 - p(t, 7.2, 7.4));
+    resumo0.style.opacity = 1 - p(t, 5.0, 5.2);
+    detalhe0.style.opacity = p(t, 5.4, 5.8) * (1 - p(t, 6.95, 7.15));
+    botao.style.transform = `scale(${1 - 0.06 * Math.sin(Math.PI * p(t, 6.9, 7.2))})`;
+
+    // dedo e toques
+    const d = dedoPos(t);
+    dedo.style.transform = `translate(${d[0] - 23}px,${d[1] - 23}px)`;
+    dedo.style.opacity = p(t, 0.6, 0.9) * (1 - p(t, 7.1, 7.4));
+    const T = TOQUES.find(q => t >= q && t < q + 0.4), rr = T === undefined ? 0 : (t - T) / 0.4;
+    anel.style.transform = `translate(${d[0] - 23}px,${d[1] - 23}px) scale(${1 + 1.2 * rr})`;
+    anel.style.opacity = T === undefined ? 0 : 1 - rr;
+
+    // acompanhando, mapa e contagem (mesmo progresso do pin)
+    const q = pinoRota(t), txt = q.pp >= 1 ? 'Chegou' : `Chega em ${Math.max(1, Math.ceil(12 * (1 - q.pp)))} min`;
+    acomp.style.opacity = p(t, 7.2, 7.6) * (1 - p(t, 17.2, 17.5));
+    barra.style.transform = `scaleX(${q.pp})`;
+    contagem.textContent = txt;
+    hud.textContent = txt;
+    hud.style.opacity = p(t, 9.0, 9.4) * (1 - p(t, 16.2, 16.5));
+    pinC.style.transform = `translate(${q.x - MAPA_X - 22}px,${q.y - 22}px)`;
+    rota.style.strokeDashoffset = rotaL * (1 - q.pp);
+
+    // Pix
+    pix.style.opacity = p(t, 17.4, 17.7);
+    pix.style.transform = `translateY(${(1 - outExpo(p(t, 17.4, 17.9))) * 90}px)`;
+    qr.style.opacity = p(t, 18.2, 18.5) * (1 - p(t, 19.1, 19.35));
+    chk.style.opacity = p(t, 19.2, 19.35);
+    chk.querySelector('path').style.strokeDashoffset = 1 - outCubic(p(t, 19.25, 19.7));
+    aprov.style.opacity = p(t, 19.35, 19.6);
+
+    // avaliação
+    avalia.style.opacity = p(t, 19.8, 19.9);
+    avalia.style.transform = `translateY(${(1 - outExpo(p(t, 19.8, 20.3))) * 300}px)`;
+    estrelas.forEach((s, i) => { const ts = 20.3 + i * 0.2; s.style.color = t > ts ? VD : '#2a2d3d'; s.style.transform = `scale(${Math.max(0, mola(t - ts, 2.4, 6))})`; });
+
+    // fim: tudo recolhe num ponto azul que vira o símbolo e a marca
+    dot.style.opacity = p(t, 21.4, 21.45) * (1 - p(t, 21.6, 21.65));
+    dot.style.transform = `scale(${Math.max(0, mola(t - 21.4, 2.2, 6))})`;
+    simb.style.opacity = p(t, 21.6, 21.65);
+    simb.style.transform = `scale(${Math.max(0, mola(t - 21.6, 2, 6))}) rotate(${(1 - outExpo(p(t, 21.6, 22))) * -90}deg)`;
+    marca.style.opacity = p(t, 21.7, 21.9);
+    marca.style.transform = `translateY(${(1 - outExpo(p(t, 21.7, 22))) * 40}px)`;
+  }
+};
+</script></body></html>

@@ -1,0 +1,11 @@
+[
+  {"id": "v1", "text": "Um pedido de ar-condicionado começa no celular, com um toque.", "t0": 0.0, "dur_est": 3.8},
+  {"id": "v2", "text": "Você descreve o serviço e chama um profissional perto de você.", "t0": 4.5, "dur_est": 4.2},
+  {"id": "v3", "text": "Ele aceita pelo celular, e o pedido entra na agenda dele.", "t0": 9.5, "dur_est": 4.2},
+  {"id": "v4", "text": "Você acompanha a chegada no mapa até ele estar na porta.", "t0": 14.5, "dur_est": 4.2},
+  {"id": "v5", "text": "Quando ele chega, você informa o código de quatro dígitos.", "t0": 21.5, "dur_est": 3.8},
+  {"id": "v6", "text": "Só então ele digita o código no app, e o serviço começa.", "t0": 26.0, "dur_est": 4.6},
+  {"id": "v7", "text": "Depois, você paga o profissional por Pix ou dinheiro.", "t0": 31.5, "dur_est": 3.5},
+  {"id": "v8", "text": "Por fim, você avalia com estrelas, e o profissional avalia você.", "t0": 35.5, "dur_est": 4.2},
+  {"id": "v9", "text": "Do primeiro toque à avaliação: TaskGO.", "t0": 47.0, "dur_est": 2.3}
+]

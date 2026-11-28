@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>22 · glitch rgb split</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: glitch-rgb-split (awesome-ai-motion nº 448). Em três janelas curtas, cópias vermelha e azul
+   se afastam em passos de 24 fps (seno com fase fixa, sem aleatório) e seis fatias horizontais saem do lugar.
+   Fora das janelas a marca fica limpa. */
+const { p, outExpo, el, cores } = M;
+const JANELAS = [[1.0, 1.3], [2.6, 2.85], [4.0, 4.25]];
+const css = 'position:absolute;left:0;width:100%;top:380px;text-align:center;font-size:300px;font-weight:700;letter-spacing:-12px;white-space:nowrap';
+const MARCA = 'Task<span style="color:#2b59ff">GO</span>';
+let grade, base, vermelho, azul, fatias = [], tag;
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    grade = el('div', 'position:absolute;inset:-120px;opacity:.1;background-image:linear-gradient(90deg,#2b59ff 2px,transparent 2px),linear-gradient(#2b59ff 2px,transparent 2px);background-size:120px 120px', palco);
+    vermelho = el('div', css + ';color:#ff2d4a;mix-blend-mode:screen;opacity:0', palco, 'TaskGO');
+    azul = el('div', css + ';color:#2b59ff;mix-blend-mode:screen;opacity:0', palco, 'TaskGO');
+    base = el('div', css, palco, MARCA);
+    for (let k = 0; k < 6; k++) fatias.push(el('div', css + ';opacity:0', palco, MARCA));
+    tag = el('div', `position:absolute;left:0;width:100%;top:730px;text-align:center;font-size:48px;font-weight:500;color:${cores.cinza};opacity:0`, palco, 'Marketplace de serviços locais');
+  },
+  quadro(t) {
+    grade.style.transform = `translate(${-((t * 60) % 120)}px,${-((t * 30) % 120)}px)`;
+    const j = JANELAS.find(([a, b]) => t >= a && t < b);
+    const g = j ? 1 : 0;
+    const f = j ? Math.floor((t - j[0]) * 24) : 0;
+    const amp = 22 * g;
+    const sc = 1 + 0.03 * p(t, 0, 5);
+    /* a marca entra com desfoque no início */
+    const entra = outExpo(p(t, 0, 0.4));
+    base.style.opacity = p(t, 0, 0.3);
+    base.style.filter = `blur(${(1 - entra) * 16}px)`;
+    base.style.transform = `scale(${sc})`;
+    vermelho.style.transform = `translateX(${-amp * Math.sin(f * 2.1)}px) scale(${sc})`;
+    vermelho.style.opacity = 0.35 * g;
+    azul.style.transform = `translateX(${amp * Math.sin(f * 1.7)}px) scale(${sc})`;
+    azul.style.opacity = 0.35 * g;
+    fatias.forEach((s, k) => {
+      const a = (k * 100) / 6, b = 100 - ((k + 1) * 100) / 6;
+      const dx = amp * 1.4 * Math.sin(f * 1.3 + k * 2.7) * (k % 2 ? 1 : -1);
+      s.style.clipPath = `inset(${a}% 0 ${b}% 0)`;
+      s.style.transform = `translateX(${dx}px) scale(${sc})`;
+      s.style.opacity = g;
+    });
+    tag.style.opacity = p(t, 4.2, 4.7);
+  }
+};
+</script></body></html>

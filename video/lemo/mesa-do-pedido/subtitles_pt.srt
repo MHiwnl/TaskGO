@@ -1,0 +1,35 @@
+1
+00:00:00,000 --> 00:00:03,485
+Um pedido de ar-condicionado começa no celular, com um toque.
+
+2
+00:00:04,500 --> 00:00:08,032
+Você descreve o serviço e chama um profissional perto de você.
+
+3
+00:00:09,500 --> 00:00:13,089
+Ele aceita pelo celular, e o pedido entra na agenda dele.
+
+4
+00:00:14,500 --> 00:00:17,605
+Você acompanha a chegada no mapa até ele estar na porta.
+
+5
+00:00:21,500 --> 00:00:25,196
+Quando ele chega, você informa o código de quatro dígitos.
+
+6
+00:00:26,000 --> 00:00:29,798
+Só então ele digita o código no app, e o serviço começa.
+
+7
+00:00:31,500 --> 00:00:35,391
+Depois, você paga o profissional por Pix ou dinheiro.
+
+8
+00:00:35,500 --> 00:00:40,099
+Por fim, você avalia com estrelas, e o profissional avalia você.
+
+9
+00:00:47,000 --> 00:00:50,456
+Do primeiro toque à avaliação: TaskGO.

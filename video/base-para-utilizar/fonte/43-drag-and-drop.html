@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>43 · arrastar horário para a agenda</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: drag-and-drop (o cursor pega um item, leva uma cópia translúcida e ela encaixa com mola no novo lugar).
+   Aqui: um horário pedido é arrastado para a agenda do profissional, encaixa e vira "Agendado"; marca no fim. */
+const { p, lerp, outExpo, inOutCubic, outBack, mola, el, cores } = M;
+const horas = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
+const ALVO = 3; /* índice da faixa 14:00 */
+let slots = [], chip, ghost, cursor, marca, simbolo, painel, rotulo;
+const CH = { x: 180, y: 430, w: 340, h: 96 };
+const SL = { x: 1080, y0: 300, w: 640, h: 100, gap: 16 };
+const slotY = i => SL.y0 + i * (SL.h + SL.gap);
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 40% 50%, #0a1440 0%, #000 70%)';
+    painel = el('div', `position:absolute;left:${SL.x - 40}px;top:200px;width:720px;height:700px;border-radius:40px;background:#0b0c12;border:2px solid #1d2140`, palco);
+    el('div', 'position:absolute;left:40px;top:34px;font-size:40px;font-weight:700', painel, 'Agenda · Carlos');
+    horas.forEach((h, i) => {
+      slots[i] = el('div', `position:absolute;left:40px;top:${slotY(i) - 200}px;width:${SL.w}px;height:${SL.h}px;border-radius:24px;background:#131624;border:2px dashed #2a2f4a;display:flex;align-items:center;gap:30px;padding:0 36px;box-sizing:border-box;font-size:34px;color:${cores.cinza}`, painel,
+        `<span style="font-weight:700;color:#fff;width:120px">${h}</span><span>Livre</span>`);
+    });
+    chip = el('div', `position:absolute;left:${CH.x}px;top:${CH.y}px;width:${CH.w}px;height:${CH.h}px;border-radius:24px;background:#131624;border:2px solid #2a2f4a;display:flex;align-items:center;gap:20px;padding:0 28px;box-sizing:border-box`, palco,
+      `<div style="width:14px;height:56px;border-radius:7px;background:${cores.azul}"></div><div><div style="font-size:34px;font-weight:700">Troca de chuveiro</div><div style="font-size:26px;color:${cores.cinza}">Pedido · quinta</div></div>`);
+    ghost = el('div', `position:absolute;left:${CH.x}px;top:${CH.y}px;width:${CH.w}px;height:${CH.h}px;border-radius:24px;background:${cores.azul};opacity:0;box-shadow:0 30px 60px rgba(43,89,255,.5);display:flex;align-items:center;padding:0 28px;box-sizing:border-box;font-size:34px;font-weight:700`, palco, 'Troca de chuveiro');
+    cursor = el('div', 'position:absolute;left:0;top:0;width:60px;height:60px', palco,
+      `<svg viewBox="0 0 60 60" width="60" height="60"><path d="M8 4 L8 46 L19 36 L27 54 L36 50 L28 33 L44 33 Z" fill="#fff" stroke="#000" stroke-width="3" stroke-linejoin="round"/></svg>`);
+    simbolo = el('img', 'position:absolute;left:0;top:0;width:150px;opacity:0', palco); simbolo.src = M.simbolo;
+    marca = el('div', 'position:absolute;left:0;width:100%;top:800px;text-align:center;font-size:110px;font-weight:700;letter-spacing:-4px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    /* 0–0,6 cursor chega ao item · 0,6–0,8 pega (escala 1,05, cópia translúcida) · 0,8–2,2 arrasta até a faixa 14:00 */
+    const destX = SL.x, destY = slotY(ALVO);
+    const dx = destX - CH.x, dy = destY - CH.y;
+    const chega = inOutCubic(p(t, 0, 0.6));
+    const arrasta = inOutCubic(p(t, 0.8, 2.2));
+    const pega = p(t, 0.6, 0.8);
+    const solta = outExpo(p(t, 2.2, 2.7));
+    /* posição do cursor: começa fora, vai ao item, acompanha a cópia */
+    const cxIni = 1700, cyIni = 980;
+    const cx = lerp(cxIni, CH.x + 60, chega) + (lerp(0, dx, arrasta) - 0) * 1;
+    const cy = lerp(cyIni, CH.y + 50, chega) + lerp(0, dy, arrasta);
+    cursor.style.transform = `translate(${cx}px,${cy}px)`;
+    /* cópia translúcida: aparece ao pegar, segue o cursor e encaixa */
+    const escala = lerp(1, 1.05, pega) * (1 - 0.05 * solta) ;
+    const offX = lerp(0, dx, arrasta), offY = lerp(0, dy, arrasta);
+    ghost.style.opacity = pega * (1 - solta) * 0.85 + solta * 0;
+    ghost.style.transform = `translate(${offX}px,${offY}px) scale(${escala})`;
+    chip.style.opacity = 1 - pega * 0.7;
+    /* encaixe com mola: a faixa acende e a cópia vira o agendamento */
+    const mo = mola(t - 2.2, 3.2, 7);
+    const esc2 = lerp(1.05, 1, mo);
+    ghost.style.transform = `translate(${offX}px,${offY}px) scale(${solta > 0 ? esc2 : escala})`;
+    const alvo = slots[ALVO];
+    alvo.style.background = `rgba(43,89,255,${0.35 * solta})`;
+    alvo.style.borderColor = cores.azul;
+    alvo.style.borderStyle = 'solid';
+    alvo.innerHTML = `<span style="font-weight:700;color:#fff;width:120px">${horas[ALVO]}</span><span style="color:#fff">Troca de chuveiro · Agendado</span>`;
+    alvo.style.opacity = 0.3 + 0.7 * solta;
+    /* 3,4–4,0 agenda e cópia somem, 3,8–4,5 símbolo e marca entram */
+    const sai = inOutCubic(p(t, 3.4, 3.9));
+    painel.style.opacity = 1 - sai;
+    chip.style.opacity = (1 - pega * 0.7) * (1 - sai);
+    ghost.style.opacity = (pega * (1 - solta) * 0.85) * (1 - sai);
+    cursor.style.opacity = 1 - sai;
+    simbolo.style.opacity = p(t, 3.9, 4.3);
+    simbolo.style.left = '885px'; simbolo.style.top = '380px';
+    simbolo.style.transform = `scale(${lerp(0.5, 1, outBack(p(t, 3.9, 4.5)))})`;
+    marca.style.opacity = p(t, 4.2, 4.7);
+    marca.style.transform = `translateY(${(1 - outExpo(p(t, 4.2, 4.9))) * 50}px)`;
+  }
+};
+</script></body></html>

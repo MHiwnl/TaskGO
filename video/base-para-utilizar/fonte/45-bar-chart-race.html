@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>45 · serviços mais pedidos no mês</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: bar-chart-race (barras trocam de posição conforme os valores mudam, o líder fica em destaque).
+   Aqui: pedidos por serviço em quatro meses (números ilustrativos). A posição é contínua, então as barras deslizam ao se cruzar. */
+const { p, lerp, outExpo, inOutCubic, outBack, el, cores } = M;
+const nomes = ['Eletricista', 'Encanador', 'Diarista', 'Pintor', 'Montador', 'Jardinagem', 'Chaveiro', 'Marceneiro'];
+/* quatro meses de pedidos por serviço (ilustrativo) */
+const meses = ['Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const K = [
+  [320, 280, 300, 210, 190, 150, 120, 90],
+  [340, 350, 260, 240, 210, 160, 130, 100],
+  [360, 330, 390, 280, 230, 200, 150, 110],
+  [380, 300, 310, 360, 260, 240, 190, 160]
+];
+const ROW = 96, X0 = 420, BW = 1000, VMAX = 420, W = 1;
+let barras = [], rotulos = [], mes, marca, simbolo, quadro_;
+/* valor interpolado no tempo u (0..3) com ease por passo */
+function valores(u) {
+  const s = Math.min(2, Math.floor(u)), f = inOutCubic(Math.min(1, u - s));
+  return K[s].map((v, i) => lerp(v, K[s + 1][i], f));
+}
+/* posição vertical contínua: conta, com transição suave, quantos têm valor maior */
+function posicoes(v) {
+  return v.map((vi, i) => v.reduce((acc, vj, j) => j === i ? acc : acc + Math.min(1, Math.max(0, (vj - vi) / 30 + 0.5)), 0));
+}
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 60% 50%, #0a1440 0%, #000 70%)';
+    el('div', 'position:absolute;left:180px;top:110px;font-size:46px;font-weight:700;letter-spacing:-1px', palco, 'Serviços mais pedidos');
+    mes = el('div', `position:absolute;left:180px;top:170px;font-size:30px;color:${cores.cinza}`, palco);
+    nomes.forEach((n, i) => {
+      rotulos[i] = el('div', 'position:absolute;left:0;top:0;width:360px;height:70px;line-height:70px;text-align:right;font-size:34px;font-weight:600;white-space:nowrap', palco, n);
+      barras[i] = el('div', `position:absolute;left:${X0}px;top:0;width:10px;height:70px;border-radius:14px;background:${i === 0 ? cores.azul : '#1c2238'};box-shadow:${i === 0 ? '0 0 40px rgba(43,89,255,.6)' : 'none'}`, palco);
+    });
+    marca = el('div', 'position:absolute;left:0;width:100%;top:820px;text-align:center;font-size:110px;font-weight:700;letter-spacing:-4px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+    simbolo = el('img', 'position:absolute;left:960px;top:400px;width:140px;margin-left:-70px;opacity:0', palco); simbolo.src = M.simbolo;
+  },
+  quadro(t) {
+    /* 0–0,4 barras entram · 0,4–3,4 quatro passos de pedidos (cada transição 0,85 s) · 3,4–4,0 o quadro se recolhe */
+    const u = lerp(0, 3, inOutCubic(p(t, 0.4, 3.6)));
+    const v = valores(u);
+    const pos = posicoes(v);
+    const entra = p(t, 0, 0.4);
+    const sai = inOutCubic(p(t, 3.9, 4.4));
+    const mesIdx = Math.min(3, Math.floor(u + 0.5));
+    mes.textContent = meses[mesIdx] + ' · pedidos no mês';
+    mes.style.opacity = entra * (1 - sai);
+    nomes.forEach((n, i) => {
+      const y = 260 + pos[i] * ROW;
+      const w = BW * (v[i] / VMAX) * entra * (1 - sai * 0.0);
+      barras[i].style.transform = `translate(0px,${y}px)`;
+      barras[i].style.width = Math.max(10, w) + 'px';
+      barras[i].style.opacity = (1 - sai) * (0.3 + 0.7 * entra);
+      rotulos[i].style.transform = `translate(${X0 - 380}px,${y}px)`;
+      rotulos[i].style.opacity = (1 - sai) * entra;
+      rotulos[i].style.color = i === 0 ? cores.azulClaro : '#fff';
+      /* valor no fim da barra */
+    });
+    /* 4,0–4,8 marca e símbolo entram */
+    simbolo.style.opacity = p(t, 4.0, 4.4);
+    simbolo.style.transform = `scale(${lerp(0.5, 1, outBack(p(t, 4.0, 4.6)))})`;
+    marca.style.opacity = p(t, 4.3, 4.8);
+    marca.style.transform = `translateY(${(1 - outExpo(p(t, 4.3, 4.9))) * 50}px)`;
+  }
+};
+</script></body></html>

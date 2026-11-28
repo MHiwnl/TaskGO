@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>47 · retícula de pontos forma a marca</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: halftone-motion (pontos cujo tamanho segue a luminância, com uma onda diagonal passando).
+   Aqui: a onda diagonal vira a palavra TaskGO em retícula: a máscara do texto é lida de um canvas próprio (não contaminado). */
+const { p, lerp, outExpo, inOutCubic, outBack, el, cores } = M;
+const W = 1920, H = 1080, G = 14, RMAX = 5.5;
+let cv, ctx, celulas = [], marca;
+window.CLIPE = {
+  dur: 5,
+  async montar(palco) {
+    palco.style.background = '#000';
+    await document.fonts.load("700 300px 'Spline Sans'");
+    cv = el('canvas', 'position:absolute;left:0;top:0', palco);
+    cv.width = W; cv.height = H; ctx = cv.getContext('2d');
+    /* máscara: "Task" branco e "GO" azul, lida de um canvas próprio para não ser contaminado */
+    const off = document.createElement('canvas'); off.width = W; off.height = H;
+    const o = off.getContext('2d');
+    o.font = "700 300px 'Spline Sans', sans-serif"; o.textBaseline = 'middle';
+    const wT = o.measureText('Task').width, wG = o.measureText('GO').width;
+    const x0 = (W - wT - wG) / 2, yM = H / 2 + 10;
+    o.fillStyle = '#fff'; o.fillText('Task', x0, yM); o.fillText('GO', x0 + wT, yM);
+    const dat = o.getImageData(0, 0, W, H).data;
+    for (let r = 0; r * G < H; r++) for (let c = 0; c * G < W; c++) {
+      const x = c * G + G / 2, y = r * G + G / 2;
+      celulas.push({ x, y, m: dat[(Math.floor(y) * W + Math.floor(x)) * 4 + 3] / 255, go: x > x0 + wT });
+    }
+  },
+  quadro(t) {
+    ctx.clearRect(0, 0, W, H);
+    /* 0–1,0 só a onda · 1,0–2,6 a onda se transforma na palavra · depois a palavra fica nítida em retícula */
+    const k = inOutCubic(p(t, 1.0, 2.6));
+    const ent = p(t, 0, 0.8);
+    const fundo = 1 - p(t, 4.3, 4.9) * 0.9;
+    for (const c of celulas) {
+      const w = 0.5 + 0.5 * Math.sin(((c.x + c.y) * 0.7) / 360 * 2 * Math.PI - 2 * Math.PI * t / 5);
+      const I = lerp(w, c.m, k);
+      const r = RMAX * (0.6 * I + 0.4 * w) * ent;
+      if (r < 0.2) continue;
+      if (c.m > 0.5) ctx.fillStyle = c.go ? cores.azul : '#fff';
+      else { ctx.fillStyle = cores.azul; ctx.globalAlpha = 0.35 * fundo; }
+      ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+};
+</script></body></html>

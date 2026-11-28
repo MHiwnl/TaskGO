@@ -1,0 +1,76 @@
+{
+  "bpm": 84,
+  "compasso": 2.857142857,
+  "fps": 24,
+  "formatos": {
+    "16x9": {
+      "size": "1920x1080",
+      "dur": 60.0,
+      "planos": [
+        {"id": "S01", "t0": 0, "t1": 2.857, "cena": "rua", "cam": "alto_empurra"},
+        {"id": "S02", "t0": 2.857, "t1": 5.714, "cena": "rua", "cam": "insert_janela", "cartao": "CAPÍTULO 1 · A CASA ESCURA", "cartao_t": [3.4, 5.6]},
+        {"id": "S03", "t0": 5.714, "t1": 11.7, "cena": "int", "cam": "medio_porta"},
+        {"id": "S04", "t0": 11.7, "t1": 14.29, "cena": "celular", "cam": "fixa"},
+        {"id": "S05", "t0": 14.29, "t1": 16.29, "cena": "cartao", "cartao": "CAPÍTULO 2 · O CAMINHO", "cartao_t": [14.29, 16.29]},
+        {"id": "S06", "t0": 16.29, "t1": 19.57, "cena": "mapa", "cam": "topo"},
+        {"id": "S07", "t0": 19.57, "t1": 21.6, "cena": "mapa", "cam": "topo_para_34"},
+        {"id": "S08", "t0": 21.6, "t1": 26.9, "cena": "caminho", "cam": "travelling"},
+        {"id": "S09", "t0": 26.9, "t1": 28.57, "cena": "caminho", "cam": "mergulho_portao"},
+        {"id": "S10", "t0": 28.57, "t1": 34.29, "cena": "int", "cam": "medio_34_dois"},
+        {"id": "S11", "t0": 34.29, "t1": 37.7, "cena": "int", "cam": "close_carlos", "dialogo": "f01"},
+        {"id": "S12", "t0": 37.7, "t1": 40.3, "cena": "int", "cam": "travelling_quadro"},
+        {"id": "S13", "t0": 40.3, "t1": 42.857, "cena": "int", "cam": "travado_largo"},
+        {"id": "S14", "t0": 42.857, "t1": 46.0, "cena": "int", "cam": "puxada_lampada", "luz": 42.857},
+        {"id": "S15", "t0": 46.0, "t1": 52.14, "cena": "pix", "cam": "fixa"},
+        {"id": "S16", "t0": 52.2, "t1": 55.0, "cena": "rua", "cam": "alto_volta", "luz_janela": true},
+        {"id": "S17", "t0": 55.0, "t1": 60.0, "cena": "rua", "cam": "alto_volta", "titulo": true, "luz_janela": true}
+      ],
+      "secoes": [
+        {"nome": "A gancho", "t0": 0, "t1": 2.857, "pad": true, "melodia": null, "batida": false},
+        {"nome": "B casa escura", "t0": 2.857, "t1": 14.29, "pad": true, "melodia": null, "batida": false, "batida_em": [3.571]},
+        {"nome": "C mapa", "t0": 14.29, "t1": 21.6, "pad": false, "melodia": null, "batida": true},
+        {"nome": "D caminho", "t0": 21.6, "t1": 28.57, "pad": true, "melodia": "A", "batida": true},
+        {"nome": "E código e corredor", "t0": 28.57, "t1": 34.29, "pad": false, "melodia": "A", "batida": true},
+        {"nome": "E2 quadro", "t0": 34.29, "t1": 37.14, "pad": true, "melodia": null, "batida": false},
+        {"nome": "E3 quadro leve", "t0": 37.14, "t1": 40.3, "pad": true, "melodia": null, "batida": "leve"},
+        {"nome": "F silêncio", "t0": 40.3, "t1": 42.857, "pad": false, "melodia": null, "batida": false},
+        {"nome": "G luz", "t0": 42.857, "t1": 52.14, "pad": true, "melodia": "B", "batida": true, "gonguê": true},
+        {"nome": "H eco", "t0": 52.14, "t1": 60.0, "pad": true, "melodia": "A", "batida": "leve", "acorde": 55.0}
+      ],
+      "efeitos": {
+        "pa": [2.857], "fala": [12.0, 34.6], "pix": [46.2], "passos_de": 21.6, "passos_ate": 26.9,
+        "respingos": [22.857], "portao": [27.0], "clique_luz": [42.857],
+        "tiques": [49.29, 50.0, 50.71, 51.43, 52.14], "acorde": [55.0]
+      }
+    },
+    "9x16": {
+      "size": "1080x1920",
+      "dur": 34.29,
+      "planos": [
+        {"id": "V01", "t0": 0, "t1": 2.857, "cena": "rua", "cam": "alto_empurra"},
+        {"id": "V02", "t0": 2.857, "t1": 3.3, "cena": "rua", "cam": "insert_janela"},
+        {"id": "V03", "t0": 3.3, "t1": 5.6, "cena": "celular", "cam": "fixa"},
+        {"id": "V04", "t0": 5.6, "t1": 11.4, "cena": "caminho", "cam": "travelling"},
+        {"id": "V05", "t0": 11.4, "t1": 14.3, "cena": "caminho", "cam": "mergulho_portao", "dialogo": "f01"},
+        {"id": "V06", "t0": 14.3, "t1": 20.0, "cena": "int", "cam": "travelling_quadro"},
+        {"id": "V07", "t0": 20.0, "t1": 22.86, "cena": "int", "cam": "puxada_lampada", "luz": 20.0},
+        {"id": "V08", "t0": 22.86, "t1": 27.0, "cena": "pix", "cam": "fixa"},
+        {"id": "V09", "t0": 27.0, "t1": 29.29, "cena": "rua", "cam": "alto_volta", "luz_janela": true},
+        {"id": "V10", "t0": 29.29, "t1": 34.29, "cena": "rua", "cam": "alto_volta", "titulo": true, "luz_janela": true}
+      ],
+      "secoes": [
+        {"nome": "A gancho", "t0": 0, "t1": 2.857, "pad": true, "melodia": null, "batida": false},
+        {"nome": "B", "t0": 2.857, "t1": 11.43, "pad": true, "melodia": null, "batida": false, "batida_em": [3.571]},
+        {"nome": "C e D caminho", "t0": 11.43, "t1": 20.0, "pad": true, "melodia": "A", "batida": true},
+        {"nome": "F silêncio", "t0": 18.4, "t1": 20.0, "pad": false, "melodia": null, "batida": false},
+        {"nome": "G luz", "t0": 20.0, "t1": 27.0, "pad": true, "melodia": "B", "batida": true, "gonguê": true},
+        {"nome": "H eco", "t0": 27.0, "t1": 34.29, "pad": true, "melodia": "A", "batida": "leve", "acorde": 29.29}
+      ],
+      "efeitos": {
+        "pa": [2.857], "fala": [3.3, 12.9], "pix": [23.0], "passos_de": 5.7, "passos_ate": 11.4,
+        "respingos": [8.571, 11.43], "portao": [12.5], "clique_luz": [20.0],
+        "tiques": [23.57, 24.29, 25.0, 25.71, 26.43], "acorde": [29.29]
+      }
+    }
+  }
+}

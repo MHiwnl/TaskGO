@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>39 · camera flythrough</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: camera-flythrough (câmera atravessa planos em profundidade). Os planos ficam a 900px de distância
+   no mundo; o mundo recua/avança em Z. Um plano some quando passa perto demais da câmera (d entre 100 e 650). */
+const { p, inOutCubic, el, cores } = M;
+const PASSO = 900, PERSP = 1200;
+let mundo, planos = [];
+
+const conteudo = [
+  `<div style="position:absolute;left:0;width:100%;top:330px;text-align:center;font-size:110px;font-weight:700;letter-spacing:-4px;line-height:1.05">Preciso de um<br><span style="color:${cores.azul}">eletricista</span></div>`,
+  `<div style="position:absolute;left:460px;top:300px;width:1000px;height:440px;border-radius:32px;background:#fff;color:#000;box-sizing:border-box;padding:56px">
+     <div style="font-size:30px;letter-spacing:6px;font-weight:700;color:${cores.azul}">PEDIDO ACEITO</div>
+     <div style="font-size:84px;font-weight:700;letter-spacing:-3px;margin-top:20px">Carlos aceitou</div>
+     <div style="font-size:36px;color:#555;margin-top:20px">★ 4,9 · Eletricista · R$ 180,00</div></div>`,
+  `<div style="position:absolute;left:0;width:100%;top:330px;text-align:center;color:#fff">
+     <div style="width:140px;height:140px;margin:0 auto;border-radius:50%;background:${cores.verde};display:grid;place-items:center;font-size:90px;color:#000;font-weight:700">✓</div>
+     <div style="font-size:110px;font-weight:700;letter-spacing:-4px;margin-top:30px">Pix aprovado</div>
+     <div style="font-size:50px;color:${cores.cinza};margin-top:14px">R$ 180,00 · Carlos</div></div>`,
+  `<div style="position:absolute;left:0;width:100%;top:320px;text-align:center;color:#fff">
+     <div style="font-size:90px;font-weight:700;letter-spacing:-3px">Como foi o serviço?</div>
+     <div style="font-size:150px;color:${cores.azul};margin-top:30px;letter-spacing:12px">★★★★★</div></div>`,
+  `<div style="position:absolute;left:0;width:100%;top:380px;text-align:center;font-size:260px;font-weight:700;letter-spacing:-10px;line-height:1;color:#fff">Task<span style="color:${cores.azul}">GO</span></div>`
+];
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#000';
+    palco.style.perspective = `${PERSP}px`;
+    mundo = el('div', 'position:absolute;inset:0;transform-style:preserve-3d', palco);
+    planos = conteudo.map((h, i) => el('div', `position:absolute;inset:0;transform-style:preserve-3d;transform:translateZ(${-i * PASSO}px);opacity:0`, mundo, h));
+  },
+  quadro(t) {
+    /* a câmera anda de -300 a 3600 em 0.4–4.0 (último plano em Z = 0 no fim) */
+    const cam = -300 + 3900 * inOutCubic(p(t, 0.4, 4.0));
+    mundo.style.transform = `translateZ(${cam.toFixed(2)}px)`;
+    planos.forEach((pl, i) => {
+      const d = cam - i * PASSO;
+      const op = Math.max(0, Math.min(1, (d + 1000) / 600, (650 - d) / 550));
+      pl.style.opacity = op.toFixed(4);
+      pl.style.transform = `translateZ(${-i * PASSO}px) translateY(${(Math.sin(t * 2 + i) * 6).toFixed(2)}px)`;
+    });
+  }
+};
+</script></body></html>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>33 · zoom through</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: zoom-through (a câmera atravessa a abertura de um O e entra na cena seguinte).
+   A cena do pedido é azul com um buraco circular; a marca fica por trás, recortada pelo mesmo buraco,
+   começa pequena (0.18) e cresce até cobrir a tela enquanto o O é ampliado 8 vezes. */
+const { p, lerp, inOutCubic, el, cores } = M;
+const K = 8, CX = 960, CY = 540, RB = 190;
+let mundo, telaB, telaA, anel;
+
+const pedido = `
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" style="position:absolute;left:0;top:0">
+  <path fill="${cores.azul}" fill-rule="evenodd" d="M0 0H1920V1080H0Z M${CX - RB} ${CY} a${RB} ${RB} 0 1 0 ${2 * RB} 0 a${RB} ${RB} 0 1 0 ${-2 * RB} 0Z"/>
+  <circle class="anel" cx="${CX}" cy="${CY}" r="${RB + 14}" fill="none" stroke="#fff" stroke-width="6"/>
+</svg>
+<div style="position:absolute;left:0;width:100%;top:120px;text-align:center;font-size:30px;letter-spacing:6px;font-weight:700;color:#fff">NOVO PEDIDO</div>
+<div style="position:absolute;left:0;width:100%;top:170px;text-align:center;font-size:96px;font-weight:700;letter-spacing:-3px;color:#fff">Preciso de um eletricista</div>
+<div style="position:absolute;left:0;width:100%;top:800px;text-align:center;font-size:44px;font-weight:600;color:#fff">Troca de chuveiro · Hoje, 16h</div>`;
+
+const marcaHtml = `<div class="marca" style="position:absolute;left:0;top:380px;width:100%;text-align:center;font-size:260px;font-weight:700;letter-spacing:-10px;line-height:1;color:#fff">Task<span style="color:${cores.azul}">GO</span></div>`;
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#000';
+    mundo = el('div', `position:absolute;inset:0;transform-origin:${CX}px ${CY}px`, palco);
+    /* a marca só aparece dentro do buraco: recorte no próprio mundo, antes de ser escalado */
+    const recorte = el('div', `position:absolute;inset:0;clip-path:circle(${RB}px at ${CX}px ${CY}px)`, mundo);
+    telaB = el('div', `position:absolute;inset:0;background:#000;transform-origin:${CX}px ${CY}px`, recorte, marcaHtml);
+    telaA = el('div', 'position:absolute;inset:0', mundo, pedido);
+    anel = telaA.querySelector('.anel');
+  },
+  quadro(t) {
+    const e = inOutCubic(p(t, 0.8, 2.3));
+    mundo.style.transform = `scale(${Math.pow(K, e).toFixed(5)})`;
+    telaB.style.transform = `scale(${(lerp(0.18, 1 / K, e) * (1 + 0.03 * p(t, 2.3, 5))).toFixed(5)})`;
+    /* pulso do anel do buraco enquanto a cena do pedido está em tela */
+    anel.setAttribute('r', (RB + 14 + 5 * Math.sin(t * 4)).toFixed(2));
+  }
+};
+</script></body></html>

@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><title>TaskGO · A mesa do pedido</title>
+<style>
+@font-face{font-family:IS;font-weight:400 700;src:url(fonts/spline_sans.ttf) format('truetype')}
+@font-face{font-family:PM;font-weight:500 600;src:url(fonts/spline_sans_mono.ttf) format('truetype')}
+@font-face{font-family:SC;font-weight:100 900;src:url(fonts/spline_sans.ttf) format('truetype')}
+:root{--paper:#e6e9f0;--ink:#14171f;--accent:#2b59ff}
+html,body{margin:0;background:#e6e3e0;overflow:hidden;width:1920px;height:1080px}
+canvas{display:block;position:absolute;left:0;top:0}
+#sub{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);display:none;flex-direction:column;align-items:center;gap:6px;
+  max-width:1720px;padding:14px 34px 16px;border-radius:18px;background:rgba(20,23,31,.72);pointer-events:none}
+#sub .zh{font:700 40px/1.25 IS,SC;color:#fff;letter-spacing:.01em;white-space:nowrap}
+#sub .en:empty{display:none}
+#sub .en{font:500 26px/1.25 IS;color:#d6dcea;white-space:nowrap}
+#credit{position:absolute;left:50%;bottom:72px;transform:translateX(-50%);display:none}
+</style></head><body>
+<div id="sub"><div class="zh"></div><div class="en"></div></div>
+<div id="credit"></div>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module" src="./src/main.js"></script>
+</body></html>

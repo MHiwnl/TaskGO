@@ -1,0 +1,8 @@
+[
+  {"id": "V01", "text": "Pia vazando. Ninguém atende.", "t": 0.2, "dur_est": 1.5},
+  {"id": "V02", "text": "Liga pro primo. Não atende.", "t": 3.2, "dur_est": 1.9},
+  {"id": "V03", "text": "Grupo da família. Silêncio.", "t": 6.2, "dur_est": 1.5},
+  {"id": "V05", "text": "Escolhe um profissional perto, com nota e preço.", "t": 11.3, "dur_est": 3.1},
+  {"id": "V06", "text": "Acompanha no mapa.", "t": 15.2, "dur_est": 1.2},
+  {"id": "V07", "text": "Confere o código na porta.", "t": 18.2, "dur_est": 1.9}
+]

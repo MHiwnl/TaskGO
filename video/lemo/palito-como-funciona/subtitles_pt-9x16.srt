@@ -1,0 +1,39 @@
+1
+00:00:00,200 --> 00:00:02,790
+Pia vazando. Ninguém atende.
+
+2
+00:00:03,200 --> 00:00:05,799
+Liga pro primo. Não atende.
+
+3
+00:00:06,200 --> 00:00:08,700
+Grupo da família. Silêncio.
+
+4
+00:00:08,700 --> 00:00:11,240
+Aí descobre a TaskGO.
+
+5
+00:00:11,300 --> 00:00:14,608
+Escolhe um profissional perto, com nota e preço.
+
+6
+00:00:15,200 --> 00:00:17,000
+Acompanha no mapa.
+
+7
+00:00:18,200 --> 00:00:20,173
+Confere o código na porta.
+
+8
+00:00:21,000 --> 00:00:23,500
+Paga o profissional quando terminar.
+
+9
+00:00:23,500 --> 00:00:25,514
+E avalia com estrelas.
+
+10
+00:00:25,800 --> 00:00:28,963
+Da próxima vez, você não precisa resolver sozinho.

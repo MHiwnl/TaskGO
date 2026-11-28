@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>05 · ASCII logo</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: ASCII animation. Um campo de caracteres (rampa " .:-=+*#%@") ondula em azul sobre preto;
+   um anel sai do centro e o texto "TaskGO" se resolve em ASCII grande, com um brilho que varre a marca. */
+const { p, lerp, outCubic, inOutCubic, el, cores } = M;
+const RAMPA = ' .:-=+*#%@', CW = 10, CH = 18, COLS = 192, ROWS = 60;
+let cv, ctx, mascara = [];
+window.CLIPE = {
+  dur: 5,
+  async montar(palco) {
+    palco.style.background = '#000';
+    await document.fonts.load('700 260px "Spline Sans"');
+    /* máscara: onde o texto grande cai na grade de células */
+    const off = document.createElement('canvas'); off.width = 1920; off.height = 1080;
+    const oc = off.getContext('2d', { willReadFrequently: true });
+    oc.fillStyle = '#fff'; oc.font = '700 260px "Spline Sans", sans-serif'; oc.textAlign = 'center'; oc.textBaseline = 'middle';
+    oc.fillText('TaskGO', 960, 540);
+    const dados = oc.getImageData(0, 0, 1920, 1080).data;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const x = Math.floor(c * CW + CW / 2), y = Math.floor(r * CH + CH / 2);
+      mascara.push(dados[(y * 1920 + x) * 4 + 3] > 128 ? 1 : 0);
+    }
+    cv = el('canvas', 'position:absolute;left:0;top:0', palco);
+    cv.width = 1920; cv.height = 1080;
+    ctx = cv.getContext('2d');
+    ctx.font = '16px Consolas, "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  },
+  quadro(t) {
+    /* 0–1.4 ondas e anel saem do centro · 1.4–2.8 o texto se resolve · 3.2–4.6 brilho varre a marca */
+    const R = outCubic(p(t, 0, 1.4)) * 1300, res = inOutCubic(p(t, 1.4, 2.8)), sx = lerp(-12, COLS + 12, inOutCubic(p(t, 3.2, 4.6)));
+    ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 1920, 1080);
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const px = c * CW + CW / 2, py = r * CH + CH / 2;
+      const onda = (Math.sin(c * 0.22 + t * 3.2) + Math.sin(r * 0.42 - t * 2.2) + Math.sin((c * 0.5 + r * 0.7) * 0.25 + t * 1.7)) / 3;
+      const dist = Math.hypot(px - 960, py - 540);
+      const anel = Math.exp(-((dist - R) ** 2) / 7200);
+      const campo = Math.min(1, (0.5 + 0.5 * onda) * 0.85 + anel * 0.9);
+      const varre = Math.exp(-((c - sx) ** 2) / 30);
+      let I;
+      if (mascara[r * COLS + c]) I = lerp(campo, 0.85 + 0.15 * Math.sin(c * 0.3 + t * 5), res);
+      else I = campo * (1 - 0.75 * res);
+      I = Math.min(1, I + varre * 0.4 * res);
+      const ch = RAMPA[Math.min(RAMPA.length - 1, Math.floor(I * RAMPA.length))];
+      if (ch === ' ') continue;
+      ctx.fillStyle = I > 0.85 ? '#fff' : cores.azul;
+      ctx.globalAlpha = 0.2 + 0.8 * I;
+      ctx.fillText(ch, px, py);
+    }
+    ctx.globalAlpha = 1;
+  }
+};
+</script></body></html>

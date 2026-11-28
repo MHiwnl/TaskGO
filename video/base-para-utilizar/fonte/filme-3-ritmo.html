@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>filme 3 · ritmo em 120 BPM</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Filme 3 · motion reel em 120 BPM: batida a cada 0,5 s; de 13 s a 15 s, 0,25 s. 16 s no total.
+   Cortes e flashes caem na batida; tremor leve nas batidas fortes (a cada 4 = 2 s) e nos impactos.
+   Cada palavra tem um tratamento próprio; os ícones explodem em partículas e cedem lugar à palavra seguinte. */
+const { p, lerp, outExpo, outCubic, outBack, mola, el, cores } = M;
+const ALF = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#/?';
+const on = (t, a, b) => (t >= a && t < b ? 1 : 0);
+/* último valor de uma lista de tempos que já passou (ou -1) */
+const ultimo = (t, lista) => { let u = -1; for (const b of lista) if (b <= t + 1e-9 && b > u) u = b; return u; };
+
+/* uma entrada por batida usada: word = palavra entra, whip = corte, hit = impacto forte */
+const EVENTOS = [[0, 'hit'], [1.5, 'whip'], [2, 'hit'], [3, 'word'], [4, 'hit'], [5, 'whip'], [6, 'hit'], [6.5, 'word'], [7.5, 'whip'], [8, 'hit'], [9, 'word'], [10.5, 'whip'], [11, 'hit'], [12, 'hit'],
+  [13, 'whip'], [13.25, 'whip'], [13.5, 'whip'], [13.75, 'whip'], [14, 'whip'], [14.25, 'whip'], [14.5, 'whip'], [14.75, 'whip'], [15, 'hit']]
+  .map(([t, kind]) => ({ t, kind, x: 960 }));
+const CORTES = EVENTOS.filter(c => c.kind !== 'word').map(c => c.t);
+const HITS = EVENTOS.filter(c => c.kind === 'hit').map(c => c.t);
+const FORTES = [0, 2, 4, 6, 8, 10, 12, 14];
+const BATIDAS = [...FORTES, ...HITS];
+const KIND = Object.fromEntries(EVENTOS.map(c => [c.t, c.kind]));
+
+const SVG = {
+  raio: '<path d="M120 0 L30 140 L95 140 L70 260 L175 105 L110 105 L150 0 Z"/>',
+  gota: '<path d="M100 0 C100 0 10 120 10 175 A90 90 0 0 0 190 175 C190 120 100 0 100 0 Z"/>',
+  vassoura: '<rect x="92" y="0" width="16" height="150" rx="8"/><path d="M60 150 L140 150 L180 260 L20 260 Z"/>',
+  pincel: '<path d="M92 0 L108 0 L108 170 L92 170 Z"/><path d="M80 170 L120 170 L120 200 L80 200 Z"/><path d="M80 200 Q100 260 120 200 Z"/>'
+};
+
+let mundo, flash, pedeA, pedeV, pedeB, achaEl, acha = [], chamaEl, chamaTxt, chegaEl, chega = [], pagaEls = [];
+let avOut, avFill, marca, marcaSimb, marcaTxt, parts = [], ic, ex, acc = [];
+
+function palavra(txt, cor) {
+  return el('div', `position:absolute;left:0;top:350px;width:1920px;height:380px;text-align:center;font-size:380px;font-weight:800;letter-spacing:-16px;line-height:380px;white-space:nowrap;color:${cor}`, mundo, txt);
+}
+function icone(k) {
+  return el('div', 'position:absolute;left:760px;top:280px;width:400px;height:520px;opacity:0', mundo, `<svg viewBox="0 0 200 260" width="400" height="520" fill="currentColor" style="display:block">${SVG[k]}</svg>`);
+}
+function setIcone(e, op, x, y, r, s) { e.style.opacity = op; e.style.transform = `translate(${x}px,${y}px) rotate(${r}deg) scale(${s})`; }
+/* partículas que saem do centro: t0 = instante da explosão */
+function explosao(t0, seed) {
+  const r = M.rnd(seed), lista = [];
+  for (let i = 0; i < 48; i++) {
+    const s = 8 + r() * 24;
+    lista.push({ t0, an: r() * 6.2832, d: 320 + r() * 640, e: el('div', `position:absolute;left:${960 - s / 2}px;top:${540 - s / 2}px;width:${s}px;height:${s}px;border-radius:50%;background:${[cores.azul, cores.verde, '#fff'][i % 3]};opacity:0`, mundo) });
+  }
+  return lista;
+}
+function explodir(lista, t) {
+  for (const o of lista) {
+    const q = p(t, o.t0, o.t0 + 1), e = outExpo(q);
+    o.e.style.transform = `translate(${Math.cos(o.an) * o.d * e}px,${Math.sin(o.an) * o.d * e + 520 * q * q}px) scale(${1 - 0.6 * q})`;
+    o.e.style.opacity = q > 0 && q < 1 ? 1 - q * q : 0;
+  }
+}
+
+window.CLIPE = {
+  dur: 16,
+  eventos: EVENTOS,
+  montar(palco) {
+    mundo = el('div', 'position:absolute;inset:0', palco);
+    flash = el('div', 'position:absolute;inset:0;opacity:0', palco);
+
+    /* PEDE. — glitch RGB: cópias azul e verde deslocadas sob o branco */
+    pedeA = palavra('PEDE.', cores.azul); pedeV = palavra('PEDE.', cores.verde); pedeB = palavra('PEDE.', '#fff');
+    ic = { raio: icone('raio'), gota: icone('gota'), vassoura: icone('vassoura'), pincel: icone('pincel') };
+    ex = { raio: explosao(2, 11), gota: explosao(6, 12), vassoura: explosao(8, 13), pincel: explosao(11, 14) };
+
+    /* ACHA. — letras embaralhadas que resolvem em sequência */
+    achaEl = palavra('', '#fff');
+    acha = [...'ACHA.'].map(c => el('span', 'display:inline-block;white-space:pre', achaEl, c));
+
+    /* CHAMA. — máscara gigante: as letras são o recorte de uma cena desenhada */
+    chamaEl = el('div', 'position:absolute;inset:0;opacity:0', mundo, `<svg viewBox="0 0 1920 1080" width="1920" height="1080" style="position:absolute;left:0;top:0">
+      <defs>
+        <linearGradient id="gCh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${cores.azul}"/><stop offset="1" stop-color="#0a1440"/></linearGradient>
+        <mask id="mCh" maskUnits="userSpaceOnUse" x="0" y="0" width="1920" height="1080"><text id="tCh" x="960" y="672" text-anchor="middle" fill="#fff" font-family="Spline Sans" font-weight="800" font-size="380" letter-spacing="-16">CHAMA.</text></mask>
+      </defs>
+      <g mask="url(#mCh)">
+        <rect width="1920" height="1080" fill="url(#gCh)"/>
+        <circle cx="1460" cy="300" r="150" fill="${cores.verde}"/>
+        <rect y="700" width="1920" height="380" fill="#000"/>
+        <rect x="220" y="520" width="300" height="180" fill="#000"/>
+        <polygon points="200,520 370,400 540,520" fill="#000"/>
+        <rect x="640" y="430" width="240" height="270" fill="#000"/>
+        <rect x="1100" y="560" width="280" height="140" fill="#000"/>
+        <polygon points="1080,560 1240,440 1400,560" fill="#000"/>
+        <rect x="1470" y="420" width="220" height="280" fill="#000"/>
+        <rect x="300" y="580" width="60" height="60" fill="${cores.verde}"/>
+        <rect x="420" y="580" width="60" height="60" fill="${cores.verde}"/>
+        <rect x="700" y="500" width="60" height="60" fill="${cores.verde}"/>
+        <rect x="1500" y="500" width="60" height="60" fill="${cores.verde}"/>
+      </g></svg>`);
+    chamaTxt = chamaEl.querySelector('#tCh');
+
+    /* CHEGA. — letras caem com mola e quicam */
+    chegaEl = palavra('', '#fff');
+    chega = [...'CHEGA.'].map(c => el('span', 'display:inline-block;white-space:pre', chegaEl, c));
+
+    /* PAGA. — eco de rastro: cópias azuis atrasadas (criadas do fundo para a frente) */
+    pagaEls = [3, 2, 1, 0].map(k => ({ k, e: palavra('PAGA.', k ? cores.azul : '#fff') }));
+
+    /* AVALIA. — contorno que se preenche de baixo para cima */
+    avOut = palavra('AVALIA.', `transparent;-webkit-text-stroke:5px ${cores.azul}`);
+    avFill = palavra('AVALIA.', '#fff');
+
+    /* icones da montagem acelerada (13–15 s) */
+    acc = ['raio', 'gota', 'vassoura', 'pincel'].map(icone);
+
+    /* marca final: símbolo + Task GO, com partículas que assentam em volta */
+    marca = el('div', 'position:absolute;inset:0', mundo);
+    marcaSimb = el('img', 'position:absolute;left:860px;top:300px;width:200px;opacity:0', marca); marcaSimb.src = M.simbolo;
+    marcaTxt = el('div', 'position:absolute;left:0;width:1920px;top:520px;text-align:center;font-size:240px;font-weight:800;letter-spacing:-8px;line-height:240px;color:#fff;opacity:0', marca, `Task<span style="color:${cores.azul}">GO</span>`);
+    const r = M.rnd(21);
+    for (let i = 0; i < 70; i++) {
+      const s = 6 + r() * 14, a = r() * 6.2832, R = 380 + r() * 240;
+      parts.push({ fx: Math.cos(a) * R * 1.3, fy: Math.sin(a) * R * 0.62, e: el('div', `position:absolute;left:${960 - s / 2}px;top:${540 - s / 2}px;width:${s}px;height:${s}px;border-radius:50%;background:${[cores.azul, cores.verde, '#fff'][i % 3]};opacity:0`, marca) });
+    }
+  },
+  quadro(t) {
+    /* tremor: forte nas batidas de 2 s e nos impactos, decai em 0,25 s */
+    const tb = ultimo(t, BATIDAS), amp = tb < 0 ? 0 : (FORTES.includes(tb) ? 10 : 6) * (1 - p(t, tb, tb + 0.25));
+    mundo.style.transform = `translate(${amp * Math.sin(t * 110)}px,${amp * 0.6 * Math.cos(t * 130)}px)`;
+    /* flash curto em cada corte: azul no impacto, branco no corte seco */
+    const cu = ultimo(t, CORTES), duro = KIND[cu] === 'hit';
+    flash.style.background = duro ? cores.azul : '#fff';
+    flash.style.opacity = cu < 0 ? 0 : (duro ? 0.8 : 0.5) * (1 - p(t, cu, cu + 0.14));
+
+    /* 0–1,5 PEDE. glitch RGB: as cópias se afastam e voltam ao branco */
+    const g = 1 - p(t, 0, 0.55), j = t < 0.55 ? Math.sin(t * 97) * g * 24 : 0, dx = g * 90 + j;
+    pedeA.style.transform = `translateX(${dx}px)`; pedeV.style.transform = `translateX(${-dx}px)`;
+    pedeA.style.opacity = pedeV.style.opacity = 0.9 * on(t, 0, 1.5);
+    pedeB.style.opacity = on(t, 0, 1.5);
+
+    /* 1,5–2 raio entra girando; 2 explode */
+    setIcone(ic.raio, on(t, 1.5, 2), 0, 0, lerp(-25, 0, outExpo(p(t, 1.5, 1.9))), outBack(p(t, 1.5, 1.9)));
+    explodir(ex.raio, t);
+
+    /* 3–4 ACHA. letras embaralhadas que resolvem uma a uma */
+    achaEl.style.opacity = on(t, 3, 4);
+    const f = Math.floor(t * 30);
+    acha.forEach((s, i) => {
+      const alvo = 'ACHA.'[i];
+      s.textContent = t >= 3.25 + i * 0.07 || alvo === '.' ? alvo : ALF[Math.floor(M.rnd(i * 7919 + f)() * ALF.length)];
+    });
+
+    /* 4–5 CHAMA. máscara gigante que encolhe e revela a cena nas letras */
+    chamaEl.style.opacity = on(t, 4, 5);
+    chamaTxt.setAttribute('transform', `translate(960 672) scale(${lerp(2.4, 1, outExpo(p(t, 4, 4.5)))}) translate(-960 -672)`);
+
+    /* 5–6 gota cai com mola; 6 explode */
+    setIcone(ic.gota, on(t, 5, 6), 0, (1 - mola(t - 5, 1.4, 11)) * -560, 0, 1);
+    explodir(ex.gota, t);
+
+    /* 6,5–7,5 CHEGA. letras caem com mola */
+    chegaEl.style.opacity = on(t, 6.5, 7.5);
+    chega.forEach((s, i) => { s.style.transform = `translateY(${(1 - mola(t - 6.5 - i * 0.055, 2.2, 11)) * -900}px)`; });
+
+    /* 7,5–8 vassoura varre a tela; 8 explode */
+    setIcone(ic.vassoura, on(t, 7.5, 8), (1 - outExpo(p(t, 7.5, 7.9))) * -1000, 0, lerp(-25, 0, outExpo(p(t, 7.5, 7.9))), 1);
+    explodir(ex.vassoura, t);
+
+    /* 9–10,5 PAGA. entra com eco: cópias atrasadas em azul */
+    const pos = tt => lerp(-600, 0, outExpo(p(tt, 9, 9.5)));
+    pagaEls.forEach(({ k, e }) => { e.style.transform = `translateX(${pos(t - k * 0.06)}px)`; e.style.opacity = on(t, 9, 10.5) * [1, 0.55, 0.3, 0.15][k]; });
+
+    /* 10,5–11 pincel entra da direita; 11 explode */
+    setIcone(ic.pincel, on(t, 10.5, 11), (1 - outExpo(p(t, 10.5, 10.9))) * 1000, 0, lerp(25, 0, outExpo(p(t, 10.5, 10.9))), 1);
+    explodir(ex.pincel, t);
+
+    /* 12–13 AVALIA. contorno que se preenche */
+    avOut.style.opacity = on(t, 12, 13);
+    avFill.style.opacity = on(t, 12, 13);
+    avFill.style.clipPath = `inset(${(1 - outCubic(p(t, 12, 12.6))) * 100}% 0 0 0)`;
+
+    /* 13–15 montagem acelerada: uma batida a cada 0,25 s, ícone diferente e cor alternada */
+    const dentro = on(t, 13, 15), k = dentro ? Math.floor((t - 13) / 0.25 + 1e-9) : 0, bt = 13 + k * 0.25;
+    acc.forEach((e, i) => {
+      e.style.opacity = dentro && i === k % 4 ? 1 : 0;
+      e.style.color = k % 2 ? cores.verde : cores.azul;
+      e.style.transform = `scale(${lerp(1.25, 1, outExpo(p(t, bt, bt + 0.2)))})`;
+    });
+
+    /* 15–16 marca em impacto; partículas assentam */
+    const imp = p(t, 15, 15.45);
+    marcaSimb.style.opacity = p(t, 15, 15.05);
+    marcaSimb.style.transform = `scale(${outBack(imp)})`;
+    marcaTxt.style.opacity = p(t, 15, 15.05);
+    marcaTxt.style.transform = `scale(${lerp(1.6, 1, outBack(imp))})`;
+    parts.forEach(o => {
+      const e = outBack(p(t, 15, 15.8), 0.9);
+      o.e.style.opacity = t >= 15 ? 0.9 : 0;
+      o.e.style.transform = `translate(${o.fx * e}px,${o.fy * e}px)`;
+    });
+  }
+};
+</script></body></html>

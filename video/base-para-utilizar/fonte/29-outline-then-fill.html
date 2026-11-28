@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>29 · outline then fill</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: outline-then-fill (awesome-ai-motion nº 425). O pino (símbolo) é desenhado primeiro só com
+   contorno (stroke-dashoffset com pathLength 1); depois o miolo branco e o preenchimento azul aparecem. Em
+   seguida o contorno da marca TaskGO é desenhado (dasharray maior que qualquer contorno de letra) e só então
+   preenche. Um anel de pulso mantém o movimento depois que a forma fica pronta. */
+const { p, outCubic, outExpo, inOutCubic, el, cores } = M;
+const NS = 'http://www.w3.org/2000/svg';
+const PINO = 'M100 18 C56 18 24 50 24 92 C24 146 100 186 100 186 C100 186 176 146 176 92 C176 50 144 18 100 18 Z';
+let svg, pino, miolo, check, texto, anel, grade;
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    grade = el('div', 'position:absolute;inset:-120px;opacity:.1;background-image:linear-gradient(90deg,#2b59ff 2px,transparent 2px),linear-gradient(#2b59ff 2px,transparent 2px);background-size:120px 120px', palco);
+    svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', 1920); svg.setAttribute('height', 1080); svg.setAttribute('viewBox', '0 0 1920 1080');
+    svg.style.cssText = 'position:absolute;left:0;top:0';
+    palco.appendChild(svg);
+    svg.innerHTML = `
+      <circle id="anel" cx="960" cy="340" r="100" fill="none" stroke="#2b59ff" stroke-width="3"/>
+      <g id="pino" transform="translate(810 190) scale(1.5)">
+        <path id="contorno" d="${PINO}" pathLength="1" fill="#2b59ff" fill-opacity="0" stroke="#2b59ff" stroke-width="5" stroke-linejoin="round" stroke-dasharray="1" stroke-dashoffset="1"/>
+        <circle id="miolo" cx="100" cy="92" r="30" fill="#fff" fill-opacity="0" stroke="#fff" stroke-width="5" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+        <path id="check" d="M84 94 L97 107 L121 80" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+      </g>
+      <text id="texto" x="960" y="760" text-anchor="middle" font-family="Spline Sans" font-weight="700" font-size="220" letter-spacing="-6" fill-opacity="0" stroke-width="3" stroke-dasharray="2000" stroke-dashoffset="2000"><tspan fill="#fff" stroke="#fff">Task</tspan><tspan fill="#2b59ff" stroke="#2b59ff">GO</tspan></text>`;
+    pino = svg.querySelector('#contorno');
+    miolo = svg.querySelector('#miolo');
+    check = svg.querySelector('#check');
+    texto = svg.querySelector('#texto');
+    anel = svg.querySelector('#anel');
+  },
+  quadro(t) {
+    grade.style.transform = `translate(${-((t * 60) % 120)}px,${-((t * 30) % 120)}px)`;
+    /* contorno do pino 0.2–0.9 s; preenchimento azul 0.9–1.3 s */
+    pino.setAttribute('stroke-dashoffset', 1 - outCubic(p(t, 0.2, 0.9)));
+    pino.setAttribute('fill-opacity', p(t, 0.9, 1.3));
+    /* miolo e check: contorno 1.2–1.6 s, preenchimento do miolo 1.6–1.9 s */
+    miolo.setAttribute('stroke-dashoffset', 1 - outCubic(p(t, 1.2, 1.6)));
+    miolo.setAttribute('fill-opacity', p(t, 1.6, 1.9));
+    check.setAttribute('stroke-dashoffset', 1 - outCubic(p(t, 1.5, 1.9)));
+    /* marca: contorno 1.9–2.7 s (cada letra desenha ao mesmo tempo), preenchimento 2.7–3.1 s */
+    texto.setAttribute('stroke-dashoffset', 2000 * (1 - outCubic(p(t, 1.9, 2.7))));
+    texto.setAttribute('fill-opacity', p(t, 2.7, 3.1));
+    /* pulso do anel depois de 3.2 s, para o quadro não ficar parado */
+    const q = p(t, 3.2, 5);
+    anel.setAttribute('r', 100 + 160 * outExpo(q));
+    anel.setAttribute('stroke-opacity', 0.7 * (1 - q));
+  }
+};
+</script></body></html>

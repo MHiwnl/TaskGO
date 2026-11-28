@@ -1,0 +1,47 @@
+[
+ {
+  "t0": 0.0,
+  "t1": 3.485,
+  "text": "Um pedido de ar-condicionado começa no celular, com um toque."
+ },
+ {
+  "t0": 4.5,
+  "t1": 8.032,
+  "text": "Você descreve o serviço e chama um profissional perto de você."
+ },
+ {
+  "t0": 9.5,
+  "t1": 13.089,
+  "text": "Ele aceita pelo celular, e o pedido entra na agenda dele."
+ },
+ {
+  "t0": 14.5,
+  "t1": 17.605,
+  "text": "Você acompanha a chegada no mapa até ele estar na porta."
+ },
+ {
+  "t0": 21.5,
+  "t1": 25.196,
+  "text": "Quando ele chega, você informa o código de quatro dígitos."
+ },
+ {
+  "t0": 26.0,
+  "t1": 29.798000000000002,
+  "text": "Só então ele digita o código no app, e o serviço começa."
+ },
+ {
+  "t0": 31.5,
+  "t1": 35.391,
+  "text": "Depois, você paga o profissional por Pix ou dinheiro."
+ },
+ {
+  "t0": 35.5,
+  "t1": 40.099000000000004,
+  "text": "Por fim, você avalia com estrelas, e o profissional avalia você."
+ },
+ {
+  "t0": 47.0,
+  "t1": 50.456,
+  "text": "Do primeiro toque à avaliação: TaskGO."
+ }
+]

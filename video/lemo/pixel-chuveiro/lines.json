@@ -1,0 +1,12 @@
+[
+  {"id": "l01", "text": "Numa noite de chuva, no Recife, a luz da casa da dona Socorro se apagou.", "dur_s": 4.7, "t_16x9": 5.9, "t_9x16": null},
+  {"id": "l02", "text": "Ela pediu um eletricista pelo celular.", "dur_s": 1.91, "t_16x9": 12.0, "t_9x16": 3.3},
+  {"id": "l03", "text": "O Carlos saiu de casa de capa azul, com a caixa de ferramentas.", "dur_s": 3.475, "t_16x9": 16.6, "t_9x16": null},
+  {"id": "l04", "text": "Atravessou a ponte, passou pela Casa Amarela, e a chuva não deu trégua.", "dur_s": 4.503, "t_16x9": 21.9, "t_9x16": 5.9},
+  {"id": "l05", "text": "Chegou, e mostrou o código de quatro dígitos para ela confirmar que era ele.", "dur_s": 4.393, "t_16x9": 28.9, "t_9x16": null},
+  {"id": "f01", "tipo": "fala", "falante": "Carlos", "text": "Confere no seu app: 4719.", "dur_s": 3.082, "t_16x9": 34.6, "t_9x16": 12.9},
+  {"id": "l06", "text": "Ele achou o defeito no chuveiro e religou o disjuntor.", "dur_s": 3.17, "t_16x9": 37.9, "t_9x16": 16.2},
+  {"id": "l07", "text": "A luz voltou, e com ela o vapor do banho quente.", "dur_s": 3.295, "t_16x9": 43.2, "t_9x16": null},
+  {"id": "l08", "text": "Ela pagou pelo Pix e deu cinco estrelas.", "dur_s": 3.009, "t_16x9": 47.7, "t_9x16": 23.4},
+  {"id": "l09", "text": "A mesma janela, acesa de novo.", "dur_s": 2.119, "t_16x9": 52.6, "t_9x16": 27.0}
+]

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>08 · micro-interação do botão</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: micro-interação. O cursor desce com rastro de movimento, o botão reage ao hover, afunda no clique
+   com onda, vira spinner, depois um ✓ verde e um toast "Profissional a caminho" deslizam; no fim, a marca no canto. */
+const { p, lerp, outExpo, outCubic, outBack, inOutCubic, mola, el, cores } = M;
+const AZUL = [43, 89, 255], VERDE = [53, 208, 143];
+const mistura = (a, b, k) => 'rgb(' + a.map((v, i) => Math.round(lerp(v, b[i], k))).join(',') + ')';
+const BTN = { w0: 460, h: 110, y: 545 }, CLIQUE = { x: 1080, y: 600 };
+const SETA = '<svg viewBox="0 0 28 38" width="28" height="38"><path d="M1 1 L1 29 L8 22 L13 34 L18 32 L13 20 L23 20 Z" fill="#fff" stroke="#000" stroke-width="2" stroke-linejoin="round"/></svg>';
+let cursor, rastros = [], btn, txt, spin, check, halo, onda, toast, marca;
+/* posição da ponta do cursor: desce de fora da tela até o clique (função de t) */
+const posCursor = t => { const k = inOutCubic(p(t, 0.2, 1.3)); return [lerp(1700, CLIQUE.x, k), lerp(-80, CLIQUE.y, k)]; };
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = 'radial-gradient(ellipse at 50% 50%, #0d1230 0%, #000 65%)';
+    el('div', 'position:absolute;left:460px;top:250px;width:1000px;height:560px;border-radius:40px;background:#0e0f14;border:1px solid #23263a', palco);
+    el('div', 'position:absolute;left:520px;top:330px;font-size:56px;font-weight:700', palco, 'Trocar chuveiro');
+    el('div', 'position:absolute;left:520px;top:405px;font-size:30px;color:#9a9aa6', palco, 'Eletricista · hoje, 14h');
+    halo = el('div', `position:absolute;left:${960 - BTN.w0 / 2 - 60}px;top:${BTN.y - 60}px;width:${BTN.w0 + 120}px;height:${BTN.h + 120}px;border-radius:999px;background:radial-gradient(closest-side,rgba(43,89,255,.7),transparent);filter:blur(18px);opacity:0`, palco);
+    btn = el('div', `position:absolute;left:0;top:${BTN.y}px;width:${BTN.w0}px;height:${BTN.h}px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:${cores.azul}`, palco);
+    txt = el('div', 'font-size:44px;font-weight:700;white-space:nowrap', btn, 'Chamar agora');
+    spin = el('div', 'position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;border:8px solid rgba(255,255,255,.35);border-top-color:#fff;box-sizing:border-box;opacity:0', btn);
+    check = el('div', 'position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;transform:scale(0)', btn,
+      '<svg viewBox="0 0 64 64" width="64" height="64"><path d="M18 33 L28 43 L47 22" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>');
+    onda = el('div', 'position:absolute;left:0;top:0;width:760px;height:760px;border-radius:50%;border:4px solid rgba(255,255,255,.8);opacity:0', palco);
+    rastros = [0, 1, 2].map(() => el('div', 'position:absolute;left:0;top:0;transform-origin:0 0', palco, SETA));
+    cursor = el('div', 'position:absolute;left:0;top:0;transform-origin:0 0', palco, SETA);
+    toast = el('div', 'position:absolute;left:1200px;top:840px;width:640px;height:140px;border-radius:28px;background:rgba(255,255,255,.08);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;gap:24px;padding:0 30px;box-shadow:0 30px 60px rgba(0,0,0,.5);opacity:0', palco,
+      `<div style="width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,${cores.azul},${cores.azulClaro});display:grid;place-items:center;font-size:36px;font-weight:700">C</div><div><div style="font-size:38px;font-weight:700;white-space:nowrap">Profissional a caminho</div><div style="font-size:26px;color:#9a9aa6;margin-top:6px">Carlos · Eletricista</div></div>`);
+    marca = el('div', 'position:absolute;left:120px;top:90px;font-size:60px;font-weight:700;letter-spacing:-2px;opacity:0', palco, 'Task<span style="color:#2b59ff">GO</span>');
+  },
+  quadro(t) {
+    /* 0.2–1.3 cursor desce com rastro · 1.3–1.6 hover com brilho · 1.6 clique: afunda e ondula
+       · 2.1–2.6 botão vira spinner · 3.0–3.3 verde e ✓ · 3.6–4.2 toast desliza · 4.2–4.8 marca no canto */
+    const [cx, cy] = posCursor(t);
+    const clique = p(t, 1.6, 1.68) - p(t, 1.68, 1.9);
+    const hover = outBack(p(t, 1.3, 1.6));
+    rastros.forEach((g, k) => {
+      const [gx, gy] = posCursor(t - 0.05 * (k + 1));
+      g.style.transform = `translate(${gx.toFixed(1)}px,${gy.toFixed(1)}px)`;
+      g.style.opacity = ((0.3 - 0.09 * k) * (1 - p(t, 1.25, 1.35))).toFixed(3);
+    });
+    cursor.style.transform = `translate(${cx.toFixed(1)}px,${cy.toFixed(1)}px) scale(${(1 - 0.15 * clique).toFixed(4)})`;
+    cursor.style.opacity = (1 - p(t, 2.4, 2.8)).toFixed(3);
+    halo.style.opacity = (0.9 * hover * (1 - 0.6 * p(t, 2.1, 2.6))).toFixed(3);
+    const morfo = outCubic(p(t, 2.1, 2.6)), w = lerp(BTN.w0, BTN.h, morfo);
+    const sx = (1 + 0.06 * clique) * (1 + 0.05 * hover), sy = (1 - 0.08 * clique) * (1 + 0.05 * hover);
+    btn.style.width = w.toFixed(1) + 'px';
+    btn.style.left = (960 - w / 2).toFixed(1) + 'px';
+    btn.style.background = mistura(AZUL, VERDE, outCubic(p(t, 3.0, 3.3)));
+    btn.style.transform = `scale(${sx.toFixed(4)},${sy.toFixed(4)})`;
+    btn.style.boxShadow = `0 0 ${(50 * hover).toFixed(1)}px rgba(43,89,255,${(0.6 * hover).toFixed(3)})`;
+    txt.style.opacity = (1 - p(t, 2.1, 2.3)).toFixed(3);
+    spin.style.opacity = (p(t, 2.3, 2.5) * (1 - p(t, 3.0, 3.15))).toFixed(3);
+    spin.style.transform = `rotate(${(t * 900).toFixed(1)}deg)`;
+    check.style.transform = `scale(${Math.max(0, outBack(p(t, 3.1, 3.45))).toFixed(4)})`;
+    check.querySelector('path').style.strokeDashoffset = (1 - outCubic(p(t, 3.2, 3.6))).toFixed(4);
+    const rp = outExpo(p(t, 1.6, 2.5));
+    onda.style.transform = `translate(${CLIQUE.x - 380}px,${CLIQUE.y - 380}px) scale(${rp.toFixed(4)})`;
+    onda.style.opacity = (t > 1.6 ? 0.8 * (1 - p(t, 1.7, 2.5)) : 0).toFixed(3);
+    const tk = outBack(p(t, 3.6, 4.2));
+    toast.style.transform = `translate(${lerp(700, 0, tk).toFixed(1)}px,${(Math.sin(t * 2.5) * 4 * p(t, 4.2, 4.6)).toFixed(2)}px)`;
+    toast.style.opacity = Math.min(1, p(t, 3.6, 3.8)).toFixed(3);
+    marca.style.opacity = p(t, 4.2, 4.5).toFixed(3);
+    marca.style.transform = `translateY(${((1 - mola(t - 4.2, 2, 6)) * -40).toFixed(1)}px)`;
+  }
+};
+</script></body></html>

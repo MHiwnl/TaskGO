@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>31 · shader wipe</title>
+<script src="../../onetake/font.js"></script>
+<script src="base.js"></script></head><body>
+<script>
+/* Referência: shader-wipe (cortina de borda ondulada com ruído). A faixa azul é pintada em canvas e a cena
+   nova aparece atrás dela, recortada pela mesma borda (clip-path polígono). Pedido → aceito → marca. */
+const { p, lerp, inOutCubic, outBack, el, cores, rnd } = M;
+const W = 1920, H = 1080, PASSO = 8;
+const ruido = (() => { const r = rnd(31), v = []; for (let y = 0; y <= H; y += PASSO) v.push(r()); return v; })();
+let telaB, telaC, cartaoA, cartaoB, marca, cx;
+
+/* x da borda na altura y; q = 0 toda fora à esquerda, q = 1 toda fora à direita */
+function borda(y, q) {
+  return lerp(-120, W + 120, q) + 60 * Math.sin(y * 0.008 + q * 5) + 25 * Math.sin(y * 0.027 + 1.7) + (ruido[Math.round(y / PASSO)] - 0.5) * 30;
+}
+/* a cena nova fica à esquerda da borda */
+function recorte(q) {
+  const pts = ['0px 0px'];
+  for (let y = 0; y <= H; y += PASSO) pts.push(`${borda(y, q).toFixed(1)}px ${y}px`);
+  pts.push(`0px ${H}px`);
+  return `polygon(${pts.join(',')})`;
+}
+/* faixa azul logo à esquerda da borda, com a borda interna também ruidosa */
+function faixa(q) {
+  cx.clearRect(0, 0, W, H);
+  cx.beginPath();
+  for (let y = 0; y <= H; y += PASSO) cx.lineTo(borda(y, q), y);
+  for (let y = H; y >= 0; y -= PASSO) cx.lineTo(borda(y, q) - 36 - ruido[Math.round(y / PASSO)] * 16, y);
+  cx.closePath();
+  cx.fillStyle = cores.azul; cx.shadowColor = cores.azul; cx.shadowBlur = 50;
+  cx.fill();
+}
+
+const pedido = `
+<div style="position:absolute;left:160px;top:200px;font-size:30px;letter-spacing:6px;font-weight:700;color:${cores.azul}">NOVO PEDIDO</div>
+<div style="position:absolute;left:160px;top:260px;width:1500px;font-size:120px;font-weight:700;letter-spacing:-4px;line-height:1.05">Preciso de um eletricista</div>
+<div class="cartao" style="position:absolute;left:160px;top:560px;width:1000px;height:320px;border-radius:28px;background:#0e0f14;border:1px solid #23263a;box-sizing:border-box;padding:44px 48px">
+  <div style="font-size:44px;font-weight:600">Troca de chuveiro</div>
+  <div style="font-size:30px;color:${cores.cinza};margin-top:12px">Hoje, 16h · Vila Mariana</div>
+  <div style="position:absolute;left:48px;bottom:44px;height:80px;line-height:80px;padding:0 40px;border-radius:999px;background:${cores.azul};font-size:32px;font-weight:700">Enviar pedido</div>
+</div>`;
+
+const aceito = `
+<div style="position:absolute;left:160px;top:200px;font-size:30px;letter-spacing:6px;font-weight:700;color:${cores.azul}">PEDIDO ACEITO</div>
+<div style="position:absolute;left:160px;top:260px;width:1500px;font-size:120px;font-weight:700;letter-spacing:-4px;color:#000">Carlos aceitou</div>
+<div class="cartao" style="position:absolute;left:160px;top:560px;width:1000px;height:320px;border-radius:28px;background:#fff;border:1px solid #d9dce6;box-shadow:0 30px 60px rgba(0,0,0,.12);box-sizing:border-box;padding:44px 48px;color:#000">
+  <div style="display:flex;gap:28px;align-items:center">
+    <div style="width:120px;height:120px;border-radius:50%;background:linear-gradient(135deg,${cores.azul},${cores.azulClaro});display:grid;place-items:center;font-size:52px;font-weight:700;color:#fff">C</div>
+    <div><div style="font-size:44px;font-weight:700">Carlos · Eletricista</div><div style="font-size:30px;color:#555;margin-top:8px">★ 4,9 · 128 serviços</div></div>
+  </div>
+  <div style="position:absolute;right:48px;bottom:44px;height:80px;line-height:80px;padding:0 40px;border-radius:999px;background:${cores.azul};font-size:32px;font-weight:700;color:#fff">Pagar por Pix</div>
+</div>`;
+
+const marcaHtml = `<div class="marca" style="position:absolute;left:0;top:380px;width:100%;text-align:center;font-size:260px;font-weight:700;letter-spacing:-10px;line-height:1">Task<span style="color:${cores.azul}">GO</span></div>`;
+
+window.CLIPE = {
+  dur: 5,
+  montar(palco) {
+    palco.style.background = '#000';
+    const A = el('div', 'position:absolute;inset:0;background:#08080a;overflow:hidden', palco, pedido);
+    telaB = el('div', 'position:absolute;inset:0;background:#f4f5f8;overflow:hidden', palco, aceito);
+    telaC = el('div', 'position:absolute;inset:0;background:#000;overflow:hidden', palco, marcaHtml);
+    cartaoA = A.querySelector('.cartao'); cartaoB = telaB.querySelector('.cartao'); marca = telaC.querySelector('.marca');
+    const cv = el('canvas', 'position:absolute;left:0;top:0;width:1920px;height:1080px', palco);
+    cv.width = W; cv.height = H; cx = cv.getContext('2d');
+  },
+  quadro(t) {
+    /* 1.0–2.0 pedido → aceito · 2.9–3.9 aceito → marca · a faixa azul acompanha a borda da vez */
+    const q1 = inOutCubic(p(t, 1.0, 2.0)), q2 = inOutCubic(p(t, 2.9, 3.9));
+    telaB.style.clipPath = recorte(q1);
+    telaC.style.clipPath = recorte(q2);
+    faixa(t < 2.45 ? q1 : q2);
+    cartaoA.style.transform = `translateY(${Math.sin(t * 1.6) * 8}px)`;
+    cartaoB.style.transform = `translateY(${Math.sin(t * 1.6 + 1) * 8}px)`;
+    marca.style.transform = `scale(${(lerp(0.7, 1, outBack(p(t, 3.9, 4.6))) * (1 + 0.02 * p(t, 4.6, 5))).toFixed(4)})`;
+  }
+};
+</script></body></html>
