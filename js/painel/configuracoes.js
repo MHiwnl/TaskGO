@@ -74,7 +74,7 @@ async function salvarPerfil(e){
   e.preventDefault();
   const f=new FormData(e.target),patch={};
   ['name','cpf','phone','city','address','bio','service','birth'].forEach(k=>{if(f.get(k)!==null)patch[k]=f.get(k);});
-  try{await saveUser(patch);toast('Perfil atualizado com sucesso!','ok');render();}catch(error){toast(error.message||'Não foi possível salvar o perfil.','err');}
+  try{await saveUser(patch);toast('Perfil atualizado com sucesso!','ok');render();}catch(error){const m=error.message||'Não foi possível salvar o perfil.';const campo=/cpf/i.test(m)?'cpf':/telefone|whats/i.test(m)?'phone':/nome/i.test(m)?'name':'';if(campo)marcarCampo(e.target.querySelector('[name='+campo+']'),m);toast(m,'err');}
 }
 function trocarFoto(input){
   const file=input.files&&input.files[0];input.value='';if(!file)return;
@@ -93,10 +93,10 @@ function trocarSenha(){
 }
 async function salvarSenha(){
   const u=me(),o=$('#pwOld').value,n=$('#pwNew').value,n2=$('#pwNew2').value;
-  const falta=faltaNaSenha(n,u.email,u.name);if(falta)return toast(falta,'err');
-  if(n!==n2)return toast('As senhas não coincidem','err');
+  const falta=faltaNaSenha(n,u.email,u.name);if(falta){marcarCampo($('#pwNew'),falta);return toast(falta,'err');}
+  if(n!==n2){marcarCampo($('#pwNew2'),'As senhas não coincidem');return toast('As senhas não coincidem','err');}
   try{const resposta=await fetch(API_BASE_URL+'/api/auth/senha',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({senhaAtual:o,novaSenha:n})});if(!resposta.ok)throw (resposta.status===401?new Error('Senha atual incorreta'):await erroDaResposta(resposta,'Não foi possível alterar a senha.'));closeModal();toast('Senha alterada com sucesso','ok');}
-  catch(erro){toast(erro.message||'Não foi possível alterar a senha.','err');}
+  catch(erro){const m=erro.message||'Não foi possível alterar a senha.';if(/atual/i.test(m))marcarCampo($('#pwOld'),m);toast(m,'err');}
 }
 function excluirConta(){
   openModal('<div class="modal-head"><div><h3 style="color:var(--danger-text)">Excluir conta</h3><p>Todos os seus dados, pedidos e saldo serão perdidos.</p></div><button class="icon-btn" aria-label="Fechar" onclick="closeModal()">'+ic('x')+'</button></div>'+
@@ -105,7 +105,7 @@ function excluirConta(){
   '<button class="btn btn-danger btn-block" id="btnConfirmarExclusao" onclick="confirmarExclusao()">Excluir permanentemente</button>');
 }
 async function confirmarExclusao(){
-  if(($('#delConf')||{}).value!=='EXCLUIR')return toast('Digite EXCLUIR para confirmar','err');
+  if(($('#delConf')||{}).value!=='EXCLUIR'){marcarCampo($('#delConf'),'Digite EXCLUIR para confirmar');return toast('Digite EXCLUIR para confirmar','err');}
   const usuario=me();
   if(!usuario)return toast('Não foi possível identificar a conta atual.','err');
   const botao=$('#btnConfirmarExclusao');

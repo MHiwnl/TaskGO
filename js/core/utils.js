@@ -83,7 +83,7 @@ function stars(n){let h='';for(let i=0;i<5;i++)h+='<svg viewBox="0 0 24 24" styl
 function toast(msg,type){
   if(type==='err'&&window.__sessaoVencida)return;
   const t=document.createElement('div');
-  t.className='toast '+(type||'');
+  t.className='toast '+(type||'');t.setAttribute('role',type==='err'?'alert':'status');
   t.innerHTML=ic(type==='err'?'x':'checkCircle')+'<span>'+esc(msg)+'</span>';
   $('#toasts').appendChild(t);
   /* Aviso que diz o que falta: leva direto ao lugar onde se resolve. */

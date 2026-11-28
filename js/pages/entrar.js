@@ -334,11 +334,11 @@ async function doAuth(e){
     }
     return;
   }
-  if(A.role==='profissional'&&!f.get('service')){toast('Escolha a sua categoria principal.','err');const b=document.getElementById('auth-service-btn');if(b){b.scrollIntoView({block:'center'});alternarSeletorServico('auth-service');}return;}
+  if(A.role==='profissional'&&!f.get('service')){toast('Escolha a sua categoria principal.','err');marcarCampo(document.getElementById('auth-service-btn'),'Escolha a sua categoria principal.');const b=document.getElementById('auth-service-btn');if(b){b.scrollIntoView({block:'center'});alternarSeletorServico('auth-service');}return;}
   const falta=faltaNaSenha(pass,email,f.get('name'));
-  if(falta){toast(falta,'err');const c=document.getElementById('auth-pass');if(c)c.focus();return;}
+  if(falta){toast(falta,'err');marcarCampo(document.getElementById('auth-pass'),falta);return;}
   const cpfDig=String(f.get('cpf')||'').replace(/\D/g,'');
-  if(cpfDig.length!==11||(typeof cpfOk==='function'&&!cpfOk(cpfDig))){toast('CPF inválido. Confira os números.','err');const c=document.getElementById('auth-cpf');if(c){c.focus();c.scrollIntoView({block:'center'});}return;}
+  if(cpfDig.length!==11||(typeof cpfOk==='function'&&!cpfOk(cpfDig))){toast('CPF inválido. Confira os números.','err');const c=document.getElementById('auth-cpf');if(c){marcarCampo(c,'CPF inválido. Confira os números.');c.scrollIntoView({block:'center'});}return;}
   const u={id:'u_'+uid(),role:A.role,name:f.get('name'),email:email,cpf:f.get('cpf'),phone:f.get('phone'),
     photo:null,city:'',address:'',bio:'',balance:0,pending:0,rating:0,since:Date.now(),plan:'free',
     refCode:'',referredBy:null,pixKey:'',

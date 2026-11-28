@@ -24,7 +24,7 @@ function mapaRastreioCard(o,isPro){
       '<a class="btn btn-ghost btn-sm" href="'+esc(linkNavegacao(o,'waze'))+'" target="_blank" rel="noopener">'+ic('route')+' Abrir no Waze</a>'+
       '<button class="btn btn-grad btn-sm" data-chegada onclick="informarChegada(\''+esc(o.id)+'\')"'+(chegando===o.id?' disabled aria-busy="true"':'')+'>'+(chegando===o.id?'<span class="pag-ponto"></span> Confirmando...':ic('mapPin')+' Cheguei')+'</button></div>':'';
   return '<div class="rastreio">'+
-    '<div class="rastreio-painel" id="rastreio-painel" aria-live="polite">'+painelRastreio(isPro)+'</div>'+
+    '<div class="rastreio-painel" id="rastreio-painel">'+painelRastreio(isPro)+'</div><p id="rastreio-anuncio" class="leitor" role="status"></p>'+
     '<div class="map tracking-map"><div id="mapa-rastreio" class="leaflet-tracking-map" role="application" aria-label="Mapa com '+(isPro?'você':'o profissional')+' e o local do atendimento"></div>'+
     '<button type="button" class="rastreio-centro" onclick="centralizarRastreio()" aria-label="Centralizar no trajeto" title="Centralizar no trajeto">'+ic('target')+'</button></div>'+
     '<p id="gps-status" class="rastreio-status"></p>'+nav+'</div>';
@@ -41,7 +41,14 @@ function painelRastreio(isPro){
     '<small>'+(isPro?'Até o local do atendimento':'O profissional está a caminho')+' · atualizado '+haQuantoSeg(info.em)+'</small></div>';
 }
 function haQuantoSeg(t){const s=Math.max(0,Math.round((Date.now()-t)/1000));return s<10?'agora':s<60?'há '+s+' s':'há '+Math.round(s/60)+' min';}
-function pintarPainelRastreio(){const n=$('#rastreio-painel');if(n&&rastreio)n.innerHTML=painelRastreio(rastreio.isPro);}
+/* Anúncio para leitor de tela só quando o tempo ou a distância muda (o painel é atualizado a cada posição). */
+function pintarPainelRastreio(){
+  const n=$('#rastreio-painel');if(!n||!rastreio)return;
+  n.innerHTML=painelRastreio(rastreio.isPro);
+  const info=rastreio.info;if(!info)return;
+  const txt=(info.precisao>IMPRECISA_M?'cerca de ':'')+info.min+' minutos, '+String(info.km.toFixed(1)).replace('.',',')+' quilômetros';
+  if(txt!==rastreio.anunciado){rastreio.anunciado=txt;const s=$('#rastreio-anuncio');if(s)s.textContent=(rastreio.isPro?'Até o local do atendimento: ':'Profissional a caminho: ')+txt+'.';}
+}
 
 /* Liga (ou religa, depois de um render) o mapa do pedido aberto. */
 function ligarRastreio(o){

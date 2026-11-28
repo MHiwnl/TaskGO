@@ -7,10 +7,12 @@
 - [x] fetch direto: legal.js passou para apiJSON; entrar.js e entrar-google.js ficam (login com CSRF explícito)
 - [x] Texto do prazo do cartão: sem o número
 - [x] Testes de regressão, 4 rodadas do revisor, commit, push e publicação
-- [ ] Filmes onetake A e B: render final 4K60 (em andamento)
+- [ ] Filmes onetake A e B: render final (em espera, pedido do usuário)
 
-## Ficou para depois (revisor, não bloqueia)
-- Devolução automática travada fica só na lista, sem aviso à equipe.
-- Aumento de valor de conferência aberta não avisa a equipe.
-- valorDaConferencia consulta as pendências por linha da lista (N+1).
-- Sem teste de integração com transação real para a conferência.
+## Pendências que tinham ficado para depois (26/11)
+- [x] Devolução automática parada avisa a equipe (30 min depois de vista automática, sem reserva; PagamentoService.conferirAutomaticasParadas)
+- [x] Aumento do valor de conferência aberta avisa a equipe, com a diferença
+- [x] Lista do Financeiro sem N+1 (cobranças, clientes e pendências lidos uma vez)
+- [x] Teste com banco real (H2): ConferenciaDevolucaoBancoTest
+- [x] Revisor: 2 correções aplicadas (aviso antes da hora; texto com a diferença)
+- [ ] Commit e publicação (aguardando o usuário)

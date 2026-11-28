@@ -72,3 +72,16 @@ auth*.json
 
 # vídeos do /brag (render e quadros)
 brag-output*/
+# Clipes de referência renderizados (refazem com video/base-para-utilizar/fonte/render.py)
+video/base-para-utilizar/*.mp4
+video/base-para-utilizar/filmes/
+video/base-para-utilizar/fonte/conferencia/
+# Filmes lemo-opuscar: áudio e vídeo gerados (refazem com os scripts de cada projeto)
+video/lemo/**/*.wav
+video/lemo/**/*.mp4
+video/lemo/**/*.mp3
+# Permissões locais do Claude Code (não versionar)
+.claude/settings.local.json
+
+# Dependências locais (axe-core dos testes de acessibilidade)
+node_modules/

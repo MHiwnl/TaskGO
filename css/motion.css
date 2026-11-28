@@ -53,7 +53,7 @@
       animation:imprime linear both;animation-timeline:view();animation-range:entry 10% entry 70%}
   }
 }
-@keyframes traca{from{clip-path:inset(-8px 100% -8px -8px);opacity:.35}to{clip-path:inset(-8px -8px -8px -8px);opacity:1}}
+@keyframes traca{from{clip-path:inset(-8px 100% -8px -8px)}to{clip-path:inset(-8px -8px -8px -8px)}}
 
 /* ---------- Troca de página ---------- */
 /* O cabeçalho do site e o menu do painel ficam parados; só o conteúdo troca. */

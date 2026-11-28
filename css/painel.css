@@ -31,7 +31,7 @@
 .map text{font-family:inherit}
 .map>svg,.leaflet-tracking-map>svg{width:100%;height:100%;display:block}
 .leaflet-tracking-map{position:absolute;inset:0;width:100%;height:100%;background:#050505}
-.leaflet-tracking-map .leaflet-control-attribution{font-size:10px}
+.leaflet-tracking-map .leaflet-control-attribution{font-size:.625rem}
 .leaflet-tracking-map .leaflet-tooltip{font-family:inherit;font-weight:600}
 .tracking-map .map-ov{z-index:500;pointer-events:none}
 .map-ov{position:absolute;left:12px;bottom:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap}
@@ -413,7 +413,7 @@ table.tb td{padding:13px 12px;border-bottom:1px solid var(--line)}
 .grafico-area svg{display:block;overflow:visible}
 .grafico-vazio{display:grid;place-items:center;min-height:190px;margin:0;color:var(--muted);font-size:.88rem;border-bottom:1px solid var(--line-strong)}
 .viz-grade{stroke:var(--line);stroke-width:1}
-.viz-eixo{fill:var(--muted);font-family:var(--font-mono);font-size:10.5px;font-variant-numeric:tabular-nums}
+.viz-eixo{fill:var(--muted);font-family:var(--font-mono);font-size:.65625rem;font-variant-numeric:tabular-nums}
 .viz-linha{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .viz-linha.viz-1{stroke:var(--viz-1)}.viz-linha.viz-2{stroke:var(--viz-2)}
 rect.viz-1{fill:var(--viz-1)}rect.viz-2{fill:var(--viz-2)}
@@ -556,7 +556,7 @@ a.faixa-adm-item svg{width:16px;height:16px}
 .aba-n{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--danger);color:#fff;font-family:var(--font-mono);font-size:.68rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
 .aba-n[hidden]{display:none}
 .area-sino-n{border-radius:999px;min-width:20px;height:20px;background:var(--danger)}
-.tag-nova{display:inline-flex;align-items:center;margin-left:8px;padding:2px 8px;background:var(--danger);color:#fff;font-family:var(--font-mono);font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:middle}
+.tag-nova{display:inline-flex;align-items:center;margin-left:8px;padding:2px 8px;background:var(--danger);color:#000;font-family:var(--font-mono);font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:middle}
 .oportunidade.op-nova{box-shadow:inset 3px 0 0 var(--danger)}
 .oportunidade{cursor:default}
 /* Melhores oportunidades no Início */
@@ -569,6 +569,7 @@ a.faixa-adm-item svg{width:16px;height:16px}
 .melhores-op svg{width:16px;height:16px}
 /* Mensagens com altura fixa: a lista e a conversa não crescem com as mensagens */
 .mensagens-grade{grid-template-columns:.7fr 1.3fr;align-items:stretch;height:clamp(460px,70vh,640px)}
+.mensagens-grade>*{min-width:0}
 .mensagens-grade>.card{display:flex;flex-direction:column;min-height:0;height:100%}
 .mensagens-lista{overflow-y:auto}
 .mensagens-grade .chat{flex:1;min-height:0;max-height:none;overflow-y:auto}

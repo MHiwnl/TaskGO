@@ -232,7 +232,7 @@ footer.site{padding:clamp(48px,6vw,72px) 0 28px}
 .cel-palco{margin:0;min-width:0}
 .cel-fundo{display:grid;place-items:center}
 .cel{width:min(100%,336px);height:680px;padding:10px;border-radius:46px;background:#09090b;border:1px solid rgba(255,255,255,.28);outline:1px solid rgba(0,0,0,.55);outline-offset:-3px}
-.cel-tela-moldura{position:relative;display:flex;flex-direction:column;height:100%;overflow:hidden;border-radius:36px;background:var(--bg);color:var(--text);font-size:15px;line-height:1.45}
+.cel-tela-moldura{position:relative;display:flex;flex-direction:column;height:100%;overflow:hidden;border-radius:36px;background:var(--bg);color:var(--text);font-size:.9375rem;line-height:1.45}
 .cel-status-barra{position:relative;flex:none;display:flex;align-items:center;justify-content:space-between;height:34px;padding:2px 24px 0;font-family:var(--font-mono);font-size:.72rem;font-weight:600}
 .cel-ilha{position:absolute;left:50%;top:8px;width:84px;height:22px;margin-left:-42px;border-radius:12px;background:#000;outline:1px solid var(--line)}
 .cel-bateria{position:relative;width:22px;height:11px;border:1px solid currentColor;border-radius:3px;padding:1px}

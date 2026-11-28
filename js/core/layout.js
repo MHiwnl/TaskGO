@@ -23,7 +23,7 @@ function linkSeta(href,texto,forte){return '<a class="seta'+(forte?' seta-forte'
 /* Seção da página: o rótulo vira o nome da região para leitores de tela. */
 function folha(rotulo,html,cls){return '<section class="folha'+(cls?' '+cls:'')+'" aria-label="'+rotulo+'"><div class="wrap folha-in"><div class="folha-corpo">'+html+'</div></div></section>';}
 /* Marca: símbolo original da TaskGO e o nome ao lado ("Task" na cor do texto, "GO" no azul da marca). */
-function marca(){return '<a href="#/home" class="logo" aria-label="TaskGO, ir para a Início"><img class="logo-simbolo" src="assets/marca/taskgo-simbolo-96.png" alt="" width="32" height="32"><span class="lt" aria-hidden="true">Task<b>GO</b></span></a>';}
+function marca(){return '<a href="#/home" class="logo" aria-label="TaskGO, ir para o início"><img class="logo-simbolo" src="assets/marca/taskgo-simbolo-96.png" alt="" width="32" height="32"><span class="lt" aria-hidden="true">Task<b>GO</b></span></a>';}
 function header(){
   /* O painel não usa a barra do site. */
   if(route.page==='painel')return '';
@@ -48,8 +48,8 @@ function header(){
 /* Menu da conta no cabeçalho: o nome abre as opções Painel e Sair. */
 function menuConta(u){
   const nome=esc(String(u.name||'Minha conta').trim().split(/\s+/)[0]);
-  return '<div class="conta">'+
-    '<button type="button" class="btn btn-ghost btn-sm conta-botao" id="contaBotao" data-fk="conta" aria-haspopup="menu" aria-expanded="false" aria-controls="contaMenu" aria-label="Conta de '+esc(u.name||'')+'" onclick="alternarMenuConta()">'+avatar(u,22)+'<span class="conta-nome">'+nome+'</span>'+ic('chevDown')+'</button>'+
+  return '<div class="conta"><span id="contaContexto" class="leitor">Conta de '+esc(u.name||'')+'</span>'+
+    '<button type="button" class="btn btn-ghost btn-sm conta-botao" id="contaBotao" data-fk="conta" aria-haspopup="menu" aria-expanded="false" aria-controls="contaMenu" aria-describedby="contaContexto" onclick="alternarMenuConta()"><span aria-hidden="true">'+avatar(u,22)+'</span><span class="conta-nome">'+nome+'</span>'+ic('chevDown')+'</button>'+
     '<div class="conta-menu" id="contaMenu" role="menu" aria-labelledby="contaBotao" hidden>'+
       (route.page==='app'?'':'<a role="menuitem" href="#/app" onclick="fecharMenuConta()">'+ic('grid')+(u.role==='administrador'?'Administração':'Minha área')+'</a>')+
       (route.page==='painel'&&route.sub!=='config'?'':'<a role="menuitem" href="#/painel" onclick="fecharMenuConta()">'+ic('user')+'Perfil</a>')+
@@ -116,7 +116,7 @@ function footer(){
     '<div><h2>TaskGO</h2><div class="foot-links">'+
       '<a href="#/sobre">Quem somos</a><a href="#/como-funciona">Como funciona</a><a href="#/profissionais">Para profissionais</a><a href="#/planos">Preços</a><a href="#/seguranca">Segurança</a><a href="#/contato">Contato</a></div></div>'+
     '<div><h2>suporte</h2><div class="foot-links">'+
-      '<a href="#/ajuda">Perguntas frequentes</a><a href="#/legal/termos">Termos de uso</a><a href="#/legal/privacidade">Privacidade</a><a href="#/legal/cancelamento">Cancelamento</a></div></div>'+
+      '<a href="#/ajuda">Perguntas frequentes</a><a href="#/legal/termos">Termos de uso</a><a href="#/legal/privacidade">Privacidade</a><a href="#/legal/cancelamento">Cancelamento</a><a href="#/acessibilidade">Acessibilidade</a></div></div>'+
   '</div>'+
   '<div class="foot-bottom"><span>© '+new Date().getFullYear()+' TaskGO · Recife/PE</span><span>taskgo.adm@gmail.com</span></div>'+
   '</div></footer>';

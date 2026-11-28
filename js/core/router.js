@@ -15,7 +15,7 @@ function parseHash(){
 function go(path){location.hash=path;}
 window.addEventListener('hashchange',()=>{
   route=parseHash();
-  const trocar=()=>{window.scrollTo({top:0,behavior:'instant'});render();document.getElementById('conteudo')?.focus({preventScroll:true});};
+  const trocar=()=>{window.scrollTo({top:0,behavior:'instant'});render();const alvo=document.getElementById('conteudo')||document.querySelector('#root h1');if(alvo){alvo.setAttribute('tabindex','-1');alvo.focus({preventScroll:true});}};
   /* Transição curta entre páginas onde o navegador oferece; nos outros, a troca é direta. */
   if(!document.startViewTransition){trocar();return;}
   /* Duas trocas seguidas cancelam a transição anterior; isso é esperado e não é erro. */

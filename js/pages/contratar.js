@@ -46,21 +46,23 @@ function wVoltar(){
   if(W.step>1){W.step--;render();return;}
   W.modo=null;render();
 }
+/* Aviso do passo: marca o campo com o erro (aria-invalid, aria-describedby) e também mostra o toast. */
+function avisoCampo(id,msg,tipo){marcarCampo(document.getElementById(id),msg);return toast(msg,tipo||'err');}
 function wGo(n){
   const destino=PASSOS[W.modo][n-1];
   if(n>W.step){
     if(!W.service)return toast('Escolha um serviço para continuar','err');
     const passou=PASSOS[W.modo].slice(0,n-1);
     if(passou.includes('local')){
-      if(!String(W.addr||'').trim())return toast('Informe o endereço do atendimento','err');
+      if(!String(W.addr||'').trim())return avisoCampo('wAddr','Informe o endereço do atendimento');
       if(W.lat==null)return toast('Marque no mapa o local do atendimento','err');
     }
-    if(passou.includes('detalhes')&&W.modo!=='obra'&&W.urgency==='agendar'&&!W.date)return toast('Escolha a data e a hora do atendimento','err');
-    if(passou.includes('problema')&&String(W.notes||'').trim().length<10)return toast('Conte em poucas palavras do que você precisa','err');
+    if(passou.includes('detalhes')&&W.modo!=='obra'&&W.urgency==='agendar'&&!W.date)return avisoCampo('wData','Escolha a data e a hora do atendimento');
+    if(passou.includes('problema')&&String(W.notes||'').trim().length<10)return avisoCampo('wNotas','Conte em poucas palavras do que você precisa');
     if(passou.includes('valor')&&!recValido())return;
-    if(passou.includes('valor')){const v=Number(W.oferta),min=W.modo==='ajuda'?AJUDA_MINIMO:1;if(!(v>=min&&v<=100000))return toast(W.modo==='ajuda'?'Na ajuda rápida, o valor mínimo é '+money(AJUDA_MINIMO):'Informe quanto você oferece, de R$ 1 a R$ 100.000','err');
+    if(passou.includes('valor')){const v=Number(W.oferta),min=W.modo==='ajuda'?AJUDA_MINIMO:1;if(!(v>=min&&v<=100000))return avisoCampo('wOferta',W.modo==='ajuda'?'Na ajuda rápida, o valor mínimo é '+money(AJUDA_MINIMO):'Informe quanto você oferece, de R$ 1 a R$ 100.000','err');
       if(W.modo!=='obra'&&v>=3000){sugerirObra();return;}}
-    if(W.modo==='obra'&&passou.includes('detalhes')&&String(W.notes||'').trim().length<20)return toast('Descreva a obra em pelo menos 20 letras: o que fazer, medidas e o que já existe.','err');
+    if(W.modo==='obra'&&passou.includes('detalhes')&&String(W.notes||'').trim().length<20)return avisoCampo('wNotas','Descreva a obra em pelo menos 20 letras: o que fazer, medidas e o que já existe.');
   }
   W.step=n;render();
   const card=document.querySelector('.contratar-card');if(card&&card.getBoundingClientRect().top<0)card.scrollIntoView({block:'start',behavior:'smooth'});

@@ -82,7 +82,7 @@ async function enviarVerificacao(){
     closeModal();toast('Enviado. A equipe vai analisar.','ok');
     const c=$('#seloConta');if(c)c.outerHTML=blocoVerificacaoConta();
     if(document.getElementById('verifServico'))render();
-  }catch(e){erro.textContent=erroLegivel(e,'Não foi possível enviar.');erro.hidden=false;if(b)b.disabled=false;}
+  }catch(e){const m=erroLegivel(e,'Não foi possível enviar.');erro.textContent=m;erro.hidden=false;if(/nasc/i.test(m))marcarCampo($('#vNasc'),m);if(b)b.disabled=false;}
 }
 
 /* ---------- Administração > Verificações ---------- */

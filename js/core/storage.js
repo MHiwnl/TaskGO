@@ -13,6 +13,8 @@ window.fetch=async function(input,init={}){
     if(token)options.headers.set('X-XSRF-TOKEN',token);
   }
   const resposta=await taskgoNativeFetch(input,options);
+  /* Diferença entre o relógio do aparelho e o do servidor (cabeçalho Date), usada nas contagens de vencimento. */
+  const horaServidor=Date.parse(resposta.headers.get('Date')||'');if(horaServidor)window.taskgoDesvioRelogio=horaServidor-Date.now();
   /* Sessão vencida no servidor (reinício, senha trocada, sessão encerrada em outro aparelho) com a conta ainda aberta no site:
      avisa uma vez e leva para Entrar, voltando depois para onde a pessoa estava. O que ela preencheu (ex.: o pedido) fica guardado. */
   if(resposta.status===401&&!/\/api\/auth\/(login|registrar|csrf|sessao|2fa|confirmar-email|recuperacao)/.test(url.pathname)&&typeof me==='function'&&me()&&!isDemoMode()&&!window.__sessaoVencida){

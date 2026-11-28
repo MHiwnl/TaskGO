@@ -44,10 +44,10 @@ function dashMensagens(){
     '<div class="grow"><b>'+esc(pp.name)+'</b><small style="display:block">'+esc(last.t||(last.foto?'Foto':''))+'</small></div>'+
     (oo?'<span class="tag tag-muted">'+esc(servicos.join(', '))+(ch.pedidos.length>1?' · '+ch.pedidos.length+' pedidos':'')+'</span>':'')+'</div>';
   }).join('')+'</div>'+
-  '<div class="card"><div style="display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:16px">'+
+  '<div class="card"><div class="chat-cab" style="display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:16px">'+
   avatar(p,44)+'<div style="flex:1"><b style="display:block">'+esc(p.name)+'</b><span class="muted" style="font-size:.8rem">'+(c.pedidos.length>1?c.pedidos.length+' pedidos com esta pessoa':'Conversa do pedido')+'</span></div>'+ 
   '<a class="btn btn-ghost btn-sm" href="#/app/pedido/'+c.orderId+'">Ver pedido</a>'+botaoDenunciar(c.orderId,p.name)+'</div>'+
-  '<div class="chat" id="chatBox">'+(c.msgs.length?c.msgs.map((m,i)=>(c.pedidos.length>1&&(i===0||c.msgs[i-1].orderId!==m.orderId)?divisorPedido(m.orderId):'')+'<div class="msg '+(m.me?'me':'them')+'">'+(m.automatic?'<small>Resposta automática</small>':'')+(m.foto?miniatura(urlFotoPedido(m.foto),'Foto enviada na conversa'):'')+esc(m.t)+'<small>'+new Date(m.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+(m.me&&m.readAt?' · Lida':'')+'</small></div>').join(''):'<p class="hint center">Ainda não há mensagens nesta conversa.</p>')+'</div>'+ 
+  '<div class="chat" id="chatBox" tabindex="0" role="log" aria-label="Mensagens da conversa">'+(c.msgs.length?c.msgs.map((m,i)=>(c.pedidos.length>1&&(i===0||c.msgs[i-1].orderId!==m.orderId)?divisorPedido(m.orderId):'')+'<div class="msg '+(m.me?'me':'them')+'">'+(m.automatic?'<small>Resposta automática</small>':'')+(m.foto?miniatura(urlFotoPedido(m.foto),'Foto enviada na conversa'):'')+esc(m.t)+'<small>'+new Date(m.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+(m.me&&m.readAt?' · Lida':'')+'</small></div>').join(''):'<p class="hint center">Ainda não há mensagens nesta conversa.</p>')+'</div>'+ 
   rodapeConversa(S.orders.find(x=>x.id===c.orderId))+'</div></div>';
 }
 function divisorPedido(id){const o=S.orders.find(x=>x.id===id);return o?'<p class="chat-divisor"><span>'+esc(svc(o.service).n)+' · '+dt(o.created)+'</span></p>':'';}

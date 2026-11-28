@@ -151,13 +151,19 @@ function painelPix(r){
   if(!a)return '<div class="pag-painel"><p class="t2">O código vale por 1 hora. O pedido sai assim que o pagamento é confirmado.</p>'+
     '<button class="btn btn-primary btn-lg" onclick="gerarPix()"'+(PAGAR.enviando?' disabled aria-busy="true"':'')+'>'+ic('pix')+(PAGAR.enviando?'Gerando…':'Gerar Pix de '+money(r.falta))+'</button></div>';
   ligarEsperaPix(a);
+  const falta=Number(a.expiraEm)-agoraServidor();
+  /* Pix vencido: não dá para pagar; a saída é gerar outro. */
+  if(falta<=0)return '<div class="pag-painel"><p class="pag-recusa" role="alert">O Pix de '+esc(money(a.valor))+' expirou; se já pagou, aguarde a confirmação.</p>'+
+    (PAGAR.pixPendente?'<p class="pag-recusa" role="alert">Estamos confirmando o Pix anterior. Tente de novo em alguns minutos; se você já pagou, aguarde a confirmação.</p>':'')+
+    '<button class="btn btn-primary btn-lg" onclick="gerarPix()"'+(PAGAR.enviando?' disabled aria-busy="true"':'')+'>'+ic('pix')+'Gerar outro Pix de '+esc(money(a.valor))+'</button></div>';
   return '<div class="pag-painel pag-pix">'+
+    (falta<=300000?'<p class="pag-recusa" role="alert">Faltam menos de 5 minutos para o Pix expirar. Se expirar, gere outro.</p>':'')+
     (a.qrCode?'<img class="pag-qr" src="'+esc(a.qrCode)+'" alt="QR code do Pix de '+esc(money(a.valor))+'" width="220" height="220">':'')+
     '<div class="pag-pix-dados"><ol class="pag-passos"><li>Abra o app do seu banco e escolha Pix.</li><li>Leia o QR ou cole o código.</li><li>Confirme o pagamento de <b>'+money(a.valor)+'</b>.</li></ol>'+
     '<label class="leitor" for="pixCodigo">Código Pix copia e cola</label><textarea id="pixCodigo" class="textarea pag-codigo" readonly rows="3" onclick="this.select()">'+esc(a.pixCopiaECola)+'</textarea>'+
     '<div class="pag-acoes"><button class="btn btn-primary" onclick="copiarPix()">'+ic('copy')+'Copiar código</button>'+
     (pagamentoTeste()?'<button class="btn btn-ghost" onclick="simularPagamentoPix(\''+esc(a.id)+'\')"'+(PAGAR.enviando?' disabled':'')+'>'+ic('checkCircle')+'Simular pagamento</button>':'')+'</div>'+
-    '<p class="pag-espera" role="status"><span class="pag-ponto" aria-hidden="true"></span>Esperando o pagamento · expira em <b id="pixExpira">'+tempoRestante(a.expiraEm)+'</b></p></div></div>';
+    '<p class="pag-espera" role="status"><span class="pag-ponto" aria-hidden="true"></span>Esperando o pagamento</p><p class="muted">Expira em <b id="pixExpira">'+tempoRestante(a.expiraEm)+'</b></p></div></div>';
 }
 function painelCartao(r){
   /* Cartão salvo em análise ou sem resposta do Asaas: não pede o cartão de novo, só espera a conferência. */
@@ -189,7 +195,9 @@ function pagoOk(o){
   return '<div class="pag-ok" role="status"><span class="pag-ok-ic">'+ic('check')+'</span><h3>Pagamento confirmado</h3><p class="t2">'+(o&&o.modo==='agora'?'Chamando os profissionais mais perto…':'O pedido já está procurando profissional.')+'</p>'+
     '<a class="btn btn-primary" href="#'+destino+'">Continuar '+ic('arrow')+'</a></div>';
 }
-function tempoRestante(fim){const s=Math.max(0,Math.round((Number(fim)-Date.now())/1000));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+/* Hora do servidor: o vencimento do Pix não depende do relógio do aparelho (desvio medido em storage.js). */
+function agoraServidor(){return Date.now()+(Number(window.taskgoDesvioRelogio)||0);}
+function tempoRestante(fim){const s=Math.max(0,Math.round((Number(fim)-agoraServidor())/1000));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 async function carregarPagar(){
   const id=PAGAR.id;if(!id)return;
   try{const r=await apiJSON('/api/pagamentos/pedidos/'+encodeURIComponent(id));if(PAGAR.id!==id)return;PAGAR.resumo=r;PAGAR.erro='';if(Number(r.falta)<=0){PAGAR.pago=true;await atualizarPedidoLocal(id);}}
@@ -198,8 +206,9 @@ async function carregarPagar(){
 }
 async function gerarPix(){
   if(PAGAR.enviando)return;PAGAR.enviando=true;render();
-  try{await apiJSON('/api/pagamentos/pedidos/'+encodeURIComponent(PAGAR.id),'POST',{metodo:'pix'});}
-  catch(e){toast(erroLegivel(e,'Não foi possível gerar o Pix.'),'err');}
+  try{await apiJSON('/api/pagamentos/pedidos/'+encodeURIComponent(PAGAR.id),'POST',{metodo:'pix'});PAGAR.pixPendente=false;}
+  /* 409: o cancelamento do Pix anterior ainda não foi confirmado; a tela explica e o botão continua disponível. */
+  catch(e){if(e.status===409)PAGAR.pixPendente=true;else toast(erroLegivel(e,'Não foi possível gerar o Pix.'),'err');}
   PAGAR.enviando=false;await carregarPagar();
 }
 async function pagarComCartao(){
@@ -222,11 +231,19 @@ function copiarPix(){
 }
 /* Enquanto o Pix está aberto: confere a cada 3 s e atualiza o relógio. */
 function ligarEsperaPix(a){
-  if(PAGAR.timer)return;
+  /* Mesmo Pix com a contagem rodando: só guarda o objeto atual. Outro Pix (ex.: "Gerar outro") reinicia a contagem. */
+  PAGAR.pix=a;
+  if(PAGAR.timer&&PAGAR.timerCobranca===a.id)return;
+  pararPagar();
+  PAGAR.timerCobranca=a.id;PAGAR.nivelPix=undefined;
   let n=0;
   PAGAR.timer=setInterval(async()=>{
+    const a=PAGAR.pix;
     if(route.sub!=='pagar'||route.id!==PAGAR.id){pararPagar();return;}
     const e=$('#pixExpira');if(e)e.textContent=tempoRestante(a.expiraEm);
+    /* Muda o aviso (5 min antes e no vencimento) só quando o nível muda: a tela é redesenhada uma vez. */
+    const restante=Number(a.expiraEm)-agoraServidor(),nivel=restante<=0?2:restante<=300000?1:0;
+    if(nivel!==PAGAR.nivelPix){PAGAR.nivelPix=nivel;if(nivel)render();}
     if(++n%3)return;
     try{const c=await apiJSON('/api/pagamentos/cobrancas/'+encodeURIComponent(a.id));if(c.status!=='pendente'){pararPagar();if(c.status==='paga'){PAGAR.pago=true;await atualizarPedidoLocal(PAGAR.id);}await carregarPagar();}}catch(err){}
   },1000);
@@ -276,7 +293,7 @@ async function salvarNovoCartao(e){
   const val=($('#ccValidade').value||'').split('/');
   const corpo={numero:$('#ccNumero').value,titular:$('#ccNome').value,mes:Number(val[0])||null,ano:Number(val[1])||null,cvv:$('#ccCvv').value,padrao:!!($('#ccPadrao')&&$('#ccPadrao').checked)};
   const falta=!corpo.numero.trim()?'Informe o número do cartão.':!corpo.titular.trim()?'Informe o nome como está no cartão.':!corpo.mes||!corpo.ano?'Informe a validade (MM/AA).':!corpo.cvv?'Informe o código de segurança.':'';
-  if(falta){erro.textContent=falta;erro.hidden=false;return;}
+  if(falta){erro.textContent=falta;erro.hidden=false;marcarCampo(document.getElementById(!corpo.numero.trim()?'ccNumero':!corpo.titular.trim()?'ccNome':!corpo.mes||!corpo.ano?'ccValidade':'ccCvv'),falta);return;}
   botao.disabled=true;botao.setAttribute('aria-busy','true');
   try{
     const c=await apiJSON('/api/pagamentos/cartoes','POST',corpo);

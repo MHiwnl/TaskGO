@@ -3,7 +3,7 @@
    ========================================================= */
 let opsTimer=null;
 let chatPollTimer=null;
-const PAGE_TITLES={servicos:'Serviços',['como-funciona']:'Como funciona',profissionais:'Para profissionais',sobre:'Quem somos',planos:'Preços',entrar:'Entrar ou criar conta',recuperar:'Recuperar acesso',['confirmar-email']:'Confirmar e-mail',painel:'Perfil',app:'Minha área',seguranca:'Segurança',ajuda:'Central de ajuda',contato:'Contato',legal:'Termos e políticas',contratar:'Contratar serviço'};
+const PAGE_TITLES={servicos:'Serviços',['como-funciona']:'Como funciona',profissionais:'Para profissionais',sobre:'Quem somos',planos:'Preços',entrar:'Entrar ou criar conta',recuperar:'Recuperar acesso',['confirmar-email']:'Confirmar e-mail',painel:'Perfil',app:'Minha área',seguranca:'Segurança',ajuda:'Central de ajuda',contato:'Contato',legal:'Termos e políticas',contratar:'Contratar serviço',acessibilidade:'Acessibilidade'};
 function atualizarTituloAba(p){
   const detalhe=p==='servicos'&&route.sub?svc(route.sub)?.n:'';
   const nome=detalhe||PAGE_TITLES[p];
@@ -35,6 +35,7 @@ function render(){
   else if(p==='ajuda')body=pageAjuda();
   else if(p==='contato')body=pageContato();
   else if(p==='legal')body=pageLegal();
+  else if(p==='acessibilidade')body=pageAcessibilidade();
   else body=pageHome();
   const pular='<a class="skip-link" href="#conteudo" onclick="event.preventDefault();document.getElementById(\'conteudo\').focus()">Pular para o conteúdo</a>';
   const conteudo=logada?pular+body:pular+header()+'<main id="conteudo" tabindex="-1">'+body+'</main>';
